@@ -1,0 +1,9 @@
+{
+  "name": "build-fleet",
+  "version": "0.1.0",
+  "description": "Spec-driven multi-agent software house. Ships product-owner, architect, coder, qa, and devops subagents that execute a deterministic SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF state machine with hook-enforced gates, bounded review cycles, and first-class human escalation.",
+  "author": {
+    "name": "Ray Car",
+    "email": "raycar@gmail.com"
+  }
+}
