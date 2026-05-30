@@ -2,7 +2,7 @@
   "name": "build-fleet",
   "owner": {
     "name": "Ray Car",
-    "url": "https://github.com/raycar/build-fleet"
+    "url": "https://github.com/rocar/build-fleet"
   },
   "plugins": [
     {
