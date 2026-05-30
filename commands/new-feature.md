@@ -36,7 +36,7 @@ and surface that the user must supply a slug.
    - `IMPL_NOTES.md` — empty, header `# Implementation Notes — <slug>`.
    - `REVIEW.md` — empty, header `# Review Log — <slug>\n\nAppend-only.`
 
-3. **Initialize `PROGRESS.md`** with the schema from `sdd-protocol` (v0.2 M4 fields included; classifier fills TIER + BUILD_MODE in step 5):
+3. **Initialize `PROGRESS.md`** with the schema from `sdd-protocol` (v0.2 M4 fields included; classifier fills TIER + BUILD_MODE in step 7):
 
    ```
    FEATURE: <slug>
@@ -50,14 +50,30 @@ and surface that the user must supply a slug.
 
 4. **Write `.sdd/ACTIVE`** with the slug as its single line.
 
-5. **Run the M4 classifier.** Use the Task tool to spawn `build-fleet:classifier`
+5. **Establish the feature description.** Before classifying or drafting,
+   determine *what the feature actually is* — the slug alone is not a spec.
+
+   - Look back through the conversation for a description the user already gave
+     (e.g. "build a celsius→fahrenheit converter that handles negatives").
+   - **If no usable description exists in context, STOP and ask the user.**
+     Do not infer requirements from the slug — a slug like `celsius-converter`
+     names the feature but says nothing about behavior, inputs/outputs, edge
+     cases, or constraints. Ask a focused prompt, e.g.: "What should `<slug>`
+     do? Briefly: the behavior, inputs/outputs, and any edge cases or
+     constraints." Wait for the answer before continuing. The classifier and
+     product-owner both consume this description; classifying from a bare slug
+     produces a hallucinated spec.
+   - Carry the description (from context or from the user) verbatim into the
+     classifier prompt below and into the product-owner delegation in step 8.
+
+6. **Run the M4 classifier.** Use the Task tool to spawn `build-fleet:classifier`
    with this prompt:
 
    > Classify this feature per `agents/classifier.md`. Emit a single JSON verdict
    > and stop.
    >
-   > Feature description: (extract from the prior conversation context — what
-   > the user described before invoking /build-fleet:new-feature `<slug>`).
+   > Feature description: <the description established in step 5 — paste it
+   > verbatim; never substitute the slug for a missing description>.
    >
    > Project context: read whatever files in the current directory help you
    > size the work. Do not exhaustively read source.
@@ -74,7 +90,7 @@ and surface that the user must supply a slug.
    BUILD_FLEET_CLASSIFIER_FALLBACK: {"feature":"<slug>","reason":"<parse-error|missing-field|empty-output>","tier_assigned":"standard"}
    ```
 
-   Continue to step 6 with the fallback values. Surface the raw classifier
+   Continue to step 7 with the fallback values. Surface the raw classifier
    output tail to the user so they can re-run `/build-fleet:dispatch` for a
    re-classification if needed. This keeps trivial false-positives at bay (the
    safe default is standard) when the classifier itself misbehaves.
@@ -89,12 +105,12 @@ and surface that the user must supply a slug.
    verdict but proceed with it. Manual override is via post-hoc PROGRESS.md
    edit (or running `/build-fleet:dispatch` for a re-check before proceeding).
 
-6. **Write classifier verdict to PROGRESS.md.** Edit PROGRESS.md:
+7. **Write classifier verdict to PROGRESS.md.** Edit PROGRESS.md:
    - `TIER:` ← classifier's `tier` (`trivial`, `standard`, or `large`)
    - `BUILD_MODE:` ← classifier's `build_mode` (`standard` for trivial/standard, `deep-build` for large)
    - `UPDATED:` ← current iso8601
 
-7. **Delegate to product-owner.** Use the Task tool to spawn the
+8. **Delegate to product-owner.** Use the Task tool to spawn the
    `build-fleet:product-owner` subagent. The prompt varies by tier:
 
    - **For `tier=trivial`:** include the classifier's `skeleton_spec_hint` and
@@ -111,7 +127,7 @@ and surface that the user must supply a slug.
    Tell PO not to set STATUS=IN_REVIEW regardless of tier — that's `/build-fleet:review`'s
    job (which trivial features skip; standard/large run normally).
 
-8. **Report back** to the user with the next-command hint based on tier:
+9. **Report back** to the user with the next-command hint based on tier:
 
    - **trivial:** "Spec drafted as a skeleton (TIER=trivial). REVIEW is skipped
      for this fast-path. Next command: `/build-fleet:finalize` — it will recognize
