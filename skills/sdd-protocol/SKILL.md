@@ -13,13 +13,17 @@ file, this file wins.
 ## Operating principles
 
 - **Spec is the contract.** No source is written until the active spec is `FINALIZED`.
-- **Gates are deterministic.** Phase transitions are enforced by hooks (exit code 2 =
-  block + feedback), never by an agent deciding it is finished.
+- **Gates are deterministic; judgments are adversarial.** Binary phase transitions are
+  enforced by hooks (exit code 2 = block + feedback). Convergence judgments (e.g., "is
+  the spec sound enough to finalize?") run as workflow cross-examination + survival vote
+  (see REVIEW phase). The category error to avoid is hook-enforcing a judgment.
 - **Filesystem is shared memory.** Subagent context is isolated and does not sync between
   roles. Everything that must cross roles lives as a file in `.sdd/<feature>/`. There is
   no per-agent persistent memory layer.
 - **Escalate, don't loop forever.** Each review gate is bounded (default **3** cycles).
-  The 4th unresolved cycle writes `ESCALATION.md` and halts that phase for a human.
+  In v0.2, one `/build-fleet:review` workflow run = one cycle. Cross-examination rounds
+  inside a single workflow run do NOT bump the cycle counter. The 4th unresolved cycle
+  writes `ESCALATION.md` and halts that phase for a human.
 - **The orchestrator routes, it does not build.** The main session assigns work, runs
   gates, and synthesizes. It never writes production source itself.
 - **One feature in flight.** `.sdd/ACTIVE` names the single active feature.
@@ -58,8 +62,10 @@ Exact field names; hooks and commands parse these lines:
 ```
 FEATURE: <slug>
 PHASE: SPEC | REVIEW | FINALIZE | BUILD | CHANGE_REVIEW | HANDOFF | ESCALATED
-CYCLE: <int>          # spec-review cycles consumed (incremented by /review)
-CHANGE_CYCLE: <int>   # change-review cycles consumed (incremented by /handoff)
+CYCLE: <int>          # spec-review cycles consumed (one increment per /build-fleet:review workflow run; cross-examination rounds inside a run do not bump CYCLE)
+CHANGE_CYCLE: <int>   # change-review cycles consumed (one increment per /build-fleet:handoff invocation; still command-driven in v0.2 until M3 converts CHANGE_REVIEW to a workflow)
+TIER: trivial | standard | large    # v0.2 M4 — set by the classifier subagent at /build-fleet:new-feature time. `trivial` opts into the REVIEW-skipping fast-path through finalize. `pending` until classifier runs.
+BUILD_MODE: standard | deep-build   # v0.2 M3 — selects /build-fleet:finalize's BUILD orchestration. `standard` = sequential qa→coder via Task tool. `deep-build` = dispatch workflows/deep-build.js. M4's classifier sets this to `deep-build` for tier=large. `pending` until classifier runs.
 UPDATED: <iso8601>
 ```
 
@@ -88,7 +94,12 @@ status: concerns-raised | approved
 ```
 
 `check-review-written` (SubagentStop) rejects a reviewer that stops without appending a
-block attributed to it for the current cycle.
+block attributed to it for the current cycle. In v0.2 workflow REVIEW: the workflow's
+reviewer subagents return structured concerns payloads; the workflow script merges them
+into the canonical REVIEW.md entries; the `scribe` subagent appends them in the final
+phase. The hook skips its gate while `.sdd/<feature>/.workflow-in-flight` exists (the
+workflow's envelope post-condition replaces it for workflow paths). Non-workflow paths
+(CHANGE_REVIEW until M3) retain the hook's per-reviewer enforcement.
 
 ## Severity rubric
 
@@ -98,8 +109,10 @@ block attributed to it for the current cycle.
 | `major` | Scalability, maintainability, or missing acceptance coverage. | Must be resolved or explicitly accepted (as an ADR) before the gate opens. |
 | `minor` | Style, wording, nits. | Advisory; never blocks a gate. |
 
-The severity vocabulary is duplicated verbatim in each reviewer agent's prompt body,
-because skill frontmatter is not loaded when an agent runs as an agent-team teammate.
+The severity vocabulary is mirrored verbatim in each reviewer agent's prompt body for
+non-workflow direct invocations and as belt-and-suspenders if `AgentDefinition.skills`
+preload regresses. In v0.2 workflow REVIEW the orchestrator preloads `review-rubric` via
+`AgentDefinition.skills`, so the in-body copy is the redundancy, not the primary source.
 
 ## State machine
 
@@ -109,34 +122,134 @@ SPEC ──► REVIEW ──► FINALIZE ──► BUILD ──► CHANGE_REVIEW
           └──┘ (≤3 cycles, then ESCALATE)   └───────┘ (≤3 cycles, then ESCALATE)
 ```
 
-**SPEC.** product-owner drafts `spec.md` (STATUS=DRAFT) + `acceptance.md`.
+**SPEC.** `/build-fleet:new-feature <slug>` scaffolds `.sdd/<slug>/`, runs the
+classifier subagent (M4) to set `TIER` + `BUILD_MODE` in PROGRESS.md, and
+delegates to product-owner to draft `spec.md` (STATUS=DRAFT) + `acceptance.md`.
+For `TIER=trivial`, PO drafts a minimal skeleton spec from the classifier's
+`skeleton_spec_hint`; for standard/large, PO drafts the full spec.
+
 Exit: a non-empty spec with all required sections exists.
 
-**REVIEW.** `/review` sets PHASE=REVIEW, increments `CYCLE`, sets STATUS=IN_REVIEW, and
-runs architect + qa + coder against the spec. Each appends a REVIEW.md block. product-owner
-then revises the spec in response.
-- Cycles 1–2: spawn reviewers as parallel subagents (Task fan-out).
-- Cycle 3: promote to an agent team so reviewers can debate and challenge each other
-  before the escalation boundary.
-Exit (to FINALIZE): in the most recent completed cycle, every reviewer block has
-`status: approved` and zero `[blocker]` items.
-Escalation: if `CYCLE` would exceed 3 with blockers still open, write `ESCALATION.md`,
-set PHASE=ESCALATED, and halt.
+**M4 trivial fast-path.** Features classified `trivial` skip the REVIEW phase
+entirely. The user invokes `/build-fleet:finalize` directly after PO drafts the
+skeleton spec; finalize recognizes `TIER=trivial` and proceeds to BUILD without
+requiring a completed review cycle. This saves the review tokens for changes
+genuinely small enough that the gate cost exceeds the gate value (typo fixes,
+dependency bumps, single-line bug fixes). See `agents/classifier.md` for the
+criteria and disqualifiers; the classifier errs toward `standard` because
+false-trivial is the dangerous miss (skips a review the change needed).
+
+**REVIEW.** `/build-fleet:review` invokes the `workflows/review.js` dynamic workflow with
+the current feature and cycle number (`args.feature`, `args.cycle`). The command writes
+`.sdd/<feature>/.workflow-in-flight` before dispatch (a marker that makes the two
+reviewer-gating hooks skip while a workflow is running); the scribe deletes it as the
+workflow's final phase. The `scribe` is a workflow-internal Write-capable subagent (see
+`agents/scribe.md`) — not a fleet role like architect/qa/coder, but the single canonical
+writer of workflow-driven state mutations.
+
+The workflow runs five phases internally:
+
+1. **Read state** — a Read-only subagent collects spec.md, acceptance.md, prior REVIEW.md.
+2. **Fan-out** — architect, qa, coder subagents review in parallel. Each returns a
+   structured concerns payload `{role, status, concerns:[{id,severity,text}]}`. Their
+   `AgentDefinition.tools` omits `Write`/`Edit`; their `AgentDefinition.skills` preloads
+   `review-rubric` (replacing the v0.1 rubric duplication in agent prompt bodies).
+3. **Cross-examination** — each reviewer is presented with peers' concerns and must
+   refute or affirm each. A refutation must (a) be ≥40 characters, (b) cite a section
+   of spec.md or acceptance.md as counter-evidence (regex: `(spec|acceptance)\.md\s*§|line\s+\d+`),
+   (c) come from a different-role reviewer (self-refutation is filtered).
+4. **Survival vote** — pure script logic. A concern survives unless refuted by a
+   different-role reviewer with substantive reasoning. Survivors are the cycle's verdict.
+5. **Apply via scribe** — the `scribe` subagent applies the structured envelope to
+   PROGRESS.md (`state_delta`) and REVIEW.md (`review_entries`), writes ESCALATION.md
+   when `escalation_payload` is non-null, and removes `.workflow-in-flight`.
+
+Convergence rule (replaces v0.1 "all approved with zero blockers"):
+
+> A concern survives unless explicitly refuted by another reviewer during
+> cross-examination. The cycle is *clean* iff zero surviving `[blocker]` items.
+
+Verdict semantics:
+- `clean` — zero surviving blockers. Next command: `/build-fleet:finalize`.
+- `revise` — surviving blockers; CYCLE < 3. Next command: `/build-fleet:review` after PO
+  revises spec.md.
+- `escalate` — surviving blockers; CYCLE >= 3. Workflow's scribe writes ESCALATION.md,
+  sets PHASE=ESCALATED, halts.
+
+The v0.1 cycle-3 agent-team fallback is retired entirely — workflow cross-examination
+replaces it.
 
 **FINALIZE.** `/finalize` runs the finalize gate. Permitted only when the most recent
 review cycle is fully approved with no open blockers. On success: set STATUS=FINALIZED,
 PHASE=BUILD. The source-write block lifts at this point and not before.
 
-**BUILD.** In parallel: qa authors tests under `tests/` mapped to `acceptance.md`; coder
-implements to spec and records deviations in `IMPL_NOTES.md`. coder refuses to start while
-STATUS≠FINALIZED.
-Exit: implementation and tests exist; tests pass locally.
+**BUILD.** Sequential, tests-first (v0.2 M2 ordering — replaces v0.1 parallel BUILD).
+`/build-fleet:finalize`, on a successful gate, dispatches qa first then coder:
+
+1. **qa drafts TEST_PLAN.md + writes failing tests.** Per the `test-plan` skill, qa
+   builds the coverage matrix from acceptance.md and implements the test suite under
+   `tests/`. Each test must initially FAIL — no source exists yet. qa signals the
+   orchestrator with `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/` when done.
+2. **coder implements to spec.** Coder refuses to begin until QA's failing tests exist
+   in `tests/` and all fail (a passing test against an empty implementation isn't testing
+   behavior). Coder iterates until every QA test passes. `gap:` / `deviation:` / `todo:`
+   markers go in `IMPL_NOTES.md` per its prompt body.
+
+coder refuses to start while STATUS ≠ FINALIZED (enforced by `block-source-before-finalized`).
+coder also refuses if no failing tests exist in `tests/` (self-enforced per `agents/coder.md`;
+the v0.1 hook layer does not gate this — Phase 5 hardening or M3 may add a hook).
+
+Exit: implementation exists, every qa test passes, IMPL_NOTES.md lists any gaps/deviations.
+
+### BUILD variants (v0.2 M3)
+
+Two BUILD execution modes — selected by `PROGRESS.md`'s `BUILD_MODE` field. v0.2 M4
+sets this automatically via the classifier at `/build-fleet:new-feature` time
+(`tier=large` → `deep-build`; everything else → `standard`). Manual override is
+possible via direct PROGRESS.md edit or by invoking `/build-fleet:deep-build`
+explicitly:
+
+- **`BUILD_MODE: standard`** — the M2 sequential qa-then-coder pattern described
+  above. `/build-fleet:finalize` orchestrates it via the Task tool. v0.2 M4's
+  classifier sets this for `tier=trivial` and `tier=standard`; manual override
+  via direct PROGRESS.md edit is supported.
+- **`BUILD_MODE: deep-build`** — for multi-file / multi-package features.
+  `/build-fleet:finalize` runs qa first (same as standard), then routes the
+  implementation phase to the `workflows/deep-build.js` workflow. The workflow's
+  architect subagent designs a file partition; N coders (default 3, max 8) fan out
+  in parallel against M2's pre-existing failing tests; an adversarial review
+  sub-phase (architect for design, qa for coverage + counterfactual) catches gaps
+  before BUILD is declared complete. The scribe aggregates results into
+  `IMPL_NOTES.md` via the envelope's new `impl_notes_appendix` field.
+
+  Until M4's classifier ships, `BUILD_MODE` is set manually (either by editing
+  PROGRESS.md or by invoking `/build-fleet:deep-build [N]` directly, bypassing
+  finalize's routing logic).
+
+  Verdicts:
+  - `clean` → next is `/build-fleet:handoff`.
+  - `needs-iteration` → re-run `/build-fleet:deep-build` after addressing the
+    surviving concerns recorded in IMPL_NOTES.md.
+  - `escalate` → **M3 only emits this on workflow malfunction** (spec not
+    finalized at workflow entry, no tests present, partition planning failed,
+    or a reviewer/coder returned an unparseable payload). M3 does NOT track
+    a cycle counter for deep-build; `needs-iteration` loops unbounded until
+    the operator either runs `handoff` or manually writes ESCALATION.md to
+    halt. Bounded-cycle escalation for deep-build is M3.1 / Phase 5 hardening.
+
+Deep-build is fault-bounded by the workflow runtime's 16-concurrent and
+1000-total-agent caps. Plan-approval for the partition happens at workflow launch
+in interactive mode (the launch prompt shows the phase list including "Plan file
+partition" and "Fan out N coders"); to halt mid-run after a bad partition is
+planned, use `/workflows` to stop the workflow.
 
 **CHANGE_REVIEW.** `/handoff` sets PHASE=CHANGE_REVIEW, increments `CHANGE_CYCLE`, and runs
 architect + product-owner + qa against the diff:
 - architect: design adherence and ADR compliance.
 - product-owner: meets `acceptance.md`.
-- qa: coverage gaps before handoff.
+- qa: coverage gaps before handoff; verifies each test would FAIL if coder's source
+  change were reverted (the v0.2 M2 counterfactual — a test that passes regardless of
+  the source isn't testing behavior, it's decorative).
 Exit (to HANDOFF): all three approve with no open blockers. Fail → back to BUILD (bounded
 by `CHANGE_CYCLE` ≤ 3, then ESCALATE).
 
@@ -147,17 +260,23 @@ by `CHANGE_CYCLE` ≤ 3, then ESCALATE).
 1. No source write while the active spec STATUS ≠ FINALIZED.
    *(block-source-before-finalized, PreToolUse Write|Edit)*
 2. architect/qa may not write outside `.sdd/<active>/`.
-   *(restrict-reviewer-writes, PreToolUse Write|Edit)*
+   *(restrict-reviewer-writes, PreToolUse Write|Edit — fires on non-workflow review
+   paths; workflow REVIEW enforces via `AgentDefinition.tools` allowlists that omit
+   `Write`/`Edit` on reviewer subagents. Hook skips while `.workflow-in-flight` marker exists.)*
 3. spec.md always carries a valid STATUS line and required sections.
    *(validate-spec-status, PostToolUse Write|Edit on spec.md)*
 4. A reviewer cannot stop without recording its review for the current cycle.
-   *(check-review-written, SubagentStop)*
+   *(check-review-written, SubagentStop — fires on non-workflow review paths; workflow
+   REVIEW enforces via the workflow's envelope post-condition that halts the workflow if
+   any reviewer returns an empty/malformed concerns payload. Hook skips while
+   `.workflow-in-flight` marker exists.)*
 5. A session cannot stop on a failing test/lint stack; if no recognized stack exists yet,
    the Stop hook is a silent no-op so bootstrap and empty repos don't deadlock.
    *(stop-tests, Stop)*
 
-`TaskCompleted` and `TeammateIdle` (agent-teams-only) are intentionally **not** shipped
-yet; they are deferred to a hardening pass once team mode is exercised.
+`TaskCompleted` and `TeammateIdle` (agent-teams-only) are intentionally **not** shipped.
+v0.2 retires the agent-teams fallback entirely — workflow cross-examination replaces the
+cycle-3 team debate path.
 
 ## Escalation
 

@@ -1,0 +1,13 @@
+# Transient Claude Code session state
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
+
+# SDD runtime workspace — this is per-target-project state, never the plugin's own
+.sdd/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+
+# Node (only present transiently during SDK probes)
+node_modules/

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# PreToolUse (Write|Edit): during REVIEW and CHANGE_REVIEW phases, restrict
+# all writes to the active feature's .sdd/<slug>/ workspace. Implements the
+# phase-based interpretation of "reviewers may not write outside .sdd/" —
+# see the build plan's Resolved Decision 1 for rationale.
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./_lib.sh
+. "$DIR/_lib.sh"
+
+require_jq
+
+input=$(cat)
+slug=$(resolve_active)
+[ -n "$slug" ] || exit 0
+
+# v0.2: workflow reviewer subagents declare tools=[Read,Grep,Glob] (no Write/Edit)
+# at AgentDefinition level, so writes are physically impossible. While the
+# workflow-in-flight marker is present, this hook skips to avoid duplicate
+# enforcement against the scribe (which DOES need Write/Edit inside .sdd/).
+if [ -f ".sdd/${slug}/.workflow-in-flight" ]; then
+  exit 0
+fi
+
+phase=$(read_progress_field "$slug" PHASE)
+case "$phase" in
+  REVIEW|CHANGE_REVIEW) ;;
+  *) exit 0 ;;
+esac
+
+file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+[ -n "$file_path" ] || exit 0
+
+if path_in_active_sdd "$file_path" "$slug"; then
+  exit 0
+fi
+
+echo "build-fleet: phase is ${phase} for feature '${slug}'. Writes are restricted to .sdd/${slug}/ during review. Refused: ${file_path}" >&2
+exit 2
