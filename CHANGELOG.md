@@ -2,6 +2,23 @@
 
 All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https://keepachangelog.com/) conventions; semver bumps track the plugin's `version` in `.claude-plugin/plugin.json`.
 
+## [0.2.1] — 2026-05-30
+
+### Fixed
+
+- **Stop-hook deadlock at SPEC phase.** `hooks/scripts/stop-tests.sh` ran the
+  test suite in every phase and treated `pytest` exit code 5 ("no tests
+  collected") as a failure. Pre-BUILD there are no tests yet — and the
+  `block-source-before-finalized` gate makes it impossible to write any — so the
+  session could neither stop nor pass. The hook now (a) only enforces the suite
+  in `BUILD | CHANGE_REVIEW | HANDOFF`, and (b) tolerates `pytest` exit 5 as a
+  non-failure. Surfaced by the first real install dogfood (bf-smoke).
+- **`new-feature` classified from the bare slug.** With no description in
+  conversation context, the command let the classifier infer requirements from
+  the slug name alone, producing a hallucinated spec. New step 5 ("Establish the
+  feature description") stops and asks the user what the feature should do when
+  no description exists in context; subsequent steps renumbered.
+
 ## [0.2.0] — 2026-05-30
 
 ### Added
