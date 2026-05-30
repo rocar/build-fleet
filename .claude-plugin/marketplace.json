@@ -9,7 +9,7 @@
       "name": "build-fleet",
       "source": "./",
       "description": "Spec-driven multi-agent software house. SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF with hook-enforced gates, dynamic-workflow adversarial review, tests-first fan-out builds, three-tier routing, and headless orchestrator support.",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "category": "development",
       "keywords": [
         "spec-driven",

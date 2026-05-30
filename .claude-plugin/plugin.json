@@ -1,6 +1,6 @@
 {
   "name": "build-fleet",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Spec-driven multi-agent software house. Ships product-owner, architect, coder, qa, devops, scribe, and classifier subagents that execute a deterministic SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF state machine. In v0.2 the REVIEW phase runs as a Claude Code dynamic workflow with adversarial cross-examination and survival-vote convergence; BUILD can fan out across partitioned coders. Hook-enforced gates, bounded review cycles, first-class human escalation, headless-mode support for orchestrators (Hermes / Agent SDK).",
   "author": {
     "name": "Ray Car",
