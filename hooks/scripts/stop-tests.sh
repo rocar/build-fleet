@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Stop: while a build-fleet feature is active, refuse to stop on a failing
-# test suite. Silent no-op when no feature is active or no recognized test
-# stack is present, so unrelated sessions and bootstrap don't deadlock.
+# Stop: while a build-fleet feature is active AND in a phase where its tests
+# should exist, refuse to stop on a failing test suite. Silent no-op when no
+# feature is active, the feature is pre-BUILD, or no recognized test stack is
+# present, so unrelated sessions and bootstrap don't deadlock.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,6 +11,17 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 slug=$(resolve_active)
 [ -n "$slug" ] || exit 0
+
+# Phase gate: tests are authored by qa during BUILD (M2 tests-first). Before
+# BUILD there are legitimately no tests, and the block-source-before-finalized
+# gate makes it impossible for the session to create any. Running the suite in
+# SPEC/REVIEW/FINALIZE therefore can only deadlock the stop. Only enforce the
+# test gate once the feature has reached a phase where its tests should exist.
+phase=$(read_progress_field "$slug" PHASE)
+case "$phase" in
+  BUILD|CHANGE_REVIEW|HANDOFF) ;;
+  *) exit 0 ;;
+esac
 
 run_test_cmd=""
 if [ -f package.json ]; then
@@ -28,7 +40,18 @@ fi
 
 [ -n "$run_test_cmd" ] || exit 0
 
-if ! out=$($run_test_cmd 2>&1); then
+# Capture output and exit code without tripping `set -e`.
+out=$($run_test_cmd 2>&1) && rc=0 || rc=$?
+
+# pytest exit code 5 == "no tests collected". That is not a test failure; it is
+# a missing-suite signal. Treat it as a pass so an empty collection never hard-
+# blocks a stop — a genuinely missing suite is surfaced by the BUILD
+# orchestration and the CHANGE_REVIEW coverage gate, not by deadlocking Stop.
+if [ "$rc" -eq 5 ] && printf '%s' "$run_test_cmd" | grep -q '^pytest'; then
+  rc=0
+fi
+
+if [ "$rc" -ne 0 ]; then
   echo "build-fleet: '${run_test_cmd}' failed for active feature '${slug}'. Tail:" >&2
   echo "----" >&2
   printf '%s\n' "$out" | tail -n 40 >&2
