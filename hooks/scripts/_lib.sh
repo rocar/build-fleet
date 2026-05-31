@@ -45,20 +45,26 @@ read_spec_status() {
 
 # Return 0 if the path lives anywhere under .sdd/.
 # Usage: path_in_sdd <file_path>
+# Matches relative forms plus both the symlinked ($PWD) and physical (pwd -P)
+# absolute cwd — necessary because a caller may address files via the canonical
+# path (e.g. macOS /tmp -> /private/tmp) while $PWD holds the symlinked form.
 path_in_sdd() {
   local p="$1"
+  local phys; phys=$(pwd -P 2>/dev/null)
   case "$p" in
-    .sdd/*|./.sdd/*|"$PWD/.sdd/"*) return 0 ;;
+    .sdd/*|./.sdd/*|"$PWD/.sdd/"*|"$phys/.sdd/"*) return 0 ;;
     *) return 1 ;;
   esac
 }
 
 # Return 0 if the path lives under .sdd/<slug>/ specifically.
 # Usage: path_in_active_sdd <file_path> <slug>
+# Same symlinked-vs-physical cwd handling as path_in_sdd.
 path_in_active_sdd() {
   local p="$1" slug="$2"
+  local phys; phys=$(pwd -P 2>/dev/null)
   case "$p" in
-    .sdd/"${slug}"/*|./.sdd/"${slug}"/*|"$PWD/.sdd/${slug}/"*) return 0 ;;
+    .sdd/"${slug}"/*|./.sdd/"${slug}"/*|"$PWD/.sdd/${slug}/"*|"$phys/.sdd/${slug}/"*) return 0 ;;
     *) return 1 ;;
   esac
 }
