@@ -66,6 +66,22 @@ and surface that the user must supply a slug.
    - Carry the description (from context or from the user) verbatim into the
      classifier prompt below and into the product-owner delegation in step 8.
 
+5b. **Inherit the product stack, if a product tier exists (v0.4 M0).** Check for
+   `.sdd/_product/STACK.md`. If it exists:
+   - Read `.sdd/_product/STACK.md` and `.sdd/_product/DECISIONS.md`.
+   - Pass both verbatim into the classifier prompt (step 6) and the product-owner
+     delegation (step 8) as **inherited, read-only product context**.
+   - Instruct product-owner (and, if it raises a stack concern in review, the
+     architect): the feature **inherits the product stack-of-record** and its
+     feature-local `DECISIONS.md` must not contradict it. If the feature
+     genuinely needs a different stack, that is **not** a feature-local override —
+     it is a signal to revise the product tier (edit `.sdd/_product/STACK.md` +
+     append a product ADR). Surface that to the user rather than silently diverging.
+
+   If `.sdd/_product/STACK.md` does **not** exist, this is a plain feature-first
+   repo (no product tier) — proceed exactly as before. The product tier is
+   additive; its absence changes nothing.
+
 6. **Run the M4 classifier.** Use the Task tool to spawn `build-fleet:classifier`
    with this prompt:
 

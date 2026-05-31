@@ -55,6 +55,58 @@ Write boundaries (enforced by hooks):
 allow operations through. Every hook resolves the active feature by reading this file —
 never an environment variable.
 
+## Product tier (v0.4 M0) — inherited context only
+
+A repo may optionally carry a **product tier** above the flat feature dirs. It lives in a
+reserved `.sdd/_product/` namespace (the underscore prevents collision with any feature
+slug). A repo with no `.sdd/_product/` is a plain feature-first repo — the product tier is
+**purely additive**; its absence changes nothing.
+
+```
+.sdd/
+  _product/              # the product tier. Created by /build-fleet:new-product.
+    vision.md            # product-owner. Overview/Goals (+ Non-goals/FAQ/OUTCOME for standard|large).
+    backlog.md           # product-owner. Phased feature list + completion markers.
+    STACK.md             # architect. The stack-of-record — inherited READ-ONLY by every feature.
+    DECISIONS.md         # architect. Append-only product ADR log (the *why* behind STACK.md).
+    PROGRESS.md          # orchestrator. PRODUCT / SIZE / UPDATED.
+  ACTIVE                 # unchanged — the single active feature.
+  <feature>/             # unchanged — features stay flat, NOT nested under _product/.
+```
+
+**M0 is inherited context only.** There is no product state machine, no product review
+gate, no scribe, and no new hook. The files are plain DRAFT artifacts edited directly.
+The outer PLAN → PLAN_REVIEW → PLAN_FINALIZE → DEVELOPING machine, CLAUDE.md generation,
+and the phased build loop are later v0.4 milestones (see ROADMAP).
+
+**Greenfield vs brownfield.** `/build-fleet:new-product` works on both. On a
+greenfield repo the architect *ratifies* a new stack from the product description.
+On a **brownfield** repo (real source/manifests already present) the architect
+*infers and records the actual stack* from the code — STACK.md documents what the
+codebase is, never proposes a migration. `/build-fleet:new-product` writes only
+`.sdd/_product/`, never source, so it is safe to run against an existing codebase;
+an existing root `CLAUDE.md` is untouched (M0 does not generate one — that is M3).
+
+**The inheritance contract:**
+- `.sdd/_product/STACK.md` is the product's stack-of-record. When `/build-fleet:new-feature`
+  runs and this file exists, it is read into the classifier + product-owner prompts as
+  read-only context. A feature's own `DECISIONS.md` must not contradict the product stack.
+  A genuine need for a different stack is a signal to **revise the product tier** (edit
+  STACK.md + append a product ADR), not a feature-local override. This is the fix for the
+  latent bug where two features could independently pick conflicting stacks (feature-scoped
+  `DECISIONS.md` has no cross-feature authority; product `DECISIONS.md` does).
+
+**Hook interactions (M0):**
+- `block-source-before-finalized` permits all `.sdd/_product/*` writes (any path under
+  `.sdd/` is allowed; and it exits early when there is no active feature).
+- `restrict-reviewer-writes` confines **all** writes to `.sdd/<active>/` while the active
+  feature's `PHASE` is `REVIEW` or `CHANGE_REVIEW` (phase-based, not role-based). Therefore
+  `/build-fleet:new-product` **refuses to run** while a feature is in those two phases —
+  the product foundation is not reshaped mid-review. All other active-feature phases are
+  fine; `/build-fleet:new-product` never touches `.sdd/ACTIVE`.
+- No hook validates `vision.md`/`STACK.md` STATUS in M0 (`validate-spec-status` fires only
+  on files named `spec.md`). Their STATUS lines are forward-compat for the M3 gate.
+
 ## PROGRESS.md schema
 
 Exact field names; hooks and commands parse these lines:
