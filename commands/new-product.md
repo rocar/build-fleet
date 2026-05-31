@@ -122,12 +122,22 @@ abandoned — bias small.
      preferences. This is a forward design decision.
    - **Brownfield** (real source/manifests already exist — `package.json`,
      `go.mod`, `Cargo.toml`, `requirements.txt`, `pyproject.toml`, a populated
-     `src/`, etc.): **infer and record the *actual* stack from the code.** Read the
-     manifests and representative source; STACK.md must describe what the codebase
-     *is*, not what the architect would prefer. **Do not propose a migration** —
-     STACK.md is documentation of reality, not a redesign. If the architect
-     believes the existing stack is wrong, that is a finding to surface to the
-     user, not a unilateral STACK.md rewrite.
+     `src/`, etc.): **infer and record the *actual* stack from the code** as the
+     **binding stack-of-record** — a `## Baseline (current)` section in STACK.md
+     describing what the codebase *is*. Read the manifests and representative
+     source; never hallucinate a stack that isn't there, and never silently
+     rewrite the baseline.
+
+     A **forward / migration direction is allowed** when the product vision calls
+     for evolution — but it is *strategy*, and **M0 has no product review gate**,
+     so it must not land as binding. Record it in a separate
+     `## Forward direction (PROVISIONAL — unreviewed)` section plus product ADRs
+     tagged `STATUS: PROVISIONAL`. **Provisional forward entries do NOT bind
+     features** — features inherit the binding *baseline* until the migration is
+     ratified (M3 plan-review, or an explicit human edit promoting a PROVISIONAL
+     ADR). Frame forward changes as incremental (migrate/wrap, not rewrite); a
+     concern about the existing stack is a finding to the user, not a unilateral
+     rewrite of reality.
 
    Detect brownfield cheaply before delegating: if the repo contains source
    manifests or a non-trivial source tree outside `.sdd/`, pass `mode=brownfield`

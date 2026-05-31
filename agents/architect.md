@@ -57,10 +57,17 @@ and the product ADRs directly.
 - *Greenfield* — ratify a stack-of-record from the product description and the
   user's preferences. A forward design decision.
 - *Brownfield* (real source/manifests already exist) — **infer and record the
-  *actual* stack from the code**. STACK.md documents what the codebase *is*, not
-  what you would prefer. **Never propose a migration** in STACK.md; if you think
-  the existing stack is wrong, surface it to the user as a finding, don't rewrite
-  reality. ADRs may note the inferred origin (e.g. "observed in package.json"). Note: `/build-fleet:new-product` refuses to run
+  *actual* stack from the code** as the **binding stack-of-record**, under a
+  `## Baseline (current)` heading. Never hallucinate a stack that isn't there;
+  never silently rewrite the baseline. ADRs may note the inferred origin (e.g.
+  "observed in package.json"). A forward / migration direction is permitted when
+  the product vision warrants evolution, but it is **unreviewed strategy** (M0 has
+  no gate): put it in a separate `## Forward direction (PROVISIONAL — unreviewed)`
+  section and tag those ADRs `STATUS: PROVISIONAL`. Provisional forward entries do
+  **not** bind features — the binding stack stays the baseline until a forward ADR
+  is ratified (M3 plan-review, or explicit human promotion). Frame migrations as
+  incremental (migrate/wrap, not rewrite); a concern about the existing stack is a
+  finding to the user, not a unilateral rewrite. Note: `/build-fleet:new-product` refuses to run
 while a feature is in REVIEW/CHANGE_REVIEW, so the `restrict-reviewer-writes`
 hook will not fire against your `_product/` writes.
 

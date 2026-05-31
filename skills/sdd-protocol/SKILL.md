@@ -82,15 +82,25 @@ and the phased build loop are later v0.4 milestones (see ROADMAP).
 **Greenfield vs brownfield.** `/build-fleet:new-product` works on both. On a
 greenfield repo the architect *ratifies* a new stack from the product description.
 On a **brownfield** repo (real source/manifests already present) the architect
-*infers and records the actual stack* from the code — STACK.md documents what the
-codebase is, never proposes a migration. `/build-fleet:new-product` writes only
-`.sdd/_product/`, never source, so it is safe to run against an existing codebase;
-an existing root `CLAUDE.md` is untouched (M0 does not generate one — that is M3).
+*infers and records the actual stack* from the code as the **binding
+stack-of-record** (a `## Baseline (current)` section) — never hallucinating or
+silently rewriting it. A forward/migration direction is allowed only as an
+explicitly **`PROVISIONAL` (unreviewed)** section + ADRs tagged
+`STATUS: PROVISIONAL`; because M0 has no product review gate, provisional forward
+entries are strategy that **do not bind features** until ratified (M3 plan-review,
+or an explicit human edit promoting the ADR). `/build-fleet:new-product` writes
+only `.sdd/_product/`, never source, so it is safe to run against an existing
+codebase; an existing root `CLAUDE.md` is untouched (M0 does not generate one —
+that is M3).
 
 **The inheritance contract:**
 - `.sdd/_product/STACK.md` is the product's stack-of-record. When `/build-fleet:new-feature`
   runs and this file exists, it is read into the classifier + product-owner prompts as
-  read-only context. A feature's own `DECISIONS.md` must not contradict the product stack.
+  read-only context. Features inherit the **binding** stack (the `## Baseline (current)`
+  on a brownfield product, or the ratified greenfield stack); any
+  `## Forward direction (PROVISIONAL — unreviewed)` entries are advisory and do **not**
+  constrain a feature until promoted. A feature's own `DECISIONS.md` must not contradict
+  the binding product stack.
   A genuine need for a different stack is a signal to **revise the product tier** (edit
   STACK.md + append a product ADR), not a feature-local override. This is the fix for the
   latent bug where two features could independently pick conflicting stacks (feature-scoped

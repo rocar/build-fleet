@@ -72,11 +72,16 @@ and surface that the user must supply a slug.
    - Pass both verbatim into the classifier prompt (step 6) and the product-owner
      delegation (step 8) as **inherited, read-only product context**.
    - Instruct product-owner (and, if it raises a stack concern in review, the
-     architect): the feature **inherits the product stack-of-record** and its
-     feature-local `DECISIONS.md` must not contradict it. If the feature
-     genuinely needs a different stack, that is **not** a feature-local override —
-     it is a signal to revise the product tier (edit `.sdd/_product/STACK.md` +
-     append a product ADR). Surface that to the user rather than silently diverging.
+     architect): the feature **inherits the *binding* product stack** — the
+     `## Baseline (current)` section on a brownfield product, or the ratified
+     greenfield stack. Any `## Forward direction (PROVISIONAL — unreviewed)`
+     entries are **advisory only** and do not constrain this feature unless the
+     feature *is* the migration that promotes them. The feature's feature-local
+     `DECISIONS.md` must not contradict the binding stack. If the feature
+     genuinely needs a different binding stack, that is **not** a feature-local
+     override — it is a signal to revise the product tier (edit
+     `.sdd/_product/STACK.md` + append a product ADR). Surface that to the user
+     rather than silently diverging.
 
    If `.sdd/_product/STACK.md` does **not** exist, this is a plain feature-first
    repo (no product tier) — proceed exactly as before. The product tier is
