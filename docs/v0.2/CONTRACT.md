@@ -2,6 +2,72 @@
 
 STATUS: M0 OUTPUT (+ Phase 6 empirical corrections appended below)
 
+## Phase 6 FINAL: install validation — GAP CLOSED (2026-05-30)
+
+build-fleet installed from `https://github.com/rocar/build-fleet.git` via
+`/plugin marketplace add` + `/plugin install build-fleet`. `/agents` then listed
+all 7 role agents:
+`build-fleet:architect (opus)`, `classifier (sonnet)`, `coder (sonnet)`,
+`devops (sonnet)`, `product-owner (opus)`, `qa (sonnet)`, `scribe (sonnet)`.
+
+This closes the one remaining Phase 6 gap: **`agentType: build-fleet:*` resolves
+when the plugin is installed.** The workflow scripts' fan-out (`agentType:
+build-fleet:architect|qa|coder`) and apply (`agentType: build-fleet:scribe`)
+calls will therefore bind to the real role/scribe prompts in production —
+the only thing the dev-session stripped-variant validation couldn't exercise.
+
+Install transport note: the `owner/repo` shorthand resolves to SSH; on a machine
+without a GitHub SSH key, use the full HTTPS URL (or a local path) with
+`/plugin marketplace add`. Documented in README.
+
+v0.2 status: **fully validated.** M1 review pipeline end-to-end (live), M3
+deep-build orchestration + violation detection (live), hooks matrix (live),
+and now agentType resolution on real install. The dedicated-scribe apply path
+and tests-green-on-real-install are the natural first dogfood run, not a
+validation blocker — the mechanism is proven.
+
+---
+
+## v0.2.1 full-cycle validation — CLOSED (2026-05-31, bf-smoke)
+
+The complete SDD pipeline ran clean end-to-end on a real marketplace install
+(plugin v0.2.1, project `~/build-projects/bf-smoke`, feature `celsius-converter`,
+a pure `to_fahrenheit` library). This closes the last validation gap noted above:
+the live agents executing the full state machine, not just resolving by name.
+
+| Phase | Outcome |
+|---|---|
+| SPEC | Skeleton spec drafted (trivial fast-path) |
+| REVIEW | Skipped (TIER=trivial) |
+| FINALIZE | Spec → FINALIZED |
+| BUILD | qa wrote **10 failing tests first**, then coder implemented to green |
+| CHANGE_REVIEW | CHANGE_CYCLE 1 — architect + PO + qa reviewed the diff |
+| HANDOFF | devops shipped (`.github/workflows/ci.yml`, CHANGELOG entry) |
+
+Final state: spec `STATUS: FINALIZED`, `PHASE: HANDOFF`, `CHANGE_CYCLE: 1`,
+final test run **`10 passed in 0.01s`**.
+
+What this proves that no prior validation could:
+
+- **M2 tests-first BUILD, live.** qa authored a failing suite before coder
+  wrote any source; coder implemented to green; the Stop hook then ran a real
+  (passing) suite. The 0.2.1 deadlock fix holds *and* the gate still has teeth.
+- **Dedicated `build-fleet:scribe` apply path works.** Every `.sdd/` mutation
+  across BUILD/CHANGE_REVIEW landed through the real scribe agent — the one
+  thing the dev-session agentType-stripped variant could not exercise.
+- **All 7 agents resolved and performed their roles** on a real install:
+  classifier → PO → qa → coder → architect+PO (change-review) → devops.
+- **CHANGE_REVIEW discriminates, not rubber-stamps.** All three reviewers
+  independently flagged the `bool` pass-through (`to_fahrenheit(True) → 33.8`,
+  since `bool` subclasses `int`) as advisory `[minor]` — a correct, subtle
+  catch surfaced without blocking. Recommended follow-up: pin the `bool`
+  behavior with a regression test before tightening the type guard.
+- **Both 0.2.1 fixes confirmed live:** `new-feature` stops and asks for the
+  feature description when none is in context; the SPEC phase no longer
+  deadlocks on the empty-suite Stop hook.
+
+---
+
 ## Phase 6 empirical findings (2026-05-30, Claude Code 2.1.158)
 
 Grounding the workflow scripts against the LIVE runtime (Workflow tool, claude

@@ -1,149 +1,288 @@
 # build-fleet
 
-A reusable Claude Code plugin that turns any project into a spec-driven multi-agent software house. v0.2 ships dynamic workflows for adversarial spec review and parallel fan-out builds, with first-class headless-mode support for orchestrator-driven (Hermes, Agent SDK) use cases.
+A spec-driven multi-agent software house, packaged as a Claude Code plugin.
+**v0.2.1**
 
-Seven subagents — `product-owner`, `architect`, `coder`, `qa`, `devops`, `scribe`, `classifier` — execute a deterministic state machine for every feature:
+build-fleet turns Claude Code into a disciplined software house: a fleet of
+role subagents drives every change through a deterministic state machine —
+**SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF** — with phase
+gates enforced by hooks, not vibes. No source is written until the spec is
+FINALIZED; no handoff until tests pass and the change is reviewed.
 
-```
-              [M4 classifier]
-                      │
-                      ▼
-SPEC ──► REVIEW ──► FINALIZE ──► BUILD ──► CHANGE_REVIEW ──► HANDOFF
-        [M1 workflow]            [M3 deep-build workflow
-                                  or M2 sequential, per BUILD_MODE]
-          ▲  │                              ▲       │
-          └──┘ (≤3 cycles, then ESCALATE)   └───────┘ (≤3 cycles, then ESCALATE)
-```
+What's new in v0.2:
 
-Phase transitions are enforced by hooks and workflow post-conditions, not by agents deciding they're done. The authoritative rulebook is the `sdd-protocol` skill bundled with this plugin.
+- **REVIEW runs as a dynamic workflow** — reviewers fan out, cross-examine each
+  other adversarially, and concerns survive only by a survival vote (see
+  [Dynamic workflows](#dynamic-workflows)).
+- **Three-tier routing** — a classifier sizes each feature; trivial work skips
+  REVIEW, large work fans out across partitioned coders.
+- **Tests-first BUILD** — qa writes a failing suite before coder writes a line
+  of source.
+- **Headless-first** — every command emits machine-readable `BUILD_FLEET_*`
+  signals, so an orchestrator (Hermes, the Agent SDK, `claude -p`) can drive the
+  fleet without scraping prose.
+
+---
+
+## What you get
+
+Seven role subagents. The **main session is the orchestrator** — it routes,
+gates, and writes `.sdd/` state, but never writes source itself.
+
+| Role | Subagent | Writes | Model |
+|---|---|---|---|
+| Product Owner | `build-fleet:product-owner` | `spec.md`, `acceptance.md` | opus |
+| Architect | `build-fleet:architect` | `DECISIONS.md`, review notes | opus |
+| Coder | `build-fleet:coder` | source, `IMPL_NOTES.md` | sonnet |
+| QA | `build-fleet:qa` | `tests/`, `TEST_PLAN.md` | sonnet |
+| DevOps | `build-fleet:devops` | CI/CD, release notes | sonnet |
+| Classifier | `build-fleet:classifier` | *(read-only — emits a routing verdict)* | sonnet |
+| Scribe | `build-fleet:scribe` | applies workflow state deltas to `.sdd/` | sonnet |
+
+The **classifier** and **scribe** are v0.2 infrastructure agents. The classifier
+sizes incoming work into a routing tier; the scribe is the canonical writer for
+state mutations produced by dynamic workflows (workflow scripts cannot touch the
+filesystem directly, so they hand a structured envelope to the scribe).
+
+Plus the shared memory layer under `.sdd/<feature>/`, two dynamic workflows
+(`workflows/review.js`, `workflows/deep-build.js`), and the gate-enforcing hooks.
+
+---
 
 ## Requirements
 
-- **Claude Code v2.1.154 or later** with the **dynamic workflows feature enabled** (`/config` → "Dynamic workflows" on Pro plans; available by default on Max / Team / Enterprise). v0.2 has a hard requirement on the `Workflow` tool — there is no v0.1 fallback. See `ROADMAP.md`.
+- **Claude Code v2.1.154 or later**, with the **dynamic workflows** feature
+  enabled (`/config` → "Dynamic workflows" on Pro plans; on by default for
+  Max / Team / Enterprise). v0.2 has a **hard** dependency on the `Workflow`
+  tool — REVIEW and deep-build BUILD run as dynamic workflows, and there is no
+  v0.1 command-pipeline fallback. If the runtime is missing, `/build-fleet:review`
+  refuses with `BUILD_FLEET_REFUSE: workflow runtime unavailable` (exit 3).
+- For **headless** callers, `Workflow` must be in the session's allowed tools,
+  e.g. `claude -p --allowedTools "Workflow,Read,Edit,Write,Bash,Agent,Task" …`.
+
+---
 
 ## Install
 
-From a Claude Code marketplace once distributed:
+The plugin is distributed from a GitHub repository as its own single-plugin
+marketplace.
 
 ```
+/plugin marketplace add https://github.com/rocar/build-fleet.git
 /plugin install build-fleet
 ```
 
-During local development, point Claude Code at this directory:
+Then verify the fleet loaded — `/agents` should list all seven `build-fleet:*`
+agents.
+
+**Transport note.** The `owner/repo` shorthand (`/plugin marketplace add
+rocar/build-fleet`) resolves to **SSH** (`git@github.com:…`). On a machine
+without a GitHub SSH key configured it will fail with a publickey error — use
+the full **HTTPS** URL shown above instead, or a local path during development.
+If the repo is **private**, the same credential (SSH key or HTTPS token via
+`gh auth`) must be able to read it.
+
+For local development, point Claude Code at a working copy directly:
 
 ```
 claude --plugin-dir /path/to/build-fleet
 ```
 
-Use `/reload-plugins` after editing plugin files to pick up changes.
+### Updating
 
-## Quickstart (interactive)
-
-In a target project (NOT inside the plugin tree):
+The plugin cache is **keyed by version** (`.claude-plugin/plugin.json`'s
+`version`). `/reload-plugins` only re-reads the *local* cache — it does **not**
+re-fetch from GitHub. To pull a new release you must update the marketplace
+clone and reinstall:
 
 ```
+/plugin marketplace update build-fleet   # re-fetches the repo
+/plugin update build-fleet               # installs the new version into a fresh cache
+/reload-plugins
+```
+
+A version bump is required for the cache to refresh; same-version pushes won't
+take effect on an installed instance.
+
+---
+
+## Quickstart
+
+```
+# 1. describe the feature → scaffold + classify
 /build-fleet:new-feature my-feature
-  # scaffolds .sdd/my-feature/, runs the M4 classifier (sets TIER + BUILD_MODE),
-  # delegates to PO to draft spec (skeleton for trivial, full for standard/large)
+
+# 2. (standard/large only) adversarial review workflow
 /build-fleet:review
-  # dynamic workflow: fan-out reviewers + cross-examination + survival vote
+
+# 3. gate the spec, then run tests-first BUILD
 /build-fleet:finalize
-  # gate; flips spec to FINALIZED; dispatches qa-first then coder (M2 ordering)
-  # OR routes to workflows/deep-build.js for BUILD_MODE=deep-build (M3 workflow)
+
+# 4. change-review the diff, then ship
 /build-fleet:handoff
-  # change-review by architect + PO + qa (counterfactual gate); then devops
-/build-fleet:status
-  # current phase, open concerns, cycle counts, tier
 ```
 
-For trivial features the classifier sets `TIER=trivial`, and `/build-fleet:finalize` skips REVIEW automatically — go straight from `new-feature` to `finalize`.
+`new-feature` will **ask you what the feature should do** if it can't find a
+description in the conversation — the slug alone is never treated as a spec.
 
-Inspect a classification before scaffolding:
+The exact path depends on the routing tier the classifier assigns (below).
 
-```
-/build-fleet:dispatch "rewrite auth to use Argon2id across cli + core + api"
-  # returns tier, build_mode, confidence; does not modify state
-```
+---
 
-Run `/build-fleet:deep-build` manually if you want fan-out BUILD without going through finalize's routing (useful for re-iteration after `verdict=needs-iteration`).
+## Three-tier routing
 
-## Quickstart (headless / orchestrator-driven)
+When you run `/build-fleet:new-feature`, the **classifier** sizes the work and
+writes `TIER` + `BUILD_MODE` into `PROGRESS.md`:
 
-Every command emits `BUILD_FLEET_*:` JSON-line signals **before any human-readable prose**, so orchestrators can branch on machine-readable outcomes without parsing the wider response.
-
-```bash
-claude -p '/build-fleet:new-feature my-feature' \
-  --allowedTools "Workflow,Read,Edit,Write,Bash,Agent,Task"
-# emits: BUILD_FLEET_CLASSIFICATION: {"feature":"my-feature","tier":"...","build_mode":"...","skip_review":...,"confidence":"..."}
-
-claude -p '/build-fleet:review' --allowedTools "Workflow,Read,Edit,Write,Bash,Agent"
-# emits: BUILD_FLEET_COST_PREVIEW: {"workflow":"review",...}
-#        BUILD_FLEET_WORKFLOW_LAUNCHED: {"runId":"...","transcriptDir":"...","status":"async_launched",...}
-
-# Poll workflow completion (e.g. via TaskList/TaskGet), then read .sdd/<feature>/ for state.
-```
-
-The signal grammar:
-
-| Signal | Emitted by | Meaning |
+| Tier | Path | BUILD |
 |---|---|---|
-| `BUILD_FLEET_REFUSE:` | any command | Refusal; always followed by exit ≥ 2 |
-| `BUILD_FLEET_CLASSIFICATION:` | new-feature, dispatch | Classifier verdict |
-| `BUILD_FLEET_CLASSIFIER_FALLBACK:` | new-feature | Classifier parse failure; safe-default to standard |
-| `BUILD_FLEET_COST_PREVIEW:` | review, deep-build, finalize | Cost ceiling for upcoming workflow |
-| `BUILD_FLEET_WORKFLOW_LAUNCHED:` | review, deep-build, finalize | Workflow dispatched with runId |
-| `BUILD_FLEET_FINALIZE_PASS:` / `_REFUSE:` | finalize | Gate outcome (machine-parseable reason codes on refuse) |
-| `BUILD_FLEET_FINALIZE_TRIVIAL_FAST_PATH:` | finalize | M4 trivial fast-path through finalize |
-| `BUILD_FLEET_BUILD_ROUTE:` | finalize | Routing to deep-build workflow vs M2 sequential |
-| `BUILD_FLEET_QA_TESTS_READY:` | qa subagent | Failing test suite ready; coder may proceed |
-| `BUILD_FLEET_QA_VERIFY_FAIL:` | finalize | qa signal absent or test count mismatch |
-| `BUILD_FLEET_CODER_REFUSE:` | coder subagent | Refuses to start (no tests / tests-pass-empty) |
-| `BUILD_FLEET_BUILD_COMPLETE:` / `_INCOMPLETE:` / `_DISPATCH_FAIL:` | finalize | BUILD result |
+| **trivial** | skips REVIEW (`/build-fleet:finalize` straight from SPEC) | standard (qa → coder) |
+| **standard** | full SPEC → REVIEW → FINALIZE → BUILD | standard (qa → coder) |
+| **large** | full pipeline, then `BUILD_MODE=deep-build` | fan-out across partitioned coders |
 
-See `docs/v0.2/CONTRACT.md` for the full headless contract and the workflow ↔ command-layer state-mutation spec.
+The classifier is deliberately conservative: a **false-trivial is the dangerous
+miss**, so anything touching auth, billing, or CI is never trivial, and a malformed
+classifier verdict falls back to `standard`. Re-check or override at any time:
+
+- `/build-fleet:dispatch` — re-runs the classifier on the active feature
+  (query-only; doesn't change state).
+- Edit `PROGRESS.md`'s `TIER:` line by hand to force a tier.
+
+---
+
+## Dynamic workflows
+
+Two phases run as Claude Code **dynamic workflows** (JS scripts under
+`workflows/` executed by the Workflow runtime), not direct Task fan-outs:
+
+- **`/build-fleet:review` → `workflows/review.js`.** Fan-out reviewers
+  (architect/qa/coder) → adversarial **cross-examination** → **survival vote** →
+  scribe applies the verdict. A concern survives only if it is *not* refuted by a
+  different-role reviewer citing a specific `spec.md`/`acceptance.md` section.
+  This kills plausible-but-unfounded concerns before they block finalize.
+- **deep-build → `workflows/deep-build.js`** (BUILD for `large` features).
+  Architect partitions the work across files; coders fan out in parallel;
+  overlap detection prevents two coders racing on the same file; an in-workflow
+  adversarial review catches integration gaps before BUILD declares complete.
+
+Because a workflow can't write files, it emits a structured envelope that the
+**scribe** applies to `.sdd/`. While a workflow is running, a
+`.sdd/<feature>/.workflow-in-flight` marker tells the per-reviewer hooks to
+stand down (the workflow's own post-conditions replace them); the scribe deletes
+the marker on completion, and a Stop hook reaps any orphaned markers older than
+an hour.
+
+> CYCLE counts **workflow runs**, not command invocations — cross-examination
+> rounds inside a single run do not bump it. Review cycles are bounded (default
+> 3); the 4th unresolved cycle writes `ESCALATION.md` and halts for a human.
+
+---
+
+## Command reference
+
+| Command | Phase | What it does |
+|---|---|---|
+| `/build-fleet:new-feature <slug>` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` + `acceptance.md`. Asks for a description if none is in context. |
+| `/build-fleet:dispatch` | — | Re-classifies the active feature (query-only). |
+| `/build-fleet:review` | REVIEW | Runs the adversarial review workflow. (Skipped for trivial.) |
+| `/build-fleet:finalize` | FINALIZE → BUILD | Gate: refuses on open blockers. On pass, flips spec to FINALIZED and orchestrates BUILD (qa-first, then coder; routes to deep-build for large). |
+| `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by finalize). |
+| `/build-fleet:handoff` | CHANGE_REVIEW → HANDOFF | architect + PO + qa review the diff; refuses if tests are missing/failing. On pass, devops ships. |
+| `/build-fleet:status` | — | Prints `.sdd/ACTIVE`, `PROGRESS.md`, open concerns, cycle counts, and any escalation. |
+
+---
+
+## Tests-first BUILD
+
+In standard BUILD, `/build-fleet:finalize` sequences **qa before coder**: qa
+authors a failing test suite from `acceptance.md` first, and coder refuses to
+begin until those tests exist. CHANGE_REVIEW then applies a counterfactual gate
+— *would each test fail without coder's change?* — so the suite actually pins the
+behavior rather than rubber-stamping it.
+
+---
+
+## Headless mode
+
+Every command prints machine-readable `BUILD_FLEET_*:` JSON lines **before** any
+human prose, so an orchestrator can drive build-fleet non-interactively (e.g.
+`claude -p`, the Agent SDK, or a Hermes profile) by parsing those signals.
+
+Representative signals: `BUILD_FLEET_CLASSIFICATION`,
+`BUILD_FLEET_CLASSIFIER_FALLBACK`, `BUILD_FLEET_WORKFLOW_LAUNCHED`,
+`BUILD_FLEET_FINALIZE_PASS` / `_REFUSE`, `BUILD_FLEET_FINALIZE_TRIVIAL_FAST_PATH`,
+`BUILD_FLEET_BUILD_ROUTE`, `BUILD_FLEET_QA_TESTS_READY`, `BUILD_FLEET_CODER_REFUSE`,
+`BUILD_FLEET_BUILD_COMPLETE` / `_INCOMPLETE`, `BUILD_FLEET_REFUSE`.
+
+---
 
 ## State lives in the target project
 
-The plugin tree itself is read-only machinery — Claude Code wipes the plugin cache on update, so nothing mutable can live here.
-
-All runtime state lives in the **target project's** `.sdd/` directory:
+Everything the fleet produces for a feature lives in `.sdd/<feature>/` in the
+**target project's** working directory — never inside the plugin:
 
 ```
-<target-project>/.sdd/
-  ACTIVE                 # one-line slug naming the active feature
+.sdd/
+  ACTIVE                 # the one feature in flight
   <feature>/
-    spec.md              # STATUS: DRAFT | IN_REVIEW | FINALIZED | BLOCKED
-    acceptance.md
-    DECISIONS.md         # append-only ADRs
-    TEST_PLAN.md
-    IMPL_NOTES.md        # also receives deep-build's per-run aggregation (M3)
-    REVIEW.md            # append-only review log
-    PROGRESS.md          # PHASE, CYCLE, CHANGE_CYCLE, TIER, BUILD_MODE
-    ESCALATION.md        # exists only when a gate exhausts its cycle budget
-    .workflow-in-flight  # transient — present only while a workflow is running
+    spec.md              # PO — STATUS: DRAFT|IN_REVIEW|FINALIZED|BLOCKED
+    acceptance.md        # PO — testable criteria
+    DECISIONS.md         # architect — append-only ADRs
+    TEST_PLAN.md         # qa
+    IMPL_NOTES.md        # coder
+    REVIEW.md            # append-only review log (every cycle)
+    PROGRESS.md          # orchestrator — phase, TIER, BUILD_MODE, handoff state
+    ESCALATION.md        # only if review cycles exhausted
+    .workflow-in-flight  # transient marker while a workflow runs
 ```
 
-Commit `.sdd/` alongside your source — it's the audit trail for every decision the fleet made.
+`PROGRESS.md` carries the v0.2 routing fields:
 
-## What changed from v0.1
+```
+FEATURE: <slug>
+PHASE:   SPEC | REVIEW | FINALIZE | BUILD | CHANGE_REVIEW | HANDOFF | ESCALATED
+CYCLE:   <review-workflow runs>
+CHANGE_CYCLE: <change-review rounds>
+TIER:    trivial | standard | large | pending
+BUILD_MODE: standard | deep-build | pending
+UPDATED: <iso8601>
+```
 
-See `CHANGELOG.md` for the full v0.1 → v0.2 diff. Highlights:
+The plugin tree itself is read-only and re-installable; wiping and reinstalling
+the plugin never touches your `.sdd/` state.
 
-- **REVIEW phase is now a dynamic workflow** with adversarial cross-examination and a survival-vote convergence rule (replaces v0.1's "all approved" check, which was a binary proxy for a judgment).
-- **The `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` env-var step is gone.** v0.1's cycle-3 agent-teams fallback is retired — workflow cross-examination replaces it.
-- **Tests-first BUILD ordering.** qa writes failing tests before coder begins; CHANGE_REVIEW verifies the counterfactual.
-- **Deep-build workflow for fan-out implementation.** `BUILD_MODE=deep-build` (set automatically by the M4 classifier for `tier=large`) partitions files across up to 8 coders running in parallel.
-- **Three-tier routing.** A classifier subagent runs at `/build-fleet:new-feature` time. Trivial features skip REVIEW.
-- **Headless mode is first-class.** Every command emits structured `BUILD_FLEET_*:` signals; designed for Hermes / Agent SDK integration.
-- **`scribe` and `classifier` subagents** are new in v0.2.
+---
 
-## Where to read the rules
+## Gates (enforced by hooks, not agents)
 
-The single source of truth for the workflow, gates, severity rubric, and escalation policy is the `sdd-protocol` skill at `skills/sdd-protocol/SKILL.md`. When this README, an agent body, or the original design history in `CLAUDE.md` disagrees with the skill, the skill wins.
+| Hook | Effect |
+|---|---|
+| `block-source-before-finalized` | Blocks writes outside `.sdd/` until `spec.md` is FINALIZED. |
+| `restrict-reviewer-writes` | Confines writes to `.sdd/<active>/` during REVIEW / CHANGE_REVIEW. |
+| `validate-spec-status` | Rejects a `spec.md` missing its STATUS line or required sections. |
+| `check-review-written` | Rejects a reviewer that stops without logging to `REVIEW.md`. |
+| `stop-tests` | During BUILD / CHANGE_REVIEW / HANDOFF, blocks stop on a failing suite (tolerates "no tests collected" pre-suite). |
+| `reap-stale-workflow-markers` | Removes orphaned `.workflow-in-flight` markers older than an hour. |
 
-Design references:
-- `ROADMAP.md` — v0.2 milestones (shipped) + v0.3 forecast (orchestrator-mediated human intervention via Hermes).
-- `V0.2-PLAN.md` — the build plan that produced v0.2 (retires once v0.3 begins).
-- `docs/v0.2/CONTROLS.md` — gate-vs-judgment control inventory.
-- `docs/v0.2/CONTRACT.md` — workflow ↔ command-layer contract (grounded against `@anthropic-ai/claude-agent-sdk@0.3.158`).
-- `CHANGELOG.md` — per-version changes.
+Hooks block with exit code 2 and return actionable feedback. They are the
+deterministic backbone — agents can't talk their way past a gate.
+
+---
+
+## The rules live in a skill
+
+The full workflow contract — phase order, gate semantics, the survival-vote
+convergence rule, escalation policy, file ownership, the `PROGRESS.md` schema —
+is encoded in the **`sdd-protocol`** skill, loaded automatically by the commands
+and agents. Read it at `skills/sdd-protocol/SKILL.md`. Supporting craft skills:
+`sdd-spec-template`, `review-rubric`, `adr`, `test-plan`.
+
+---
+
+## Conventions
+
+- One feature in flight per `.sdd/` at a time (named in `.sdd/ACTIVE`).
+- Reviewers append to `REVIEW.md`; they never overwrite it.
+- Every surviving design decision becomes an ADR in `DECISIONS.md`.
+- The orchestrator (main session) never writes source — it routes and gates.
+- Human escalation is a first-class outcome, not a failure.
