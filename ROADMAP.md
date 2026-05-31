@@ -91,6 +91,123 @@ Open the integration surface between build-fleet workflows and external orchestr
 
 ---
 
+## v0.4 — product tier (forecast)
+
+> Own milestone group, not a v0.3 bolt-on. Source: post-v0.2 user testing surfaced
+> four comments — (1) no new-product initialization phase, (2) no per-product-type
+> skill/tool selection, (3) no CLAUDE.md for a from-scratch product, (4) no phased
+> backlog / pick-next-feature. A multi-agent review (8-agent workflow, 2026-05-31)
+> cross-checked these and the unifying "product tier" proposal against the live repo,
+> the external framework landscape (Kiro, Agent OS, spec-kit, BMAD), and
+> product-lifecycle practice. The findings below are that review's recommendation.
+
+### Direction
+
+build-fleet has nothing above the feature: every entrypoint presupposes a feature and
+the state machine starts at SPEC. Add a **product tier** that records vision, stack, and
+a phased backlog once, and inherits them read-only into features. Ship it as **three
+separable units, smallest-first — not one monolith.** The recursion is partial: the
+outer machine resembles the inner one but diverges (no terminal HANDOFF, long-lived
+DEVELOPING, revisable backlog, and — crucially — a **human/caller ratification gate**
+where the inner machine has an adversarial survival vote).
+
+### Principle of separation (the v0.4 lens)
+
+The inner machine's rule "gates deterministic, judgments adversarial" gains a third
+category at product scope: **strategy is ratified, not voted.** Outcome, non-goals, and
+stack-of-record are stake-bearing human calls. Adversarial review *interrogates* them
+(risk-pokes the FAQ, cross-exams stack trade-offs, checks dependency soundness and
+MVP-slice completeness); it does not *converge* them. A survival vote here would launder
+strategy through a process that only looks rigorous — it picks *a* plan, not *the right*
+plan. This inverts the automation emphasis of the original proposal.
+
+### What the review corrected in the original proposal
+
+- **Not one tier — three separable units.** Comments 1/3/4 collapse into "nothing above
+  the feature"; comment 2 (skill routing) is independent and ships without the outer
+  machine. The latent conflicting-stack bug ships first, alone, with no machinery.
+- **Latent correctness bug (verified).** Per-feature `DECISIONS.md` is scoped strictly
+  under `.sdd/<feature>/` (sdd-protocol), so two features can independently pick
+  conflicting stacks. Hoisting stack/architecture ADRs to a product-level `DECISIONS.md`
+  is a standalone fix — the keystone, M0.
+- **CLAUDE.md generation is mostly already permitted.** `block-source-before-finalized.sh`
+  exits 0 when there is no active feature; greenfield product-init has none. A hook
+  carve-out is needed *only* to regenerate root config mid-feature — deferred.
+- **Skill routing reuses the existing M4 classifier seam.** The classifier already
+  inspects domain for sizing but emits no skill/tool manifest. The fix extends it to
+  emit a manifest threaded into role prompts — not a second, parallel router.
+
+### Milestones
+
+**M0 — Product as inherited context (keystone; smallest value-bearing slice). Effort: S/M.**
+Single stack-of-record + inherited ADRs; **fixes the conflicting-stack bug with no new
+machinery.** Depends-on: nothing.
+- New `commands/new-product.md`: scaffold `.sdd/_product/{vision.md, backlog.md, STACK.md, DECISIONS.md}` as plain DRAFT files. No gate, no workflow, no scribe.
+- `agents/product-owner.md` owns `vision.md` + `backlog.md`; `agents/architect.md` owns `STACK.md` + product `DECISIONS.md`.
+- `commands/new-feature.md`: if `_product/STACK.md` exists, read it + product `DECISIONS.md` into PO/architect prompts; refuse a feature stack choice contradicting STACK.md.
+- `skills/sdd-protocol/SKILL.md`: document `_product/` as **inherited context only** — no outer state machine yet.
+- `path_in_sdd` already matches `.sdd/_product/*` (glob `.sdd/*`, verified `_lib.sh:48-54`) — workspace carve-out is automatic.
+- **Migration rule:** `/new-product` runs alongside an in-flight feature (touches only `_product/`, never `.sdd/ACTIVE`); STACK.md binds **only features created after it lands** — already-FINALIZED features are not retroactively re-validated.
+- **vision.md ceremony is classifier-gated:** `## Non-goals` recommended for non-trivial (consistent with `validate-spec-status.sh:46`); `## FAQ` / `OUTCOME:` are net-new ceremony gated to non-trivial products — resolves the small-product-collapse contradiction.
+
+**M1 — Dynamic skill/tool routing (comment 2's hard half). Effort: M.**
+Domain-appropriate skills/tools at feature dispatch (e.g. frontend-design for frontend
+work). Depends-on: **M0's `new-feature.md` STACK.md edit** — M1 routes through the *same*
+classifier-threading block, so the two are serialized through one file, not parallel.
+- Route through the existing M4 classifier seam — feed STACK.md + feature type in; emit a skill/tool **manifest** threaded into role prompts (the seam that threads `build_mode`/`skeleton_spec_hint` today). Do **not** build a second router.
+- Plumbing constraint (CLAUDE.md §5): team-mode ignores per-agent `skills` frontmatter — put stack-keyed skill instructions in the prompt **body**. Borrow Kiro's declarative `fileMatch`/inclusion-mode shape.
+
+**M2 — Backlog completion-flip on feature HANDOFF (cheap half of comment 4). Effort: M.**
+Cross-feature progress visibility. Depends-on: M0 (backlog artifact).
+- `commands/handoff.md`/`finalize.md` flip `[ ]→[x]` in `_product/backlog.md` on HANDOFF.
+- **Orchestrator-direct write** (keeps the scribe append-only per `scribe.md:114`; avoids touching the envelope contract). Keep the write path a thin helper that is **forward-compatible with M3's `workspace_dir` scheme**, or M3 rips it out.
+- `commands/status.md` surfaces backlog completion state.
+
+**M3 — The outer PLAN state machine (the product tier proper). Effort: L.**
+PLAN → PLAN_REVIEW → PLAN_FINALIZE → DEVELOPING; plan review; validated backlog STATUS;
+CLAUDE.md generation gated at PLAN_FINALIZE. Depends-on: M0–M2 **and three hard
+prerequisites, none optional:**
+- **Resolver contract (most dangerous flaw — fix first).** The entire gate layer keys off one mutable line, `.sdd/ACTIVE` (`_lib.sh:16-19`). A DEVELOPING loop toggling it either disables all gates (empty) or deadlocks `/new-feature` (set → it refuses). Add `resolve_product()` (reads `.sdd/PRODUCT`) + an atomic "complete N / arm N+1" transition that **re-resolves next from live backlog state, not a cached index** (backlogs get re-prioritized mid-flight).
+- **Scribe envelope `workspace_dir`/`scope` field.** Scribe is hardwired to `.sdd/<feature>/` with an explicit "never write outside" constraint (`scribe.md:8,114`). Product-scope writes — **including product-level `.sdd/_product/ESCALATION.md`** — need the field + scribe path rewrite + CONTRACT.md §6 change. Ship escalation-write with it (else a ratification gate whose escalation silently can't be written).
+- **`review.js` parameterization (not a param).** Hardcoded and verified: role enum `["architect","qa","coder"]` (`additionalProperties:false`); paths `.sdd/${feature}/spec.md`; the survival-vote citation regex `/(spec|acceptance)\.md\s*§|line\s+\d+/i` (`SECTION_REF`, line 259) — a `STACK.md §` citation fails it, so a plan-review concern survives unconditionally and **plan review never converges**; `phase:"REVIEW"`; `next_legal_commands`. Parameterize all four by `target`, or fork `plan-review.js`.
+- Plan artifact must **not** be named `spec.md` — `validate-spec-status.sh` fires on any `spec.md` under `.sdd/` and demands 8 sections. Use `backlog.md`/`vision.md` + a new `validate-backlog-status.sh`.
+- **PLAN_FINALIZE = human (or, headless, caller) ratification gate, not a survival vote.** Under `claude -p` it **emits its structured plan + cost ceiling and halts for the upstream caller's resume signal** (ROADMAP:50 pattern) — never auto-passes.
+- **Cost ceiling.** The outer loop multiplies adversarial fan-outs; monotonic regression (feature N re-runs 1..N-1) is **O(N²)** — declare it against the existing `BUILD_FLEET_COST_PREVIEW` seam (`review.js:14`) and make it opt-in past a backlog-size threshold.
+- CLAUDE.md carve-out **only here, only if** regenerating mid-feature is wanted; greenfield needs none.
+
+**M4 (optional) — `/next-feature` advancement convenience. Effort: M.**
+"First PENDING in lowest unblocked phase whose depends-on are all DONE." Depends-on: M3.
+- **Keep optional** to preserve orchestrator-agnosticism — completion-tracking stays
+  in-plugin, advancement *policy* stays with the orchestrator/human. Its mere presence
+  invites callers to depend on plugin-side sequencing; document it as convenience, not
+  policy. Defer until M3 lands.
+
+### Design decisions to lock
+
+- **`_product/` namespace:** `.sdd/_product/` (inside `.sdd/`). `path_in_sdd` and the stale-marker reaper (`find -mindepth 2 -maxdepth 2`) already cover it; the resolver must distinguish product vs feature scope (`resolve_product` vs `resolve_active`).
+- **STACK.md vs product DECISIONS.md:** STACK.md = current resolved state; product DECISIONS.md = append-only ADR log of *why*. Features read both read-only — with an **escalation path to challenge an inherited product ADR** (else inherited stack becomes tyranny forcing feature-local workarounds, and STACK.md becomes the v0.2 bug relocated).
+- **CLAUDE.md gating:** generate at PLAN_FINALIZE while no inner feature is active (already-permitted path). A path-based "always allow CLAUDE.md" carve-out punches a permanent hole in the source-write gate — avoid.
+- **Cross-feature dependency mechanism:** depend on published contracts/interfaces (`INTERFACES.md` / per-feature `contract.md`), not `IMPL_NOTES.md` (couples features to each other's internals).
+- **Tier-awareness:** make the product tier classifier-gated (reuse trivial/standard/large) — small products collapse vision+backlog and STACK+DECISIONS and skip FAQ/OUTCOME. Eight ceremony files before any code on a 3-feature tool = abandonment.
+- **Plugin self-testing:** per-milestone test obligation against the pytest harness — golden-envelope + hook-exit-code tests, non-negotiable for M3's `review.js` parameterization and the resolver "complete N / arm N+1" transition.
+
+### Borrow from other frameworks (load-bearing only)
+
+- **Kiro inclusion modes** (`fileMatch`/`always`/`manual`/`auto`, kiro.dev/docs/steering) — the model for M1 skill routing; its `product.md`/`tech.md`/`structure.md` trio is the convergent industry shape for the above-feature tier.
+- **Agent OS phased now/next/later roadmap** (buildermethods.com/agent-os) — the backlog shape for M0/M2 (borrow structure; treat pick-next automation as under-documented).
+- *Out of scope for these four asks:* BMAD sharding, Working Backwards PR-FAQ, OpenSpec dated-archive, Spec Kit constitution, Conductor worktree orchestration. Revisit only if a specific gap surfaces.
+
+### Explicitly rejected from the original "product tier" proposal
+
+- "One product tier" as a monolith (over-unifies; comment 2 and the stack-bug fix ship independently).
+- PLAN_FINALIZE as an adversarial survival vote (converges to *a* plan, not *the right* plan).
+- A second, stack-axis router for comment 2 (feed stack into the *one* classifier).
+- A path-based "always allow CLAUDE.md" hook carve-out (permanent gate hole).
+- Autonomous `/next-feature` advancement as default behavior (agnosticism); deferred to optional M4.
+- Unbounded monotonic regression (cost bomb; make it opt-in past a size threshold).
+
+---
+
 ## Durable principles (apply to every version)
 
 - **Spec is the contract.** No implementation begins until a spec is FINALIZED.
