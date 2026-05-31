@@ -41,6 +41,7 @@ file, this file wins.
     IMPL_NOTES.md        # coder. Implementation notes and deviations.
     REVIEW.md            # reviewers. Append-only review log (see format below).
     PROGRESS.md          # orchestrator. Phase + cycle state (schema below).
+    SKILL_MANIFEST.md    # orchestrator (from classifier). OPTIONAL (v0.4 M1). Per-role domain skills to load at BUILD.
     ESCALATION.md        # exists only when a gate has exhausted its cycles.
 ```
 
@@ -117,6 +118,35 @@ that is M3).
   fine; `/build-fleet:new-product` never touches `.sdd/ACTIVE`.
 - No hook validates `vision.md`/`STACK.md` STATUS in M0 (`validate-spec-status` fires only
   on files named `spec.md`). Their STATUS lines are forward-compat for the M3 gate.
+
+## Skill routing (v0.4 M1) — domain skills to BUILD roles
+
+build-fleet stays **process machinery**; it ships no domain-craft skills. What it
+ships is a routing convention (the **`skill-routing` skill**): the classifier maps a
+feature's stack + type to the *names* of domain skills, and the BUILD roles load
+them **if available**. Flow:
+
+- **Classifier** (at `/build-fleet:new-feature`) emits a `skill_manifest` in its JSON
+  verdict, derived from the inherited binding stack (`.sdd/_product/STACK.md`, when a
+  product tier exists — see M1's dependence on M0), the feature description, and the
+  project. It writes no state.
+- **`/build-fleet:new-feature`** persists a non-empty manifest to
+  `.sdd/<feature>/SKILL_MANIFEST.md`. An empty/null manifest writes no file — absence
+  means "no routing," and BUILD runs exactly as plain v0.2 (additive/backward-compatible).
+- **coder / qa** read `SKILL_MANIFEST.md` at BUILD and load+apply the skills listed
+  for their role; the orchestrator's BUILD delegation (`/build-fleet:finalize`, and the
+  `deep-build` workflow's coder prompt) also points them at it. Skills load by
+  name-mention in the agent's reasoning, not frontmatter — so it works in every
+  execution mode (incl. agent-team mode, which ignores per-agent frontmatter skills).
+
+Semantics: routing is **advisory and never gates**. A named skill that isn't
+installed is a no-op (the role records `skill-unavailable: <name>` and proceeds). The
+manifest never changes `tier`/`build_mode` or any deterministic gate; it only enriches
+*how* a role works, never *whether* a gate passes. `tools_recommended` in the manifest
+is **recorded only / informational in M1** — no path binds tools yet (skills-first
+scope); wiring it into the `deep-build` workflow's `AgentDefinition.tools` is a later
+increment. See the `skill-routing` skill for the manifest schema and the stack→skill
+mapping table.
 
 ## PROGRESS.md schema
 

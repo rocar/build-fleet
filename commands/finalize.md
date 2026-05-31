@@ -114,6 +114,9 @@ refuse with an actionable diff.
       > Every test must initially FAIL. When the full failing suite is in place, emit
       > exactly: `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/`. Do NOT signal coder
       > or write any source — only tests.
+      > If `.sdd/<slug>/SKILL_MANIFEST.md` exists, first load and apply the skills it
+      > lists under the `qa` role (per the `skill-routing` skill); an unavailable
+      > skill is a no-op — note it in TEST_PLAN.md and proceed.
 
    c. **Wait for QA's signal and verify.** When qa's Task call returns, parse its
       output for the `BUILD_FLEET_QA_TESTS_READY: <N>` line.
@@ -205,6 +208,10 @@ refuse with an actionable diff.
       > passes. Record `gap:` / `deviation:` / `todo:` markers in
       > `.sdd/<slug>/IMPL_NOTES.md`. Self-review against acceptance.md before
       > declaring BUILD complete.
+      > If `.sdd/<slug>/SKILL_MANIFEST.md` exists, first load and apply the skills it
+      > lists under the `coder` role (per the `skill-routing` skill); an unavailable
+      > skill is a no-op — record `skill-unavailable: <name>` in IMPL_NOTES.md and
+      > proceed with normal craft.
 
    e. **Wait for coder's Task call to return, then branch.**
 

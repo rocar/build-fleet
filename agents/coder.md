@@ -62,6 +62,14 @@ During REVIEW you write **only** to `REVIEW.md`. No source. No
 The orchestrator only invokes you after qa signals `BUILD_FLEET_QA_TESTS_READY`. Your job: make
 those failing tests pass — that, plus IMPL_NOTES.md, is your deliverable.
 
+**Skill manifest (v0.4 M1).** Before anything else, check for
+`.sdd/<active>/SKILL_MANIFEST.md`. If it exists, load and apply the skills listed
+under the `coder` role (per the `skill-routing` skill) so domain-appropriate craft
+shapes your implementation. A listed skill that isn't available in this environment
+is a **no-op** — record `skill-unavailable: <name>` in `IMPL_NOTES.md` and proceed
+with your normal craft. Absent manifest = no routing; proceed normally. This never
+changes the gates below — tests-first and the source-write block still apply.
+
 **Refuse-to-begin gate (self-enforced).** Before writing any source:
 
 1. Read `.sdd/<active>/TEST_PLAN.md` to understand the coverage matrix.

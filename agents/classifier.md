@@ -76,7 +76,8 @@ Default. Everything not clearly trivial or clearly large.
      "skip_review": true|false,
      "build_mode": "standard|deep-build",
      "skeleton_spec_hint": "<for tier=trivial: a 3-5 sentence spec PO can use directly; null for standard/large>",
-     "confidence": "high|medium|low"
+     "confidence": "high|medium|low",
+     "skill_manifest": null
    }
    ```
 
@@ -85,6 +86,58 @@ Default. Everything not clearly trivial or clearly large.
    - `tier=standard` → `skip_review=false`, `build_mode=standard`, `skeleton_spec_hint=null`.
    - `tier=large` → `skip_review=false`, `build_mode=deep-build`, `skeleton_spec_hint=null`.
    - `confidence=low` → the orchestrator may surface this for human override.
+   - `skill_manifest` → see "Skill manifest" below. `null` when you cannot determine
+     a domain (the common, safe default); otherwise the object defined there.
+
+## Skill manifest (v0.4 M1)
+
+In addition to sizing, you route **domain-appropriate skills** to the BUILD roles.
+The full convention — the `feature_type` taxonomy, the stack→skill mapping table,
+and the advisory load-if-available semantics — lives in the **`skill-routing`
+skill**; consult it. You only *emit* the manifest; you never write it to disk
+(the orchestrator persists it).
+
+Derive a `feature_type` from the strongest available signal (in order): the
+**inherited binding product stack** if one was provided in your prompt (from
+`.sdd/_product/STACK.md`), then the **feature description** cues, then the
+**project files**. Map that type to per-role skill names via the `skill-routing`
+table. Then set `skill_manifest` to:
+
+```json
+{
+  "feature_type": "frontend-ui|backend-api|data|cli|infra|mobile|docs|mixed|unknown",
+  "derived_from": "<one line: the stack/description signal that drove the type>",
+  "roles": {
+    "coder": { "skills": ["<name>"], "tools_recommended": [], "rationale": "<why>" },
+    "qa":    { "skills": ["<name>"], "tools_recommended": [], "rationale": "<why>" }
+  },
+  "advisory": true
+}
+```
+
+Manifest rules:
+- **Do not include a top-level `feature` field** — `/build-fleet:new-feature` stamps
+  the slug when it persists the manifest. You emit only the object shown above.
+- **Bias to `null`.** If signals conflict or no domain is clear, emit
+  `skill_manifest: null` (or `feature_type: "unknown"` with empty `roles`). A
+  mis-routed skill wastes a load; a missing route is just plain v0.2. Err toward
+  not routing — same conservative instinct as `standard` for sizing.
+- Name **at most ~2 skills per role**; focus beats breadth.
+- **Use the GENERIC names from the `skill-routing` mapping table**
+  (`frontend-design`, `frontend-testing`, `api-design`, …). Do **NOT** emit
+  library-/framework-specific names (`react-hooks`, `dexie-indexeddb`, `vitest`) —
+  build-fleet ships no skills, so a name only routes to something if the operator
+  created a skill of that name, and operators make general role-craft skills, not
+  per-library ones. A specific name almost always no-ops. Put the React/Dexie/Vite
+  specificity in `rationale` and `derived_from`, never in the skill name.
+- Skill names are conventional (per the `skill-routing` table); you do not verify
+  they are installed — routing is advisory and a missing skill is a no-op.
+- Never name destructive tools or invent capabilities in `tools_recommended`; in
+  M1 it is **recorded only / informational on every path** — no path binds tools
+  yet (skills-first scope).
+- The manifest never affects `tier`/`build_mode` — sizing and routing are
+  independent outputs of this one verdict (do not let a "frontend" type inflate
+  size, etc.).
 
 5. **Stop.** No further work. The orchestrator handles routing.
 
@@ -92,8 +145,8 @@ Default. Everything not clearly trivial or clearly large.
 
 - You never modify `.sdd/`, `PROGRESS.md`, or any project files.
 - You never invent project state — read it.
-- If you cannot read the project at all (no files exist yet), default to `standard` with `confidence=low` and rationale "no project context available".
-- If the description is empty or nonsensical, default to `standard` with `confidence=low` and a rationale calling out the ambiguity.
+- If you cannot read the project at all (no files exist yet), default to `standard` with `confidence=low` and rationale "no project context available", and `skill_manifest=null`.
+- If the description is empty or nonsensical, default to `standard` with `confidence=low` and a rationale calling out the ambiguity, and `skill_manifest=null`.
 - You never escalate. The orchestrator decides whether to halt on `confidence=low`.
 
 ## On being wrong

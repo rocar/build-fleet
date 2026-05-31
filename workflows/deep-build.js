@@ -312,6 +312,9 @@ Tests you must make pass (they EXIST and currently FAIL — qa wrote them under 
 ${JSON.stringify(partition.tests)}
 
 Read .sdd/${feature}/spec.md and acceptance.md yourself for full context.
+If .sdd/${feature}/SKILL_MANIFEST.md exists, load and apply the skills it lists
+under the 'coder' role (per the skill-routing skill) before implementing; an
+unavailable skill is a no-op — note it in your impl_notes and proceed.
 
 Your job:
 1. Run your partition's failing tests; confirm they fail initially.

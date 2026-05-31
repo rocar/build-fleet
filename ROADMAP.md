@@ -156,6 +156,19 @@ work). Depends-on: **M0's `new-feature.md` STACK.md edit** — M1 routes through
 classifier-threading block, so the two are serialized through one file, not parallel.
 - Route through the existing M4 classifier seam — feed STACK.md + feature type in; emit a skill/tool **manifest** threaded into role prompts (the seam that threads `build_mode`/`skeleton_spec_hint` today). Do **not** build a second router.
 - Plumbing constraint (CLAUDE.md §5): team-mode ignores per-agent `skills` frontmatter — put stack-keyed skill instructions in the prompt **body**. Borrow Kiro's declarative `fileMatch`/inclusion-mode shape.
+- **Scope (as shipped):** skills-first. The classifier emits a `skill_manifest` (per-role **generic** role-craft skill names — `frontend-design`, not `react-hooks`, which no-op); `new-feature` persists it to `.sdd/<feature>/SKILL_MANIFEST.md`; coder/qa load-if-available at BUILD (advisory, non-gating). `tools_recommended` is **recorded only** — no path binds tools yet (a later increment would wire it into the deep-build workflow's `AgentDefinition.tools`). build-fleet ships **no** domain skills — pure mechanism; operators supply the skills.
+
+**M1.1 (optional) — Marketplace skill-discovery. Effort: S/M.**
+The complement to M1 routing: when a BUILD role hits `skill-unavailable: <name>`, an
+optional step searches the official marketplace for a matching role-craft skill and
+*suggests* a `claude plugin install …` command. Depends-on: M1. Deliberately **out of
+M1's core path** — routing must stay offline-deterministic because the classifier has
+no web/Bash tools and build-fleet is headless-first + orchestrator-agnostic; a live
+marketplace call in the routing path breaks both. So discovery is a **separate,
+optional, advisory** convenience keyed off the `skill-unavailable` signal, never a
+dependency of routing. Caveat: pays off only once domain-craft skills actually exist in
+the marketplace (today it is mostly tooling plugins) — M1 ships the mechanism; the skill
+ecosystem is a separate question.
 
 **M2 — Backlog completion-flip on feature HANDOFF (cheap half of comment 4). Effort: M.**
 Cross-feature progress visibility. Depends-on: M0 (backlog artifact).

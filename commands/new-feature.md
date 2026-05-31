@@ -109,7 +109,7 @@ and surface that the user must supply a slug.
    > size the work. Do not exhaustively read source.
 
    Parse the classifier's JSON verdict. Extract `tier`, `build_mode`, `skip_review`,
-   `skeleton_spec_hint`, `confidence`.
+   `skeleton_spec_hint`, `confidence`, `skill_manifest` (v0.4 M1 — may be `null`).
 
    **Parse-failure fallback.** If the classifier returns malformed JSON or omits
    any of the required fields above, do NOT write `undefined` to PROGRESS.md.
@@ -139,6 +139,22 @@ and surface that the user must supply a slug.
    - `TIER:` ← classifier's `tier` (`trivial`, `standard`, or `large`)
    - `BUILD_MODE:` ← classifier's `build_mode` (`standard` for trivial/standard, `deep-build` for large)
    - `UPDATED:` ← current iso8601
+
+7b. **Persist the skill manifest, if any (v0.4 M1).** The `skill-routing` skill is
+   the convention. If the classifier's `skill_manifest` is **non-null and has at
+   least one non-empty `roles` entry**, write it to `.sdd/<slug>/SKILL_MANIFEST.md`:
+   a one-line header `# Skill Manifest — <slug>` followed by a fenced ```json block
+   containing the manifest object with `"feature":"<slug>"` added. This routes
+   domain-appropriate skills to coder/qa at BUILD (see the `skill-routing` skill
+   for the schema and the load-if-available semantics). Emit:
+
+   ```
+   BUILD_FLEET_SKILL_MANIFEST: {"feature":"<slug>","feature_type":"<...>","coder_skills":[...],"qa_skills":[...]}
+   ```
+
+   If `skill_manifest` is `null` or has only empty `roles`, **write no file** — its
+   absence means "no routing," and BUILD proceeds as plain v0.2. Do not scaffold an
+   empty manifest. (Manifest routing is advisory and never gates anything.)
 
 8. **Delegate to product-owner.** Use the Task tool to spawn the
    `build-fleet:product-owner` subagent. The prompt varies by tier:

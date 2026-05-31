@@ -78,6 +78,13 @@ you must append the block before stopping.
 **v0.2 M2: you run BEFORE coder.** `/build-fleet:finalize`, on a passing gate,
 dispatches you first. coder refuses to begin until your failing test suite is in place.
 
+**Skill manifest (v0.4 M1).** Before drafting tests, check for
+`.sdd/<active>/SKILL_MANIFEST.md`. If it exists, load and apply the skills listed
+under the `qa` role (per the `skill-routing` skill) so domain-appropriate testing
+craft shapes your plan. An unavailable skill is a **no-op** — note
+`skill-unavailable: <name>` in `TEST_PLAN.md` and proceed. Absent manifest = no
+routing. Routing never changes the tests-first ordering or any gate.
+
 Once spec is FINALIZED and PHASE=BUILD, draft `TEST_PLAN.md` following the
 `test-plan` skill: map each acceptance criterion → one or more test cases →
 coverage type (unit / integration / e2e). Then implement the tests.
