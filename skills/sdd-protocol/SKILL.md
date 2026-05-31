@@ -96,11 +96,12 @@ that is M3).
 **The inheritance contract:**
 - `.sdd/_product/STACK.md` is the product's stack-of-record. When `/build-fleet:new-feature`
   runs and this file exists, it is read into the classifier + product-owner prompts as
-  read-only context. Features inherit the **binding** stack (the `## Baseline (current)`
-  on a brownfield product, or the ratified greenfield stack); any
-  `## Forward direction (PROVISIONAL — unreviewed)` entries are advisory and do **not**
-  constrain a feature until promoted. A feature's own `DECISIONS.md` must not contradict
-  the binding product stack.
+  read-only context. Features inherit the **binding** stack — everything in STACK.md
+  not marked provisional (a `## Forward direction (PROVISIONAL — unreviewed)` section,
+  or per-line `PROVISIONAL` tags); if nothing is marked provisional, the whole stack
+  binds (greenfield, or a fully-adopted brownfield). Any provisional forward entries are
+  advisory and do **not** constrain a feature until promoted. A feature's own
+  `DECISIONS.md` must not contradict the binding product stack.
   A genuine need for a different stack is a signal to **revise the product tier** (edit
   STACK.md + append a product ADR), not a feature-local override. This is the fix for the
   latent bug where two features could independently pick conflicting stacks (feature-scoped

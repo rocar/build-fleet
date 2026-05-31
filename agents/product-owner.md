@@ -45,6 +45,18 @@ You do **not** own `.sdd/_product/STACK.md` or `.sdd/_product/DECISIONS.md` — 
 are the architect's. In M0 there is no product review gate: leave `vision.md` and
 `backlog.md` at `STATUS: DRAFT` and do not invent a product STATUS transition.
 
+**Consuming an inherited product stack (during `/build-fleet:new-feature`).** When
+you draft a feature `spec.md`/`acceptance.md` and the orchestrator hands you an
+inherited `.sdd/_product/STACK.md`, you are **bound by its binding stack** —
+everything in STACK.md **not** marked provisional (a `## Forward direction
+(PROVISIONAL — unreviewed)` section, or per-line `PROVISIONAL` tags); if nothing
+is marked provisional, the whole stack binds (greenfield, or a fully-adopted
+brownfield). Your spec must conform to it; never pick or imply a stack that
+contradicts it. Treat any provisional forward entries as **advisory only** — they
+do not bind this feature unless the feature *is* the migration that promotes them. If the feature genuinely cannot be built on the binding stack, do
+not silently diverge: surface it as a signal to revise the product tier (the
+architect edits STACK.md + appends a product ADR). You never edit STACK.md.
+
 ## What "good" looks like
 
 - Spec sections per `sdd-spec-template` are all present and non-empty.

@@ -96,6 +96,15 @@ and surface that the user must supply a slug.
    > Feature description: <the description established in step 5 — paste it
    > verbatim; never substitute the slug for a missing description>.
    >
+   > Inherited product stack (only if a product tier exists — from step 5b):
+   > <paste the BINDING stack from .sdd/_product/STACK.md — i.e. everything EXCEPT
+   > entries marked provisional (whether a `## Forward direction (PROVISIONAL —
+   > unreviewed)` section or per-line `PROVISIONAL` tags). If nothing is marked
+   > provisional, the whole file binds (greenfield, or a fully-adopted brownfield).
+   > Write "none — no product tier" only if .sdd/_product/STACK.md is absent>. Use
+   > it only to size the work (a feature that migrates the product stack is
+   > larger); do not let provisional forward entries inflate the size.
+   >
    > Project context: read whatever files in the current directory help you
    > size the work. Do not exhaustively read source.
 
@@ -144,6 +153,21 @@ and surface that the user must supply a slug.
    - **For `tier=standard` or `tier=large`:** the v0.1/v0.2-baseline prompt —
      ask for a complete first-pass `spec.md` (STATUS=DRAFT) and `acceptance.md`
      following the `sdd-spec-template` skill, with PO's self-review checklist.
+
+   **Inherited product stack (both tiers — from step 5b).** If
+   `.sdd/_product/STACK.md` exists, **prepend to the PO prompt**, verbatim and
+   labeled "inherited, read-only product context": the **binding** stack and the
+   product `DECISIONS.md`. The binding stack is everything in STACK.md NOT marked
+   provisional (a `## Forward direction (PROVISIONAL — unreviewed)` section, or
+   per-line `PROVISIONAL` tags); if nothing is marked provisional, the whole file
+   binds (greenfield, or a fully-adopted brownfield). Instruct PO to draft the spec
+   and acceptance so they **conform to the binding product stack** —
+   the feature's stack choices must not contradict it.
+   `## Forward direction (PROVISIONAL — unreviewed)` entries are advisory only and
+   must not be treated as the stack unless this feature *is* the migration that
+   promotes them. If the feature genuinely cannot fit the binding stack, PO must
+   surface that as a product-tier revision signal (architect edits STACK.md +
+   appends a product ADR), **not** a feature-local override.
 
    Tell PO not to set STATUS=IN_REVIEW regardless of tier — that's `/build-fleet:review`'s
    job (which trivial features skip; standard/large run normally).
