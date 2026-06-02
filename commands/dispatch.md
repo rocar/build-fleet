@@ -22,20 +22,34 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
 
 1. **Validate arguments.** `$ARGUMENTS` is the feature description. If empty, refuse with `BUILD_FLEET_REFUSE: dispatch requires a feature description in arguments` and exit 2.
 
-2. **Invoke the classifier.** Use the Task tool to spawn `build-fleet:classifier` with this prompt:
+2. **Invoke the classifier.** First, if `.sdd/_product/STACK.md` exists, read its
+   binding stack (everything not marked `PROVISIONAL`) so the classifier derives the
+   skill manifest from the product stack — mirroring `/build-fleet:new-feature` step 5b
+   so this preview matches what scaffolding would actually emit. Then spawn
+   `build-fleet:classifier` via the Task tool with this prompt:
 
    > Classify the following feature request per agents/classifier.md. Emit a single JSON verdict and stop.
    >
    > Feature description: `$ARGUMENTS`
    >
+   > Inherited product stack (only if a product tier exists): <paste the binding stack
+   > from .sdd/_product/STACK.md, or "none — no product tier">. Use it to derive
+   > `feature_type` and the skill manifest; do not let it change sizing.
+   >
    > Project context: read whatever files in the current directory help you size the work. Do not exhaustively read source.
 
-3. **Parse the verdict.** The classifier emits a single JSON block of the shape documented in agents/classifier.md (`tier`, `rationale`, `skip_review`, `build_mode`, `skeleton_spec_hint`, `confidence`). Extract it.
+3. **Parse the verdict.** The classifier emits a single JSON block of the shape documented in agents/classifier.md (`tier`, `rationale`, `skip_review`, `build_mode`, `skeleton_spec_hint`, `confidence`, `skill_manifest`). Extract it. `skill_manifest` (v0.4 M1) may be `null`.
 
 4. **Emit the classification signal.** Before any human-readable output, write exactly one line:
 
    ```
    BUILD_FLEET_CLASSIFICATION: {"tier":"<...>","build_mode":"<...>","skip_review":<bool>,"confidence":"<...>"}
+   ```
+
+   If `skill_manifest` is non-null with at least one non-empty `roles` entry, also emit (preview only — dispatch writes no file):
+
+   ```
+   BUILD_FLEET_SKILL_MANIFEST: {"feature_type":"<...>","coder_skills":[...],"qa_skills":[...]}
    ```
 
 5. **Report to the user.** Human-readable summary:
@@ -46,6 +60,12 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
      - `standard`: `/build-fleet:new-feature <slug>` will scaffold and PO will draft the full spec; user runs `/build-fleet:review` then `/build-fleet:finalize` as the v0.1 flow.
      - `large`: same as standard PLUS PROGRESS.md gets `BUILD_MODE=deep-build` so finalize routes the implementation phase to `workflows/deep-build.js`.
    - If `confidence=low`: surface the rationale and recommend the user either provide a more detailed description or override the tier manually by editing PROGRESS.md after scaffolding.
+   - **Skill routing preview (v0.4 M1).** If `skill_manifest` is non-null, show
+     `feature_type` and the per-role skill names (coder / qa) it would write to
+     `.sdd/<slug>/SKILL_MANIFEST.md` at `/build-fleet:new-feature` time. Note these
+     are **generic, advisory** names per the `skill-routing` skill — a name only
+     takes effect at BUILD if a skill of that name is available, else it's a no-op.
+     If `skill_manifest` is `null`, state that no domain routing applies (plain v0.2).
 
 6. **Cleanup.** No state to clean — this command never wrote any.
 

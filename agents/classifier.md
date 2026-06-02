@@ -122,7 +122,16 @@ Manifest rules:
   `skill_manifest: null` (or `feature_type: "unknown"` with empty `roles`). A
   mis-routed skill wastes a load; a missing route is just plain v0.2. Err toward
   not routing — same conservative instinct as `standard` for sizing.
-- Name **at most ~2 skills per role**; focus beats breadth.
+- Name **at most ~2 skills per role**; focus beats breadth. Prefer **one** skill
+  per role unless a second is genuinely warranted.
+- **Stay within the determined `feature_type`'s row.** Emit only skills mapped to
+  that type in the `skill-routing` table. Do **NOT** borrow another domain's skill
+  (e.g. `api-design` on a pure `frontend-ui` feature). **Client-side storage —
+  IndexedDB / Dexie / localStorage — is part of `frontend-ui`, not `backend-api`
+  or `data`**: a local persistence layer is not an API or a data backend, so it
+  does not justify `api-design`/`data-modeling`. Only emit a second type's skill
+  when the feature is truly `mixed` with a real second domain present (e.g. an
+  actual HTTP backend service), and justify it in `rationale`.
 - **Use the GENERIC names from the `skill-routing` mapping table**
   (`frontend-design`, `frontend-testing`, `api-design`, …). Do **NOT** emit
   library-/framework-specific names (`react-hooks`, `dexie-indexeddb`, `vitest`) —

@@ -84,6 +84,13 @@ Determine `feature_type` from the strongest available signal, in order:
    "flag" → cli; "migration", "schema", "ETL" → data.
 3. The **project files** — framework manifests, directory shape.
 
+**Client-side storage is `frontend-ui`.** IndexedDB / Dexie / `localStorage` /
+in-browser persistence is part of a frontend feature — it is **not** `backend-api`
+(there is no API) and **not** `data` (there is no data backend). A browser-only SPA
+with local persistence is `frontend-ui`, full stop. `backend-api` requires an actual
+server/HTTP service; `data` requires a real datastore/pipeline/migrations on a
+backend.
+
 If signals conflict or none is clear → `feature_type: "unknown"` and emit an empty
 `roles` (no routing). Bias to empty over a wrong route — a mis-routed skill wastes
 a load; a missing route is just plain v0.2 behavior.
@@ -116,6 +123,13 @@ Capture all stack/library specificity in the manifest's `rationale` and
 the skill name. Never invent tools or destructive capabilities, and never name more
 than ~2 skills per role (focus over breadth). The table is extensible, but
 additions must be generic role-craft names.
+
+**Stay in-row.** Emit only the skills mapped to the **determined `feature_type`'s
+row**. Do not borrow another row's skill (e.g. `api-design` on a `frontend-ui`
+feature) — that is the most common misroute. Prefer one skill per role. Only emit a
+second type's skill when the feature is genuinely `mixed` with a real second domain
+present (an actual backend, not a local persistence layer), and say so in
+`rationale`.
 
 ## How coder / qa apply it (advisory, non-blocking)
 
