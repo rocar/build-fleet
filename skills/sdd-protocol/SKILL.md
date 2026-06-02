@@ -70,10 +70,22 @@ slug). A repo with no `.sdd/_product/` is a plain feature-first repo — the pro
     backlog.md           # product-owner. Phased feature list + completion markers.
     STACK.md             # architect. The stack-of-record — inherited READ-ONLY by every feature.
     DECISIONS.md         # architect. Append-only product ADR log (the *why* behind STACK.md).
-    PROGRESS.md          # orchestrator. PRODUCT / SIZE / UPDATED.
+    PROGRESS.md          # orchestrator. PRODUCT / SIZE / UPDATED (PHASE added by M3.1).
+  PRODUCT                # v0.4 M3.0 — one-line product slug marker (mirrors ACTIVE). resolve_product() reads it.
   ACTIVE                 # unchanged — the single active feature.
   <feature>/             # unchanged — features stay flat, NOT nested under _product/.
 ```
+
+**Product-tier foundations (v0.4 M3.0).** Two behavior-preserving primitives are
+in place ahead of the outer state machine (M3.1+):
+- `resolve_product()` (`hooks/scripts/_lib.sh`) echoes the product slug from the
+  `.sdd/PRODUCT` marker (or the `_product/PROGRESS.md` `PRODUCT:` field). **Dormant
+  in M3.0** — no gate keys off it yet; it mirrors `resolve_active()` for the
+  product tier.
+- The scribe accepts an optional envelope `workspace_dir` (CONTRACT §6): when set
+  (e.g. `.sdd/_product/`) it writes there instead of `.sdd/<feature>/`, so
+  product-scope workflows (M3.1's `plan-review`) can apply state — including
+  `.sdd/_product/ESCALATION.md`. Absent ⇒ byte-identical v0.2 feature-scope behavior.
 
 **M0 is inherited context only.** There is no product state machine, no product review
 gate, no scribe, and no new hook. The files are plain DRAFT artifacts edited directly.

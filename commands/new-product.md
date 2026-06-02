@@ -94,7 +94,11 @@ abandoned — bias small.
      SIZE: <small | standard | large>
      UPDATED: <iso8601>
      ```
-     *(No `PHASE` field in M0 — there is no product state machine yet. M3 adds it.)*
+     *(No `PHASE` field in M0 — there is no product state machine yet. M3.1 adds it.)*
+   - `.sdd/PRODUCT` — a one-line marker file containing the product slug, written
+     at the `.sdd/` root (mirrors `.sdd/ACTIVE` for features). `resolve_product()`
+     reads it; its presence flags the product tier as engaged for v0.4 M3+.
+     Behavior-preserving in M3.0 — no gate keys off it yet.
 
 2. **Delegate vision + backlog to product-owner.** Spawn `build-fleet:product-owner`
    via the Task tool. Tell it: it owns `.sdd/_product/vision.md` and

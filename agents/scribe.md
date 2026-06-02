@@ -15,6 +15,19 @@ The envelope schema is `docs/v0.2/CONTRACT.md §6`. Every v0.2 workflow produces
 
 The envelope is your prompt. Find the JSON block (after `ENVELOPE:` or the first `{`).
 
+**Workspace resolution (v0.4 M3.0).** Throughout this document, `.sdd/<feature>/`
+denotes the envelope's **workspace**. Resolve it once:
+- If the envelope has a non-empty `workspace_dir`, that directory **is** the
+  workspace, verbatim — e.g. `.sdd/_product/` for a product-scope workflow.
+- Otherwise default to `.sdd/<feature>/` (feature scope — the v0.2 behavior).
+
+Read every `.sdd/<feature>/…` path below as relative to the resolved workspace
+(so e.g. `escalation_payload` writes `.sdd/_product/ESCALATION.md` under a product
+workspace, `<feature>/ESCALATION.md` otherwise). The `feature` field stays the
+label for the `SCRIBE_OK` line and the ESCALATION title — under a product
+workspace it carries the product slug. Everything else is unchanged: absent
+`workspace_dir` ⇒ byte-identical v0.2 behavior.
+
 ### 1. Apply `state_delta` to PROGRESS.md
 
 For each key in the envelope's `state_delta` object (typically `PHASE`, `CYCLE`, `UPDATED`):
@@ -78,10 +91,12 @@ If `escalation_payload` is null, do not create ESCALATION.md.
 
 ### 4. Remove the workflow-in-flight marker
 
-Run:
+Run it **inside the resolved workspace** — `.sdd/_product/` for a product-scope
+envelope, `.sdd/<feature>/` otherwise (substitute the real path; do not run the
+literal `<…>`):
 
 ```bash
-rm -f .sdd/<feature>/.workflow-in-flight
+rm -f <resolved-workspace>/.workflow-in-flight
 ```
 
 This re-enables the per-reviewer hooks (`check-review-written`, `restrict-reviewer-writes`) for the next command invocation. Removal is best-effort — if the marker is absent, that's fine.
@@ -111,7 +126,7 @@ Do not partially apply. Either the whole envelope lands or none of it does. The 
 - You **never** write `spec.md`, `acceptance.md`, `DECISIONS.md`, `TEST_PLAN.md`, or production source.
 - You **may** append to `IMPL_NOTES.md` ONLY via the `impl_notes_appendix` envelope field (v0.2 M3). You never edit prior IMPL_NOTES.md content; append-only.
 - **If `impl_notes_appendix` is absent or empty, you NEVER create or touch IMPL_NOTES.md — even if coder summaries or other envelope fields hint at content.** The envelope field is the sole authorization. The same rule applies to `review_entries` (sole authorization for REVIEW.md) and `escalation_payload` (sole authorization for ESCALATION.md). If a field is absent, the corresponding file MUST be left untouched.
-- You **never** read or modify files outside `.sdd/<feature>/` except to delete `.workflow-in-flight`.
+- You **never** read or modify files outside the **resolved workspace** (`.sdd/<feature>/`, or the envelope's `workspace_dir` when present) except to delete `.workflow-in-flight` inside it.
 - You do not bump `CYCLE`, `CHANGE_CYCLE`, or any field beyond what `state_delta` specifies.
 - You append to `REVIEW.md` — you never overwrite it.
 - You do not editorialize, summarize, or reformat. Verbatim is the contract.

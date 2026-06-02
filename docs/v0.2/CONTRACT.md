@@ -496,7 +496,8 @@ Every workflow's *final phase* produces this envelope and passes it to the scrib
 ```jsonc
 {
   "build_fleet_version": "0.2",       // string — schema version guard
-  "feature": "my-feature",            // string — feature slug from .sdd/ACTIVE
+  "feature": "my-feature",            // string — subject slug (feature from .sdd/ACTIVE; product slug for product-scope)
+  "workspace_dir": null,              // string | null — v0.4 M3.0. Directory the scribe writes to. null/absent ⇒ ".sdd/<feature>/" (feature scope, v0.2 behavior). ".sdd/_product/" for product-scope workflows (plan-review). Generalizes the scribe off the hardwired feature dir; absent ⇒ byte-identical v0.2 behavior.
   "phase": "REVIEW",                  // string — PROGRESS.md PHASE value at run-start
   "cycle": 2,                         // int — CYCLE value AFTER this run's increment
   "verdict": "clean|revise|escalate", // string — terminal outcome of survival vote

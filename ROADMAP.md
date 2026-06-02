@@ -189,6 +189,12 @@ prerequisites, none optional:**
 - **Cost ceiling.** The outer loop multiplies adversarial fan-outs; monotonic regression (feature N re-runs 1..N-1) is **O(N²)** — declare it against the existing `BUILD_FLEET_COST_PREVIEW` seam (`review.js:14`) and make it opt-in past a backlog-size threshold.
 - CLAUDE.md carve-out **only here, only if** regenerating mid-feature is wanted; greenfield needs none.
 
+*Build approach (as building):* split into three sub-increments, smallest-first.
+- **M3.0 — foundations (behavior-preserving). SHIPPED.** `resolve_product()` + `read_product_field()` + the `.sdd/PRODUCT` marker (`/new-product` writes it; dormant — no gate keys off it yet); scribe `workspace_dir` envelope field (CONTRACT §6) so product-scope workflows can apply state incl. `.sdd/_product/ESCALATION.md` — absent ⇒ byte-identical v0.2. **Decision: fork, don't parameterize.** Since `review.js` is left untouched (still the spec-review workhorse) and the forked `plan-review.js` is co-designed with its command, the "review.js parameterization" prerequisite is obviated — M3.0 is just the resolver + scribe primitives.
+- **M3.1 — PLAN → PLAN_REVIEW → PLAN_FINALIZE.** New `workflows/plan-review.js` (forked; interrogation, **not** survival-vote), `/build-fleet:plan-review` + `/build-fleet:plan-finalize`, product `PROGRESS` PHASE field, `validate-backlog-status.sh`, optional CLAUDE.md generation. PLAN_FINALIZE is the human/caller ratification gate.
+- **M3.2 — DEVELOPING loop.** Product PHASE=DEVELOPING; the atomic complete-N/arm-N+1 transition (driven on HANDOFF, extends M2's flip) re-resolving next from live backlog.
+- **Deferred out of M3:** the O(N²) monotonic regression — later opt-in, not core to the loop.
+
 **M4 (optional) — `/next-feature` advancement convenience. Effort: M.**
 "First PENDING in lowest unblocked phase whose depends-on are all DONE." Depends-on: M3.
 - **Keep optional** to preserve orchestrator-agnosticism — completion-tracking stays

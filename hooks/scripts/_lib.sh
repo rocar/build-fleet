@@ -30,6 +30,35 @@ read_progress_field() {
     | tr -d '\r '
 }
 
+# Echo the product slug if a product tier is engaged, else empty string.
+# (v0.4 product tier — mirrors resolve_active.) Reads the .sdd/PRODUCT marker
+# written by /build-fleet:new-product; falls back to the PRODUCT: field of
+# .sdd/_product/PROGRESS.md for tiers scaffolded before the marker existed.
+# DORMANT in M3.0 — no gate keys off it yet; M3.1/M3.2 wire it in.
+resolve_product() {
+  local marker=".sdd/PRODUCT"
+  if [ -f "$marker" ]; then
+    head -n1 "$marker" 2>/dev/null | tr -d '[:space:]'
+    return 0
+  fi
+  local prog=".sdd/_product/PROGRESS.md"
+  [ -f "$prog" ] || return 0
+  grep -m1 "^PRODUCT:" "$prog" 2>/dev/null \
+    | sed -E 's/^PRODUCT:[[:space:]]*//' \
+    | tr -d '\r '
+}
+
+# Echo a field value from .sdd/_product/PROGRESS.md.
+# Usage: read_product_field <field>   (e.g. PHASE, SIZE)  — DORMANT in M3.0.
+read_product_field() {
+  local field="$1"
+  local f=".sdd/_product/PROGRESS.md"
+  [ -f "$f" ] || return 0
+  grep -m1 "^${field}:" "$f" 2>/dev/null \
+    | sed -E "s/^${field}:[[:space:]]*//" \
+    | tr -d '\r '
+}
+
 # Echo the spec STATUS value (DRAFT|IN_REVIEW|FINALIZED|BLOCKED) for the
 # active feature, or empty if spec.md or its STATUS line is absent.
 # Usage: read_spec_status <slug>
