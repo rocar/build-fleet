@@ -10,8 +10,13 @@ not mutate anything.
 
 ## What you do
 
-1. **Read `.sdd/ACTIVE`.** If empty or absent, report "no active feature"
-   and stop. Suggest `/build-fleet:new-feature <slug>`.
+1. **Read `.sdd/ACTIVE`.** If empty or absent:
+   - If `.sdd/_product/backlog.md` exists, there is a product tier with no feature
+     in flight — skip the feature-detail steps (2–5) and go straight to the
+     **Product backlog** section (step 5b), which surfaces the backlog and names the
+     next unblocked feature to scaffold.
+   - Otherwise report "no active feature" and stop. Suggest
+     `/build-fleet:new-feature <slug>`.
 
 2. **Read `.sdd/<active>/PROGRESS.md`.** Print:
    - Feature slug.
@@ -37,6 +42,19 @@ not mutate anything.
    contents — phase, cycle count, unresolved blockers, conflicting
    positions. Skip the "next command" recommendation; only a human
    unblocks an escalation.
+
+5b. **Product backlog (v0.4 M2), if a product tier exists.** If
+   `.sdd/_product/backlog.md` exists, summarize it:
+   - For each `## Phase N: <name> — STATUS:` line, print the phase name + its STATUS.
+   - Under each phase, print every feature row with its state: `PENDING`, or `DONE`
+     (with its `handoff:` date) — and if a row's slug matches `.sdd/ACTIVE`, annotate
+     it `← active (in flight, PHASE=<phase>)`. Active is **derived from `.sdd/ACTIVE`**,
+     not a backlog marker.
+   - A roll-up line: `<done>/<total> features done across <N> phases`.
+   - If no feature is active, name the **next unblocked feature**: the first `PENDING`
+     row in the lowest phase whose `depends-on` are all `DONE`, and suggest
+     `/build-fleet:new-feature <that-slug>`.
+   Read-only, like the rest of status.
 
 6. **Recommend the next command** based on PHASE:
    - `SPEC` → product-owner is drafting; run `/build-fleet:review` when

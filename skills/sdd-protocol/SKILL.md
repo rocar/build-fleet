@@ -119,6 +119,23 @@ that is M3).
 - No hook validates `vision.md`/`STACK.md` STATUS in M0 (`validate-spec-status` fires only
   on files named `spec.md`). Their STATUS lines are forward-compat for the M3 gate.
 
+## Backlog completion (v0.4 M2)
+
+`.sdd/_product/backlog.md` rows track per-feature completion. Row format:
+`- [ ] <slug>   PENDING   depends-on: <none|slug>`. On a successful
+`/build-fleet:handoff` (devops done), the orchestrator flips the matching row to
+`- [x] <slug>   DONE   depends-on: <unchanged>   handoff:<iso-date>` and recomputes
+the containing `## Phase N: … — STATUS:` line (`complete` when all its rows are `[x]`,
+else `in-progress` if any are, else `pending`). This is an **orchestrator-direct
+write** — not the scribe (the scribe is append-only; product-scope writes are M3's
+concern, and M3 re-points them through the scribe's `workspace_dir`). A feature with
+no matching backlog row (an ad-hoc fix) is left untouched. "Active in flight" is
+**derived from `.sdd/ACTIVE`**, not a backlog marker — there is no `[>]` state to
+keep in sync. `/build-fleet:status` surfaces the backlog and, when no feature is
+active, names the next unblocked `PENDING` feature (first row in the lowest phase
+whose `depends-on` are all `DONE`). Advancement stays manual / orchestrator-driven
+(M4 adds an optional `/build-fleet:next-feature`).
+
 ## Skill routing (v0.4 M1) — domain skills to BUILD roles
 
 build-fleet stays **process machinery**; it ships no domain-craft skills. What it

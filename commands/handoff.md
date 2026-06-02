@@ -76,6 +76,32 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
     Tell the user the feature is shipped (or in the project's equivalent
     of shipped — opened PR, queued release, etc.).
 
+11. **Flip the product backlog, if a product tier exists (v0.4 M2).** After a
+    successful devops completion (step 10), if `.sdd/_product/backlog.md` exists,
+    mark this feature done in it:
+    - Find the row for the active slug — `- [ ] <slug> …`. If **no row matches**
+      (the feature isn't a backlog item — e.g. an ad-hoc fix), **skip this step**
+      and note `feature not in product backlog — nothing to flip`. Do not invent a
+      row. (There is no `[>]`/active row state — "in flight" is derived from
+      `.sdd/ACTIVE`, so a PENDING row is the only thing to flip.)
+    - Flip the checkbox and state to:
+      `- [x] <slug>   DONE   depends-on: <unchanged>   handoff:<iso-date>`.
+      **Preserve any existing `depends-on:` token** (later features reference it);
+      only change `- [ ]` → `- [x]`, the `PENDING` word → `DONE`, and append
+      `handoff:<iso-date>`.
+    - **Recompute the containing `## Phase N: … — STATUS:` line**: `complete` if
+      every feature row in that phase is now `[x]`; else `in-progress` if at least
+      one row in the phase is `[x]`; else `pending`.
+    - Emit: `BUILD_FLEET_BACKLOG_FLIP: {"feature":"<slug>","phase":"<phase name>","phase_status":"<complete|in-progress|pending>"}`.
+
+    **Orchestrator-direct write** to `.sdd/_product/backlog.md` — a `.sdd/` path the
+    hooks permit at HANDOFF (`block-source-before-finalized` allows anything under
+    `.sdd/`; `restrict-reviewer-writes` only acts during REVIEW/CHANGE_REVIEW, and
+    we are past that). It deliberately does **not** go through the scribe: the
+    scribe is append-only and product-scope writes are M3's concern. Keep this a
+    thin, self-contained step — **M3 re-points product writes through the scribe's
+    `workspace_dir` scheme**, so do not couple it to feature-scope state here.
+
 ## Refusal cases
 
 - `.sdd/ACTIVE` empty → refuse.

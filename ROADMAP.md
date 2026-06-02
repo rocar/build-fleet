@@ -175,6 +175,7 @@ Cross-feature progress visibility. Depends-on: M0 (backlog artifact).
 - `commands/handoff.md`/`finalize.md` flip `[ ]→[x]` in `_product/backlog.md` on HANDOFF.
 - **Orchestrator-direct write** (keeps the scribe append-only per `scribe.md:114`; avoids touching the envelope contract). Keep the write path a thin helper that is **forward-compatible with M3's `workspace_dir` scheme**, or M3 rips it out.
 - `commands/status.md` surfaces backlog completion state.
+- **Scope (as shipped):** the flip lives in `handoff.md` step 11 only (devops-success-gated) — **not** `finalize.md`, which is BUILD *entry*, not completion. Flips `- [ ] <slug> PENDING` → `- [x] <slug> DONE … handoff:<date>`, preserves `depends-on`, and recomputes the containing phase `STATUS` (complete/in-progress/pending). **No `[>]`/active row marker** — "in flight" is derived from `.sdd/ACTIVE`, avoiding a second source of truth. Guarded: no product tier or no matching row → no-op (pure v0.2). `status.md` surfaces the backlog (phases, per-feature done/pending, active-derived) and, when no feature is active, names the next unblocked `PENDING` feature. Advancement stays manual (M4's optional `/next-feature`).
 
 **M3 — The outer PLAN state machine (the product tier proper). Effort: L.**
 PLAN → PLAN_REVIEW → PLAN_FINALIZE → DEVELOPING; plan review; validated backlog STATUS;
