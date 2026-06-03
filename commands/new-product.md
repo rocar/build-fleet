@@ -92,9 +92,18 @@ abandoned — bias small.
      ```
      PRODUCT: <slug>
      SIZE: <small | standard | large>
+     PHASE: PLAN
+     CYCLE: 0
      UPDATED: <iso8601>
      ```
-     *(No `PHASE` field in M0 — there is no product state machine yet. M3.1 adds it.)*
+     `PHASE` seeds the outer PLAN state machine (v0.4 M3.1):
+     `PLAN | PLAN_REVIEW | DEVELOPING | ESCALATED` (the `PLAN_FINALIZE` ratification
+     gate is synchronous — it writes `PLAN_REVIEW → DEVELOPING` directly and is never
+     a resting phase). A freshly scaffolded product starts at `PLAN` — vision/backlog/stack
+     are being drafted.
+     `CYCLE: 0` is the plan-review cycle counter (mirrors the feature-tier `CYCLE`);
+     `workflows/plan-review.js` bumps it and the scribe writes it back. Both fields
+     must be present so the product-scope scribe can replace them in place.
    - `.sdd/PRODUCT` — a one-line marker file containing the product slug, written
      at the `.sdd/` root (mirrors `.sdd/ACTIVE` for features). `resolve_product()`
      reads it; its presence flags the product tier as engaged for v0.4 M3+.

@@ -1,5 +1,5 @@
 {
-  "description": "build-fleet SDD gates: block source writes until FINALIZED, confine reviewers to .sdd/ during non-workflow REVIEW/CHANGE_REVIEW (workflow paths skip via .workflow-in-flight marker), validate spec STATUS + required sections, require reviewer REVIEW.md entries on non-workflow paths, refuse Stop on failing tests while a feature is active, reap orphaned .workflow-in-flight markers on Stop.",
+  "description": "build-fleet SDD gates: block source writes until FINALIZED, confine reviewers to .sdd/ during non-workflow REVIEW/CHANGE_REVIEW (workflow paths skip via .workflow-in-flight marker), validate spec STATUS + required sections, validate product backlog STATUS + structure (v0.4 M3.1), require reviewer REVIEW.md entries on non-workflow paths, refuse Stop on failing tests while a feature is active, reap orphaned .workflow-in-flight markers on Stop.",
   "hooks": {
     "PreToolUse": [
       {
@@ -23,6 +23,10 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-spec-status.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-backlog-status.sh\""
           }
         ]
       }

@@ -191,7 +191,33 @@ prerequisites, none optional:**
 
 *Build approach (as building):* split into three sub-increments, smallest-first.
 - **M3.0 — foundations (behavior-preserving). SHIPPED.** `resolve_product()` + `read_product_field()` + the `.sdd/PRODUCT` marker (`/new-product` writes it; dormant — no gate keys off it yet); scribe `workspace_dir` envelope field (CONTRACT §6) so product-scope workflows can apply state incl. `.sdd/_product/ESCALATION.md` — absent ⇒ byte-identical v0.2. **Decision: fork, don't parameterize.** Since `review.js` is left untouched (still the spec-review workhorse) and the forked `plan-review.js` is co-designed with its command, the "review.js parameterization" prerequisite is obviated — M3.0 is just the resolver + scribe primitives.
-- **M3.1 — PLAN → PLAN_REVIEW → PLAN_FINALIZE.** New `workflows/plan-review.js` (forked; interrogation, **not** survival-vote), `/build-fleet:plan-review` + `/build-fleet:plan-finalize`, product `PROGRESS` PHASE field, `validate-backlog-status.sh`, optional CLAUDE.md generation. PLAN_FINALIZE is the human/caller ratification gate.
+- **M3.1 — PLAN → PLAN_REVIEW → PLAN_FINALIZE. DRAFTED (review pending).** New
+  `workflows/plan-review.js` (forked; **interrogation, not survival-vote** — roles
+  `[product-owner, architect, qa]` surface `question|risk|gap` findings, consolidated
+  by pure JS, nothing auto-killed, never auto-escalates); `/build-fleet:plan-review` +
+  `/build-fleet:plan-finalize`; product `PROGRESS` `PHASE` + `CYCLE` fields seeded by
+  `/new-product`; `validate-backlog-status.sh` (keys on `_product/backlog.md`; PRODUCT +
+  STATUS + ≥1 phase heading). **Locked decisions:**
+  - **PLAN_FINALIZE = explicit `ratify` arg.** Bare call is a **dry-run** (prints report +
+    open-blocker count, halts — the headless safety stop); `ratify` flips iff zero open
+    blockers; `ratify force` overrides. **Never auto-passes, even with zero findings.**
+    Does **not** promote PROVISIONAL→binding (finalizes the plan as written).
+  - **Ratification is ADVISORY** — `PHASE=DEVELOPING` does **not** gate `/new-feature`
+    (preserves M0/M1 inheritance behavior). The product machine's teeth are M3.2's loop.
+  - **No hook taught about `_product`** — plan-review/plan-finalize refuse while a feature
+    is in `REVIEW`/`CHANGE_REVIEW` (same guard `/new-product` uses), covering both
+    `restrict-reviewer-writes` and `check-review-written`.
+- **M3.1.1 — CLAUDE.md generation (split out of M3.1). DRAFTED (review pending).**
+  Root `./CLAUDE.md` product block (`<!-- BEGIN/END build-fleet:product -->`; vision
+  one-liner, **binding** stack, conventions) — **non-clobbering** (only the marked region
+  is ever rewritten; an existing hand-authored CLAUDE.md keeps all its content) +
+  **idempotent** (markers present → replace in place; absent → append at EOF; no file →
+  create). One algorithm in the `sdd-protocol` skill, two callers: `/build-fleet:plan-finalize`
+  generates best-effort on the ratify-flip; new `/build-fleet:product-memory` is the
+  standalone regen/recover path. **Block-source caveat handled, not bypassed:** `./CLAUDE.md`
+  is outside `.sdd/`, so generation is **pre-checked + deferred** (not forced) when an active
+  feature's spec isn't FINALIZED — the gate stays uniform; `/build-fleet:product-memory`
+  recovers a deferred write. Binding-only (PROVISIONAL/forward entries excluded).
 - **M3.2 — DEVELOPING loop.** Product PHASE=DEVELOPING; the atomic complete-N/arm-N+1 transition (driven on HANDOFF, extends M2's flip) re-resolving next from live backlog.
 - **Deferred out of M3:** the O(N²) monotonic regression — later opt-in, not core to the loop.
 

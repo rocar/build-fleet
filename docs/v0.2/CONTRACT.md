@@ -529,6 +529,24 @@ Every workflow's *final phase* produces this envelope and passes it to the scrib
 }
 ```
 
+#### Product-scope variant (v0.4 M3.1 — `plan-review`)
+
+`workflows/plan-review.js` emits the same envelope shape with these scope-specific
+values (the scribe handles them uniformly via `workspace_dir`):
+- `workspace_dir`: `".sdd/_product/"` — the scribe writes the product tier, and
+  `feature` carries the **product slug** (used for `SCRIBE_OK` + any ESCALATION title).
+- `verdict`: `"interrogated"` — informational only. Plan-review holds **no survival
+  vote**, so `surviving_concerns` is always `[]` and the `verdict` never gates anything;
+  the human ratifies at `/build-fleet:plan-finalize`.
+- `escalation_payload`: **always `null`** — plan-review never auto-escalates. A missing
+  interrogator payload halts the run *without writing any envelope* (the workflow returns
+  `verdict:"incomplete"` and the command surfaces it); only a human writes
+  `.sdd/_product/ESCALATION.md`.
+- `state_delta.PHASE`: `"PLAN_REVIEW"`; `state_delta.CYCLE`: the bumped plan-review cycle.
+- `review_entries`: the interrogation report blocks (one per role, grouped by
+  `kind: question|risk|gap`, plus a consolidated summary block) — append-only to
+  `.sdd/_product/REVIEW.md`.
+
 ### Envelope post-conditions (replaces `check-review-written` hook for workflow paths)
 
 The workflow script validates before passing to scribe:

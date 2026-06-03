@@ -131,6 +131,145 @@ that is M3).
 - No hook validates `vision.md`/`STACK.md` STATUS in M0 (`validate-spec-status` fires only
   on files named `spec.md`). Their STATUS lines are forward-compat for the M3 gate.
 
+## Product tier — PLAN state machine (v0.4 M3.1)
+
+The product tier gains an **outer state machine**, mirroring the feature tier one level
+up but with an inverted temperament. A feature spec is a contract the machine can
+**adversarially converge** (REVIEW's survival vote kills concerns refuted with a section
+cite). A product plan is a **strategic bet** the machine must not converge — it surfaces
+risk and a human chooses. So:
+
+```
+feature:   SPEC  →  REVIEW (survival vote)        →  FINALIZE (deterministic gate)  →  BUILD
+product:   PLAN  →  PLAN_REVIEW (interrogation)    →  PLAN_FINALIZE (human ratifies)  →  DEVELOPING
+```
+
+`.sdd/_product/PROGRESS.md` carries `PHASE: PLAN | PLAN_REVIEW | DEVELOPING | ESCALATED`
+and a `CYCLE` counter (the plan-review cycle; mirrors the feature `CYCLE`).
+`/build-fleet:new-product` seeds `PHASE: PLAN`, `CYCLE: 0`. *(`PLAN_FINALIZE` names the
+ratification **gate**, not a persisted resting phase — the gate is synchronous and writes
+`PLAN_REVIEW → DEVELOPING` directly; PROGRESS never rests at `PLAN_FINALIZE`.)*
+
+**PLAN_REVIEW (`/build-fleet:plan-review` → `workflows/plan-review.js`).** A **fork** of
+`review.js` (the M3.0 decision: fork, don't parameterize). Roles `[product-owner,
+architect, qa]` **interrogate** the product artifacts (`vision/backlog/STACK/DECISIONS.md`)
+from their lenses, each returning structured `findings` (`kind: question|risk|gap`,
+`severity: blocker|major|minor`). The workflow **consolidates by pure JS** (groups + counts)
+— there is **no cross-examination, no survival vote, nothing auto-killed** — and the scribe
+appends an interrogation report to `.sdd/_product/REVIEW.md`, setting `PHASE=PLAN_REVIEW`.
+The scribe writes the product workspace via the envelope's `workspace_dir=".sdd/_product/"`
+(CONTRACT §6). plan-review **never auto-escalates**: a missing interrogator payload halts the
+run *without writing* (re-run), and the only thing that writes `_product/ESCALATION.md` is a
+human. Self-interrogation by the artifact's author (PO interrogating its own vision) is fine —
+the act surfaces risk, it does not vote.
+
+**PLAN_FINALIZE (`/build-fleet:plan-finalize`) — the ratification gate.** A product plan is
+**ratified, never auto-decided**, so this gate **never auto-passes — even with zero findings**:
+- *Bare* `/build-fleet:plan-finalize` is a **dry-run**: it prints the latest interrogation
+  report + open `[blocker]` count and **halts**. In headless mode (`claude -p`) this is the
+  whole safety story — it cannot ratify itself.
+- `ratify` flips state **iff** zero open blocker-severity findings; open blockers → refuse.
+- `ratify force` flips over open blockers, recording them as consciously accepted.
+- Small fast-path: `SIZE=small` + `PHASE=PLAN` + `CYCLE=0` may ratify without a prior
+  plan-review (mirrors the trivial-feature fast-path; treats open-blocker count as 0).
+
+On ratification it edits `vision.md` + `backlog.md` `STATUS: FINALIZED` and sets
+`PHASE: DEVELOPING`. It also flips `STACK.md` `STATUS: FINALIZED` **conditionally** — only
+when the stack is **fully binding** (no `## Forward direction (PROVISIONAL — unreviewed)`
+section and no `PROVISIONAL`-tagged lines); when provisional/forward content is present,
+`STACK.md` STATUS is **left untouched** (the file still holds un-ratified strategy, so
+labelling it `FINALIZED` would be dishonest). Either way it **does NOT promote** any forward
+direction or `STATUS: PROVISIONAL` ADR — ratification finalizes the plan **as written**; the
+binding stack stays whatever is currently un-tagged. Auto-promoting provisional strategy would
+be the machine choosing direction, which this gate must never do. `DECISIONS.md` (per-ADR
+STATUS, architect-owned) is never edited by the gate.
+
+**Ratification is advisory (M3.1 decision).** Setting `PHASE=DEVELOPING` does **not** gate
+`/build-fleet:new-feature` — features build against the binding stack regardless of product
+phase, preserving the M0/M1 inheritance behavior. The product machine's "teeth" are the M3.2
+**DEVELOPING loop** (which reads `PHASE=DEVELOPING` to drive feature arming), not a
+feature-creation block.
+
+### Product memory — root CLAUDE.md generation (v0.4 M3.1.1)
+
+On ratification, build-fleet seeds the repo's Claude memory with the ratified product so
+**any** Claude Code session (not just build-fleet commands) inherits the vision + **binding**
+stack. The generation is owned by this skill (one algorithm, two callers): `/build-fleet:plan-finalize`
+triggers it on the ratify-flip (best-effort), and `/build-fleet:product-memory` is the
+standalone (re)generation path (refresh after editing the plan, or recover a deferred write).
+
+**The block** — a single delimited region in the repo-root `./CLAUDE.md`:
+
+```
+<!-- BEGIN build-fleet:product -->
+## Product: <slug>
+_Generated by build-fleet (`/build-fleet:plan-finalize` · `/build-fleet:product-memory`) — edits between these markers are overwritten on regeneration; edit `.sdd/_product/` instead._
+
+<vision one-liner: first sentence of vision.md ## Overview, or the OUTCOME: line if present>
+
+**Binding stack** (the stack-of-record every feature inherits — see `.sdd/_product/STACK.md`):
+- <concise bullets distilled from STACK.md's sections>
+_Provisional/forward-direction entries are excluded — they do not bind._
+
+**Conventions**: <distilled from STACK.md ## Conventions, or "see .sdd/_product/STACK.md">
+
+**Source of truth**: the product tier lives in `.sdd/_product/` (vision, backlog, STACK,
+DECISIONS); the feature backlog + phases are in `.sdd/_product/backlog.md`. build-fleet
+commands drive features against this plan. This block is a generated summary — edit the
+`.sdd/_product/` files, then re-run `/build-fleet:product-memory` to refresh it.
+<!-- END build-fleet:product -->
+```
+
+**Generation algorithm (non-clobbering + idempotent):**
+1. Distil the content above from `.sdd/_product/{vision,STACK}.md` and the product slug.
+   **Exclude** any `## Forward direction (PROVISIONAL — unreviewed)` section and any
+   `PROVISIONAL`-tagged lines from the binding-stack bullets — the block reflects only
+   what currently binds. **Brownfield "all-provisional" fallback:** if STACK.md has *no*
+   binding entries because everything is a provisional forward direction, use the
+   `## Baseline (current)` content as the binding stack (the brownfield baseline *is* the
+   stack-of-record) and add a one-line note that a forward direction exists but does not
+   yet bind. Never emit an empty binding-stack section.
+2. **Detect the existing block by PREFIX, not full line.** The block is present iff a line
+   starts with `<!-- BEGIN build-fleet:product` (match the prefix only — the trailing prose
+   after the slug may change between versions); its region runs to the next line equal to
+   `<!-- END build-fleet:product -->`. A brittle full-line match on the BEGIN marker would
+   miss a prose-tweaked block and append a duplicate (breaking idempotency).
+3. Splice into `./CLAUDE.md`:
+   - **No file** → `Write` it containing just the block.
+   - **Block present** (prefix match per step 2) → `Edit` it in place: `old_string` = the
+     entire existing region from the `<!-- BEGIN build-fleet:product…` line through the
+     `<!-- END build-fleet:product -->` line; `new_string` = the freshly-generated block.
+     **Everything outside the region is preserved byte-for-byte** by Edit's exact-match.
+   - **Block absent** (an existing hand-written `CLAUDE.md`) → **append via `Edit`**:
+     `old_string` = the file's current final line, `new_string` = that same line + a blank
+     line + the block. Prefer this over a Read→reconstruct→`Write`: anchoring the append on
+     `Edit` makes NON-CLOBBERING structural (exact-match) rather than dependent on faithfully
+     re-emitting the whole file. **Never modify pre-existing content.**
+
+**Block-source caveat (why generation can be deferred).** `./CLAUDE.md` is **outside**
+`.sdd/`, so `block-source-before-finalized` blocks the write whenever `.sdd/ACTIVE` names a
+feature whose `spec.md` STATUS ≠ `FINALIZED`. The generating command **pre-checks** this and,
+if the write would be blocked, **skips generation with a deferred note** rather than fighting
+the gate — the ratification flip itself (all in `.sdd/_product/`) always succeeds. The escape
+hatch is `/build-fleet:product-memory`, run once no feature is mid-non-finalized. (We do
+**not** whitelist `CLAUDE.md` in the gate — keeping the FINALIZED gate uniform is worth the
+occasional deferral.)
+
+**Hook interactions (M3.1):**
+- `validate-backlog-status.sh` (new, PostToolUse) keys on `basename==backlog.md` under
+  `.sdd/_product/` — feature dirs have no `backlog.md`, so no collision. It requires a
+  `PRODUCT:` header, a valid `STATUS` line, and ≥1 `## Phase N:` heading (structural presence,
+  not per-row grammar).
+- Both `/build-fleet:plan-review` and `/build-fleet:plan-finalize` **refuse while a feature is
+  in `REVIEW`/`CHANGE_REVIEW`** — `restrict-reviewer-writes` confines all writes to
+  `.sdd/<active>/` during feature review (so the product scribe / the STATUS flips could not
+  write `.sdd/_product/`), and the interrogator roles overlap the feature-reviewer set so a
+  mid-review feature would mis-fire `check-review-written`. This single guard (the same one
+  `/build-fleet:new-product` uses) covers both hooks; no hook needed teaching about `_product`.
+- The product scribe removes `.sdd/_product/.workflow-in-flight` (resolved under the envelope's
+  `workspace_dir`); `reap-stale-workflow-markers` reaps it if orphaned (it scans depth-2, which
+  includes `_product/`).
+
 ## Backlog completion (v0.4 M2)
 
 `.sdd/_product/backlog.md` rows track per-feature completion. Row format:
