@@ -104,6 +104,22 @@ assert "prose-cannot-satisfy-dep" "$H
 * [x] cleanup the build before merging
 - [ ] needs-cleanup   PENDING   depends-on: cleanup" '"status":"deadlocked"'
 
+# M3.3 intent lines (indented, under each row) must be invisible to the resolver
+assert "intent-lines-ignored" "$H
+## Phase 1: Foundations — STATUS: in-progress
+- [x] cli-skeleton   DONE   depends-on: none   handoff:2026-06-03
+      Cobra root command + global --format flag; the app shell.
+- [ ] api-client   PENDING   depends-on: cli-skeleton
+      The internal/yahoo typed HTTP wrapper — sole package that talks to Yahoo." '"status":"next","slug":"api-client","phase":"Phase 1: Foundations","done":1,"total":2'
+
+# M3.3 allows 1-3 line intents — multi-line indented blocks must also be invisible
+assert "multiline-intent-ignored" "$H
+## Phase 1: P1 — STATUS: pending
+- [ ] solo   PENDING   depends-on: none
+      Line one of the intent: what it is.
+      Line two: the scope boundary.
+      Line three: explicit non-goals / deferrals to sibling features." '"slug":"solo","phase":"Phase 1: P1","done":0,"total":1'
+
 out="$(bash "$RESOLVER" "$work/does-not-exist.md")"
 if printf '%s' "$out" | grep -qF '"status":"no-backlog"'; then
   pass=$((pass+1)); printf 'ok   %-34s %s\n' "missing-file-no-backlog" "$out"

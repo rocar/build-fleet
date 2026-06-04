@@ -229,8 +229,21 @@ prerequisites, none optional:**
   decisions:** deterministic shared resolver (not prose); M3.2 stops at surfacing (M4 keeps
   `/next-feature` separate); "complete" + "deadlock" are **derived** from the backlog (no
   terminal PHASE value, deadlock is a warning not an escalation). Resolver has a committed
-  test harness (`scripts/next-feature.test.sh`, 13 cases) covering every branch + regressions
-  (CRLF, empty-vs-complete, capital `[X]`/`None`, substring-dep, phase-crossing, forward deps).
+  test harness (`scripts/next-feature.test.sh`, 18 cases) covering every branch + regressions
+  (CRLF, empty-vs-complete, capital `[X]`/`None`, substring-dep, phase-crossing, forward deps,
+  prose-line rejection, M3.3 single- and multi-line intent invisibility).
+- **M3.3 — Per-feature intent in the backlog. DRAFTED (review pending).** Each backlog row
+  gets an **indented 1–3 line intent** (what the feature is + scope boundary + explicit
+  non-goals/deferrals to siblings — a sketch, *not* a spec) so intent survives the
+  plan→feature boundary. PO authors it at `/new-product`; `/new-feature` step 5 seeds the
+  feature description from it and step 8 hands it to the PO to *realize + elaborate*
+  (deviations flagged in self-review). **PLAN_REVIEW explicitly interrogates intent quality**
+  (clarity, clean sibling boundaries, dep justification) — result quality tracks intent
+  quality, so intent is reviewed, not blindly trusted. **Parser-invisible** (no `- [`/`##`
+  prefix → resolver, `validate-backlog-status`, and the M2 flip all ignore it; flip preserves
+  it). Backward-compatible (slug-only rows still work). **Hard line:** intent stays
+  boundary-level — no acceptance criteria/interfaces/behavior — to keep the spec-is-the-contract
+  gate intact and avoid two rotting sources of truth.
 - **Deferred out of M3:** the O(N²) monotonic regression — later opt-in, not core to the loop.
 
 **M4 (optional) — `/next-feature` advancement convenience. Effort: M.**

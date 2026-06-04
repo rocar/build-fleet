@@ -36,14 +36,46 @@ When the orchestrator runs `/build-fleet:new-product`, you additionally own:
   products, Non-goals / FAQ / an `OUTCOME:` line). The orchestrator scaffolds the
   required headings per product size; you fill them.
 - `.sdd/_product/backlog.md` — the **phased** feature list. Each row is
-  `- [ ] <feature-slug>   PENDING   depends-on: <none | other-slug>`. Group rows
-  under `## Phase N: <name> — STATUS: pending`. Sequence by dependency: a feature
-  in a later phase may `depends-on` one in an earlier phase. Use stable kebab-case
-  slugs — `/build-fleet:new-feature <slug>` will consume them later.
+  `- [ ] <feature-slug>   PENDING   depends-on: <none | other-slug>`, **followed by an
+  indented intent block of 1–3 lines** (v0.4 M3.3):
+  ```
+  - [ ] api-client   PENDING   depends-on: cli-skeleton
+        The internal/yahoo typed HTTP wrapper (Quote/History/Search) over stdlib net/http —
+        the sole package that talks to Yahoo's unofficial endpoints. Network only:
+        no rendering, no persistence (those are output-formatter / local-config-store).
+  ```
+  Group rows under `## Phase N: <name> — STATUS: pending`. Sequence by dependency: a
+  feature in a later phase may `depends-on` one in an earlier phase. Use stable
+  kebab-case slugs — `/build-fleet:new-feature <slug>` will consume them later.
+
+  **Write an intent (1–3 lines) under every feature row.** It states *what the feature is*,
+  its *scope boundary*, and any *explicit non-goals / deferrals to sibling features* — the
+  seed that `/build-fleet:new-feature` hands you later so the spec realizes the plan's
+  intent instead of a fresh guess from a bare slug. The boundary/deferral facts are the
+  high-value part: they keep sibling features from overlapping or leaving a gap (e.g.
+  "config persistence lives in `local-config-store`, not here").
+
+  It is a **sketch, not a spec.** Capture intent + boundary + non-goals; do **NOT** write
+  acceptance criteria, interfaces, or detailed behavior — that is the feature's `spec.md`,
+  drafted and adversarially reviewed at feature time. Two sources of truth for behavior
+  would rot apart and make the per-feature review redundant; keep the contract in the spec.
+  These intents are **interrogated at PLAN_REVIEW** (clarity, clean sibling boundaries,
+  dep justification) — write them to survive that, not to pre-empt the spec.
+  The indent (no `- [`, no `##`) keeps the block invisible to the resolver and the flip —
+  those parse only the `- [ ]`/`- [x]` row line.
 
 You do **not** own `.sdd/_product/STACK.md` or `.sdd/_product/DECISIONS.md` — those
 are the architect's. In M0 there is no product review gate: leave `vision.md` and
 `backlog.md` at `STATUS: DRAFT` and do not invent a product STATUS transition.
+
+**Consuming the inherited intent (during `/build-fleet:new-feature`, v0.4 M3.3).** When
+the orchestrator hands you the active feature's backlog **intent line**, treat it as the
+plan author's *intended scope* — the starting point your spec must realize and elaborate.
+It is a sketch, not the contract: expand it into full Behavior / Interfaces / Acceptance
+Criteria, and if your spec must deviate from the stated intent (the plan was wrong, or
+scope shifted), say so explicitly in your `## Self-review notes` rather than silently
+drifting. If no intent line was supplied (a legacy slug-only backlog, or an ad-hoc
+feature with no backlog row), draft from the user's description as usual.
 
 **Consuming an inherited product stack (during `/build-fleet:new-feature`).** When
 you draft a feature `spec.md`/`acceptance.md` and the orchestrator hands you an

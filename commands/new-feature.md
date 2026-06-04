@@ -55,7 +55,21 @@ and surface that the user must supply a slug.
 
    - Look back through the conversation for a description the user already gave
      (e.g. "build a celsius→fahrenheit converter that handles negatives").
-   - **If no usable description exists in context, STOP and ask the user.**
+   - **Check the product backlog for an inherited intent (v0.4 M3.3).** If
+     `.sdd/_product/backlog.md` exists, find the row for this slug
+     (`- [ ] <slug>` / `- [x] <slug>`) and read its **intent block** — the run of
+     indented lines (NOT starting with `- [` or `##`) immediately under the row, up to
+     the next feature row, the next `## Phase` heading, or a blank line, whichever
+     comes first (1–3 lines). If present **and usable**, that intent is the **plan
+     author's starting description** — carry it forward (prefer it over re-deriving
+     from the slug) and label it to the PO as the inherited intent (step 8).
+   - **Quality floor — a thin intent does NOT suppress the gate.** A backlog intent
+     counts as a usable description only if it actually states *what the feature is + its
+     scope boundary*. A bare restatement of the slug ("the API client", "the skeleton")
+     with no boundary is **not** usable — treat it as if absent and fall through to the
+     STOP-and-ask below. (A hand-edited or legacy backlog can carry a vague intent that
+     PLAN_REVIEW never interrogated; the mere presence of a line does not excuse the gate.)
+   - **If no usable description exists in context *and* no usable backlog intent, STOP and ask the user.**
      Do not infer requirements from the slug — a slug like `celsius-converter`
      names the feature but says nothing about behavior, inputs/outputs, edge
      cases, or constraints. Ask a focused prompt, e.g.: "What should `<slug>`
@@ -184,6 +198,14 @@ and surface that the user must supply a slug.
    promotes them. If the feature genuinely cannot fit the binding stack, PO must
    surface that as a product-tier revision signal (architect edits STACK.md +
    appends a product ADR), **not** a feature-local override.
+
+   **Inherited feature intent (v0.4 M3.3).** If step 5 found a usable backlog
+   **intent (1–3 lines)** for this slug, pass it to the PO labeled "inherited intent
+   (the plan author's intended scope — a sketch, not the contract)". Instruct PO to **realize
+   and elaborate** that intent into the full spec (Behavior / Interfaces / Acceptance
+   Criteria), and to flag in `## Self-review notes` if the spec must deviate from the
+   stated intent rather than silently drifting. If there was no intent line, omit this
+   block — PO drafts from the established description as usual.
 
    Tell PO not to set STATUS=IN_REVIEW regardless of tier — that's `/build-fleet:review`'s
    job (which trivial features skip; standard/large run normally).

@@ -273,7 +273,8 @@ occasional deferral.)
 ## Backlog completion (v0.4 M2)
 
 `.sdd/_product/backlog.md` rows track per-feature completion. Row format:
-`- [ ] <slug>   PENDING   depends-on: <none|slug>`. On a successful
+`- [ ] <slug>   PENDING   depends-on: <none|slug>`, optionally **followed by an
+indented 1–3 line intent** (v0.4 M3.3 — see below). On a successful
 `/build-fleet:handoff` (devops done), the orchestrator flips the matching row to
 `- [x] <slug>   DONE   depends-on: <unchanged>   handoff:<iso-date>` and recomputes
 the containing `## Phase N: … — STATUS:` line (`complete` when all its rows are `[x]`,
@@ -283,6 +284,45 @@ concern, and M3 re-points them through the scribe's `workspace_dir`). A feature 
 no matching backlog row (an ad-hoc fix) is left untouched. "Active in flight" is
 **derived from `.sdd/ACTIVE`**, not a backlog marker — there is no `[>]` state to
 keep in sync.
+
+### Per-feature intent (v0.4 M3.3)
+
+A backlog row carries only a slug + dependency; that loses the plan author's *intent*
+for the feature across the tier boundary, so `/build-fleet:new-feature` would re-guess
+the scope from a bare slug. M3.3 adds an **indented 1–3 line intent** under each row:
+
+```
+## Phase 1: Foundations — STATUS: pending
+- [ ] cli-skeleton   PENDING   depends-on: none
+      Cobra root command + global --format flag wiring; the app shell other commands hang
+      off. No data commands, no rendering, no persistence (those are later features).
+- [ ] api-client     PENDING   depends-on: cli-skeleton
+      The internal/yahoo typed HTTP wrapper — the sole package that talks to Yahoo.
+      Network only: rendering is output-formatter; config is local-config-store.
+```
+
+- **It is a sketch, not a spec.** What the feature is + its scope boundary + explicit
+  non-goals/deferrals to sibling features. The boundary/deferral facts are the high-value
+  part — they keep siblings from overlapping or leaving a gap, and they justify the
+  `depends-on` edges. **No** acceptance criteria / interfaces / detailed behavior — those
+  stay in the feature's `spec.md`, drafted by the PO and adversarially reviewed at
+  `/build-fleet:new-feature` time. The intent is *inherited advisory context* (like the
+  stack); the spec is the contract. Two sources of truth for behavior would rot apart and
+  make the per-feature review redundant — so the line holds at boundary-level.
+- **Authored** by the PO at `/build-fleet:new-product` (it already conceived each feature
+  when phasing it). **Inherited** at `/build-fleet:new-feature`: step 5 seeds the feature
+  description from the intent, and step 8 hands it to the PO to *realize and elaborate*
+  (the PO flags any deviation in `## Self-review notes`).
+- **Reviewed, not blindly trusted.** Result quality tracks intent quality, so PLAN_REVIEW
+  (M3.1) explicitly interrogates the intents — clarity (can it drive a spec?), clean
+  sibling boundaries (no overlap/gap), and whether the stated boundaries justify the deps.
+  A vague or wrongly-bounded intent is a finding to fix before ratifying, not silent input
+  to a downstream spec.
+- **Parser-invisible.** The intent lines have no `- [`/`##` prefix, so the M3.2 resolver,
+  `validate-backlog-status`, and the M2 completion-flip (which edits only the `- [ ]` row
+  line) all ignore them — the flip preserves the intent untouched.
+- **Backward-compatible.** A legacy slug-only row (no intent) works exactly as before; the
+  PO drafts from the user's description.
 
 ## DEVELOPING loop (v0.4 M3.2)
 

@@ -178,10 +178,22 @@ sole writer; the human revises the plan after reading your report.
 
 Read these product artifacts yourself (you have Read/Grep/Glob):
 - .sdd/_product/vision.md      (the product vision + goals; OUTCOME for standard/large)
-- .sdd/_product/backlog.md     (phased feature backlog + dependencies)
+- .sdd/_product/backlog.md     (phased feature backlog + dependencies + per-feature intent lines)
 - .sdd/_product/STACK.md       (the binding stack-of-record; brownfield has a Baseline + maybe PROVISIONAL forward)
 - .sdd/_product/DECISIONS.md   (product ADRs — the why behind the stack)
 - .sdd/_product/REVIEW.md      (prior interrogation cycles; may not exist on cycle 1)
+
+**Pressure-test the per-feature INTENT lines (v0.4 M3.3).** Each backlog row should
+have an indented one-to-three-line intent — what the feature is + its scope boundary.
+These intents are inherited by /build-fleet:new-feature to seed each spec, so a vague,
+overlapping, or wrongly-bounded intent yields a wrong spec downstream. From your lens,
+interrogate: is each intent clear enough to drive a spec, or too vague to constrain it?
+Are the boundaries between sibling features clean (no two features claiming the same
+scope; no scope falling in the gap between them)? Do the stated boundaries/deferrals
+justify the depends-on edges? Is any feature under-scoped (a real concern hidden) or
+over-scoped (should be split)? A missing intent line on a non-trivial feature is itself
+a gap. **But do not demand spec-level detail in the intent** — acceptance criteria,
+interfaces, and behavior belong in the feature's own spec.md, not the backlog.
 
 Interrogate through YOUR lens:
 ${lens}
@@ -212,18 +224,26 @@ const LENS = {
 `- Is the vision coherent and falsifiable? For standard/large, is OUTCOME measurable?
 - Is the backlog genuinely PHASED — each phase a shippable increment, not a dumping ground?
 - Are depends-on edges real and acyclic? Does phase 1 stand alone?
-- Is scope honest, or is this a roadmap that gets abandoned at feature 3? Flag over-ceremony.`,
+- Is scope honest, or is this a roadmap that gets abandoned at feature 3? Flag over-ceremony.
+- INTENT: is each feature's intent line a clear, single-responsibility scope, or vague/
+  bloated? Do sibling intents partition the product cleanly — no overlap, no gap?`,
   "architect":
 `- Is the stack-of-record sound for the stated goals and scale? Any load-bearing gap?
 - Is each ADR justified, or are there silent/unexplained choices?
 - Brownfield: is the Baseline captured accurately? Is any PROVISIONAL forward direction
   incremental (migrate/wrap) rather than a rewrite, and is its risk named?
-- What failure modes (data integrity, blast radius, coupling) does the plan not address?`,
+- What failure modes (data integrity, blast radius, coupling) does the plan not address?
+- INTENT: do the intents' stated boundaries/deferrals match the stack's module seams,
+  and justify the depends-on edges? Is a load-bearing piece deferred into a feature
+  whose intent does not actually claim it (a boundary gap)?`,
   "qa":
 `- Is the OUTCOME / are the goals actually measurable and testable as written?
 - Does each backlog phase have a discernible acceptance shape, or is "done" undefined?
 - What observability / verification is the plan silent on?
-- Are there cross-feature integration risks the phasing hides?`,
+- Are there cross-feature integration risks the phasing hides?
+- INTENT: is each intent concrete enough that a tester could see *that* it's testable
+  (not *what* the tests are), or so vague that "done" is undefinable? Flag intents too
+  thin to anchor a spec — but never demand acceptance criteria here (that's the spec).`,
 };
 
 function mergeFindings(reports) {

@@ -81,8 +81,11 @@ abandoned — bias small.
 
      ## Phase 1: <name> — STATUS: pending
      - [ ] <feature-slug>   PENDING   depends-on: none
+           <intent (1-3 lines): what this feature is, its scope boundary, and any
+           explicit non-goals / deferrals to sibling features>
      ```
-     Leave the feature rows as a single placeholder — PO fills the real phases.
+     Leave the feature rows as a single placeholder — PO fills the real phases,
+     each row followed by its indented 1-3 line intent (v0.4 M3.3).
    - `STACK.md` — first line `STATUS: DRAFT`, then headings: `## Languages & runtimes`,
      `## Frameworks & libraries`, `## Data & storage`, `## Infrastructure & deploy`,
      `## Conventions`. Empty bodies — architect fills them.
@@ -113,7 +116,12 @@ abandoned — bias small.
    via the Task tool. Tell it: it owns `.sdd/_product/vision.md` and
    `.sdd/_product/backlog.md`; draft the vision from the description (size-gated
    sections per above) and a **phased** feature backlog. Each backlog feature row
-   is `- [ ] <slug>   PENDING   depends-on: <none | other-slug>`. It must NOT set
+   is `- [ ] <slug>   PENDING   depends-on: <none | other-slug>`, **followed by an
+   indented 1-3 line intent** (v0.4 M3.3) — what the feature is, its scope boundary,
+   and explicit non-goals/deferrals to sibling features; a sketch the feature's spec
+   later elaborates, **not** acceptance criteria/interfaces/behavior. This intent is
+   inherited by `/build-fleet:new-feature` (so the spec realizes the plan's intent
+   rather than re-guessing) and is interrogated at PLAN_REVIEW. It must NOT set
    any STATUS beyond `DRAFT` (there is no product review gate in M0). Pass the
    product description verbatim. **Brownfield note:** the backlog is
    *forward-looking* — features that already exist in the codebase are not backlog
