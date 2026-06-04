@@ -167,8 +167,9 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
      and on the record.
    - Features continue to build against the binding stack via `/build-fleet:new-feature`
      (M3.1 ratification is advisory — it does not gate feature creation).
-   - The M3.2 DEVELOPING loop (when it lands) will drive feature arming off `PHASE=DEVELOPING`
-     and the backlog phases.
+   - The M3.2 DEVELOPING loop arms the next backlog feature off the **presence of
+     `.sdd/_product/backlog.md`** (re-resolved live on each `/build-fleet:handoff`);
+     `PHASE=DEVELOPING` is advisory context, not a hard gate.
 
 ## Hard rules
 

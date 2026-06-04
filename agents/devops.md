@@ -53,6 +53,28 @@ not for DevOps to invent missing requirements.
 In any refusal case, write a short note explaining the refusal to the
 orchestrator and stop. The orchestrator decides next steps.
 
+## Completion signal (headless contract)
+
+Emit **exactly one** machine-readable line as the last thing you output, so the
+orchestrator can branch deterministically instead of interpreting your prose
+(`/build-fleet:handoff` keys off this line — if neither appears, it treats the
+handoff as failed and does **not** mark the feature shipped):
+
+- **Success** — CI/IaC/release work is done and the feature is actually shipped
+  (PR opened / release cut / deploy triggered, per the project's process):
+  ```
+  BUILD_FLEET_DEVOPS_OK: {"feature":"<slug>","shipped":"<pr|release|deploy|...>"}
+  ```
+- **Refusal or failure** — any refusal condition above, or a deploy/release step
+  that errored. Do **not** emit `_OK`:
+  ```
+  BUILD_FLEET_DEVOPS_REFUSED: {"feature":"<slug>","reason":"<phase-mismatch|escalation|tests-failing|review-not-approved|deploy-failed|missing-requirement>"}
+  ```
+
+Emit `_OK` **only** when the feature is genuinely shipped. If you did partial work
+then hit an error, emit `_REFUSED` with `deploy-failed` — never `_OK`. A silent
+return (neither line) is treated as failure by the orchestrator.
+
 ## Style
 
 - Follow the project's existing release conventions. Do not introduce a

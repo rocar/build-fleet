@@ -187,8 +187,8 @@ STATUS, architect-owned) is never edited by the gate.
 **Ratification is advisory (M3.1 decision).** Setting `PHASE=DEVELOPING` does **not** gate
 `/build-fleet:new-feature` — features build against the binding stack regardless of product
 phase, preserving the M0/M1 inheritance behavior. The product machine's "teeth" are the M3.2
-**DEVELOPING loop** (which reads `PHASE=DEVELOPING` to drive feature arming), not a
-feature-creation block.
+**DEVELOPING loop** (which clears `.sdd/ACTIVE` on completion and arms the next backlog
+feature — see the DEVELOPING-loop section), not a feature-creation block.
 
 ### Product memory — root CLAUDE.md generation (v0.4 M3.1.1)
 
@@ -282,10 +282,50 @@ write** — not the scribe (the scribe is append-only; product-scope writes are 
 concern, and M3 re-points them through the scribe's `workspace_dir`). A feature with
 no matching backlog row (an ad-hoc fix) is left untouched. "Active in flight" is
 **derived from `.sdd/ACTIVE`**, not a backlog marker — there is no `[>]` state to
-keep in sync. `/build-fleet:status` surfaces the backlog and, when no feature is
-active, names the next unblocked `PENDING` feature (first row in the lowest phase
-whose `depends-on` are all `DONE`). Advancement stays manual / orchestrator-driven
-(M4 adds an optional `/build-fleet:next-feature`).
+keep in sync.
+
+## DEVELOPING loop (v0.4 M3.2)
+
+M3.2 closes the multi-feature loop. **The motivating gap:** `/build-fleet:handoff`
+shipped a feature but never cleared `.sdd/ACTIVE`, and `/build-fleet:new-feature`
+hard-refuses while `.sdd/ACTIVE` is non-empty — so after shipping feature N there was
+no in-plugin way to start N+1 (a manual `rm .sdd/ACTIVE` was required). The
+**complete-N → arm-N+1** transition fixes that.
+
+On a **full** `/build-fleet:handoff` completion (devops succeeded + the M2 backlog flip
+ran — *not* a CHANGE_REVIEW bounce-back to BUILD), when a product tier exists, handoff:
+1. **Clears `.sdd/ACTIVE`** (empties the file — the shipped feature is no longer in
+   flight). This is what unblocks the next `/build-fleet:new-feature`. Safe: with no
+   active feature, `block-source-before-finalized` and the per-reviewer hooks are simply
+   inactive — correct between features.
+2. **Re-resolves the next unblocked feature from the LIVE backlog** — *first `PENDING`
+   row in the lowest phase whose `depends-on` are all `DONE`* — via the shared
+   deterministic resolver `scripts/next-feature.sh`. Re-resolving live (never a cached
+   index) means a mid-flight backlog re-prioritization is always honored. The resolver
+   is the **single source of truth**: `/build-fleet:handoff`, `/build-fleet:status`, and
+   (M4) `/build-fleet:next-feature` all call it instead of re-deriving dependency math in
+   prose.
+3. **Surfaces — does not auto-start.** Advancement policy stays with the human/orchestrator
+   (orchestrator-agnosticism): handoff *reports* the next slug; running
+   `/build-fleet:new-feature <slug>` is an explicit act. The auto-advance convenience is M4.
+
+**Resolver outcomes** (`scripts/next-feature.sh` emits one JSON line):
+`next` (slug + phase) · `complete` (all rows `[x]`, `total>0`) · `deadlocked` (`PENDING`
+rows remain but none unblocked — a dependency cycle / unsatisfiable edge) · `empty` (a
+backlog with no parseable feature rows, `total=0` — distinct from `complete` so an
+unparseable backlog never reads as "fully shipped") · `no-backlog` (file absent). The
+resolver strips `\r` (CRLF-safe) and tolerates `[x]`/`[X]`/`-`/`*`/`none`/`None`; it has a
+committed test harness (`scripts/next-feature.test.sh`).
+
+**Terminal & deadlock are derived, not stored** (matching M2's derive-don't-store):
+- **Complete** is computed from the backlog (every row `[x]`) — there is **no terminal
+  `PHASE` value**. Appending features/phases to `backlog.md` re-opens the loop automatically.
+- **Deadlock** is a runtime **warning** (check `depends-on` / cycles), **not** an escalation
+  — the human reorders deps; nothing auto-halts.
+
+**`PHASE=DEVELOPING`** is the product state during this loop. The arming above engages
+whenever a product backlog is present; the phase is reported for context, not used as a
+hard gate (a feature can be shipped before ratification too — the loop just tracks it).
 
 ## Skill routing (v0.4 M1) — domain skills to BUILD roles
 

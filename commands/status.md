@@ -51,10 +51,21 @@ not mutate anything.
      it `← active (in flight, PHASE=<phase>)`. Active is **derived from `.sdd/ACTIVE`**,
      not a backlog marker.
    - A roll-up line: `<done>/<total> features done across <N> phases`.
-   - If no feature is active, name the **next unblocked feature**: the first `PENDING`
-     row in the lowest phase whose `depends-on` are all `DONE`, and suggest
-     `/build-fleet:new-feature <that-slug>`.
-   Read-only, like the rest of status.
+   - **If no feature is active, resolve what's next via the shared resolver** (v0.4 M3.2)
+     — the same read-only helper `/build-fleet:handoff` uses, so status and the loop never
+     disagree:
+     ```bash
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/next-feature.sh"
+     ```
+     It emits one JSON line; report from its `status`:
+     - `next` → name the slug + phase and suggest `/build-fleet:new-feature <slug>`.
+     - `complete` → "product backlog complete (`done/total`)" — nothing to start.
+     - `deadlocked` → "`<pending>` features remain but none are unblocked — check
+       `depends-on` / cycles in `backlog.md`."
+     - `empty` → "backlog has no parseable feature rows — check its format" (not
+       "complete"; `total=0`).
+     Do **not** re-derive the next feature in prose; use the resolver output verbatim.
+   Read-only, like the rest of status (the resolver only reads `backlog.md`).
 
 6. **Recommend the next command** based on PHASE:
    - `SPEC` → product-owner is drafting; run `/build-fleet:review` when
@@ -71,7 +82,8 @@ not mutate anything.
 
 ## Hard rules
 
-- This command **never** writes any file. Read-only.
+- This command **never** writes any file. Read-only. (It may invoke the read-only
+  `scripts/next-feature.sh` resolver, which only reads `backlog.md` and writes nothing.)
 - This command **never** runs tests or invokes subagents.
 - If any of the expected `.sdd/<active>/` files are missing or malformed,
   report which and stop — recovery is the user's call (probably

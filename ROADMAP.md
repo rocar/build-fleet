@@ -218,7 +218,19 @@ prerequisites, none optional:**
   is outside `.sdd/`, so generation is **pre-checked + deferred** (not forced) when an active
   feature's spec isn't FINALIZED — the gate stays uniform; `/build-fleet:product-memory`
   recovers a deferred write. Binding-only (PROVISIONAL/forward entries excluded).
-- **M3.2 — DEVELOPING loop.** Product PHASE=DEVELOPING; the atomic complete-N/arm-N+1 transition (driven on HANDOFF, extends M2's flip) re-resolving next from live backlog.
+- **M3.2 — DEVELOPING loop. DRAFTED (review pending).** The complete-N/arm-N+1 transition
+  on full `/handoff` completion: (1) **clear `.sdd/ACTIVE`** — fixes the latent deadlock
+  where handoff never cleared it and `/new-feature` refuses while it's set, so N+1 couldn't
+  start without a manual `rm`; (2) re-resolve the next unblocked feature **live** via a new
+  deterministic shared resolver `scripts/next-feature.sh` (first PENDING in lowest phase
+  with all `depends-on` DONE; emits `next|complete|deadlocked|no-backlog`), used by
+  `/handoff` + `/status` (+ M4 `/next-feature`) — one source of truth, no prose re-derivation;
+  (3) **surface, don't auto-start** (advancement stays with the human/orchestrator). **Locked
+  decisions:** deterministic shared resolver (not prose); M3.2 stops at surfacing (M4 keeps
+  `/next-feature` separate); "complete" + "deadlock" are **derived** from the backlog (no
+  terminal PHASE value, deadlock is a warning not an escalation). Resolver has a committed
+  test harness (`scripts/next-feature.test.sh`, 13 cases) covering every branch + regressions
+  (CRLF, empty-vs-complete, capital `[X]`/`None`, substring-dep, phase-crossing, forward deps).
 - **Deferred out of M3:** the O(N²) monotonic regression — later opt-in, not core to the loop.
 
 **M4 (optional) — `/next-feature` advancement convenience. Effort: M.**

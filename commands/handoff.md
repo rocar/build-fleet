@@ -59,7 +59,8 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
      → delegate to `build-fleet:coder` to fix (PHASE returns to `BUILD`).
      Do not auto-loop; tell the user that BUILD is open again and they
      should re-run `/build-fleet:handoff` once coder is done. The
-     `CHANGE_CYCLE` counter persists.
+     `CHANGE_CYCLE` counter persists. **STOP here — do NOT continue to
+     steps 9–12.** The feature is not shipped; `.sdd/ACTIVE` stays set.
    - If all three are `status: approved` with zero open blockers →
      CHANGE_REVIEW passes. Continue to step 9.
 
@@ -69,8 +70,26 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    - Pointers to spec.md, acceptance.md, DECISIONS.md, IMPL_NOTES.md.
    - Asks for CI/CD updates, IaC if applicable, and release notes.
    - Reminds devops to refuse if PHASE isn't HANDOFF — defense in depth.
+   - Reminds devops to end with its completion signal — `BUILD_FLEET_DEVOPS_OK`
+     on a genuine ship, `BUILD_FLEET_DEVOPS_REFUSED` otherwise (per `agents/devops.md`).
 
-10. **On devops completion.** Edit `spec.md` STATUS line to retain
+   **Branch on the devops result before step 10 — key off its machine signal, not
+   its prose.** devops emits exactly one terminal line (`agents/devops.md` →
+   Completion signal): `BUILD_FLEET_DEVOPS_OK: {…}` on a genuine ship, or
+   `BUILD_FLEET_DEVOPS_REFUSED: {…,"reason":…}` on any refusal/failure. **Proceed to
+   step 10 ONLY if you see `BUILD_FLEET_DEVOPS_OK`.** In every other case — `_REFUSED`,
+   **or neither line present (a silent/ambiguous return counts as failure)** — emit:
+   ```
+   BUILD_FLEET_HANDOFF_DEVOPS_FAIL: {"feature":"<slug>","reason":"<refused|deploy-failed|no-signal>"}
+   ```
+   then surface devops' output, **leave `PHASE: HANDOFF` and `.sdd/ACTIVE`
+   untouched, and STOP.** **Steps 10–12 run ONLY on `BUILD_FLEET_DEVOPS_OK`** — the
+   feature is not shipped otherwise, so it must not be marked done and its `ACTIVE`
+   must not be cleared. The user resolves the devops issue and re-runs
+   `/build-fleet:handoff`. *(Defaulting an unrecognized/missing signal to failure is
+   deliberate — the safe default is "not shipped," never a false advance.)*
+
+10. **On devops success.** Edit `spec.md` STATUS line to retain
     `FINALIZED` (no flip) and append a `## Implementation` section if not
     already present, noting the CHANGE_CYCLE that approved and the date.
     Tell the user the feature is shipped (or in the project's equivalent
@@ -98,9 +117,56 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
     hooks permit at HANDOFF (`block-source-before-finalized` allows anything under
     `.sdd/`; `restrict-reviewer-writes` only acts during REVIEW/CHANGE_REVIEW, and
     we are past that). It deliberately does **not** go through the scribe: the
-    scribe is append-only and product-scope writes are M3's concern. Keep this a
-    thin, self-contained step — **M3 re-points product writes through the scribe's
-    `workspace_dir` scheme**, so do not couple it to feature-scope state here.
+    scribe is append-only and product-scope writes are M3's concern.
+
+12. **Advance the DEVELOPING loop (v0.4 M3.2).** This step runs **only** on the
+    full-completion path — you reached it after devops **succeeded** (step 10) and the
+    backlog flip (step 11). A CHANGE_REVIEW bounce-back to BUILD (step 8) and a devops
+    refusal/failure (step 9 branch) both STOP earlier and never reach here, so an
+    unshipped feature is never advanced.
+
+    a. **Clear `.sdd/ACTIVE`.** The shipped feature is no longer in flight — **empty
+       the file** (write zero bytes / a single empty line; do not delete it). This is
+       **always** done on a successful ship, whether or not a product tier exists: it is
+       the fix that lets the loop continue (`/build-fleet:new-feature` refuses while
+       `.sdd/ACTIVE` is non-empty, and nothing else clears it; leaving it set would
+       deadlock the next feature). *(Safe: with no active feature,
+       `block-source-before-finalized` and the per-reviewer hooks are simply inactive —
+       correct between features.)*
+
+    b. **Resolve the next unblocked feature (live).** Run the shared resolver — exactly
+       one read-only call, the single source of truth for "what's next" (it returns
+       `no-backlog` on its own when there is no product tier, so call it unconditionally):
+       ```bash
+       bash "${CLAUDE_PLUGIN_ROOT}/scripts/next-feature.sh"
+       ```
+       It re-reads the **live** backlog (never a cached index) and emits one JSON line:
+       `next` (slug+phase) | `complete` | `deadlocked` | `empty` | `no-backlog`. Do
+       **not** re-derive the next feature in prose — use this output verbatim.
+
+    c. **Surface, do not auto-start.** Report based on `status`:
+       - `next` → name the next slug + its phase, and tell the user to start it with
+         `/build-fleet:new-feature <slug>` (M3.2 surfaces; it does not auto-advance —
+         starting the next feature stays an explicit act).
+       - `complete` → the product backlog is fully shipped (`done/total`). Congratulate;
+         note that appending features/phases to `backlog.md` re-opens the loop. ("Complete"
+         is **derived** from the backlog — there is no terminal PHASE value to set.)
+       - `deadlocked` → `<pending>` features remain but none are unblocked. Warn the user
+         to check `depends-on` edges / dependency cycles in `backlog.md`. Do **not**
+         escalate — the human reorders deps.
+       - `empty` → a product backlog exists but **no feature rows parsed** (`total=0`).
+         This is **not** "complete" — warn that the backlog has no parseable
+         `- [ ] <slug> …` rows and to check its format. Do not congratulate.
+       - `no-backlog` → the feature was not part of a product backlog (ad-hoc). Nothing
+         to advance; skip silently.
+
+    d. **Emit the machine-readable line** (headless contract):
+       ```
+       BUILD_FLEET_LOOP_ADVANCE: {"completed":"<slug>","backlog":"<in-progress|complete|deadlocked|empty|none>","next":"<next-slug|null>"}
+       ```
+       Map resolver `status` → `backlog`: `next`→`in-progress`, `complete`→`complete`,
+       `deadlocked`→`deadlocked`, `empty`→`empty`, `no-backlog`→`none`. `next` is the
+       slug only for `status:next`; it is `null` for every other status.
 
 ## Refusal cases
 
