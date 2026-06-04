@@ -246,12 +246,21 @@ prerequisites, none optional:**
   gate intact and avoid two rotting sources of truth.
 - **Deferred out of M3:** the O(N²) monotonic regression — later opt-in, not core to the loop.
 
-**M4 (optional) — `/next-feature` advancement convenience. Effort: M.**
-"First PENDING in lowest unblocked phase whose depends-on are all DONE." Depends-on: M3.
-- **Keep optional** to preserve orchestrator-agnosticism — completion-tracking stays
-  in-plugin, advancement *policy* stays with the orchestrator/human. Its mere presence
-  invites callers to depend on plugin-side sequencing; document it as convenience, not
-  policy. Defer until M3 lands.
+**M4 (optional) — `/next-feature` advancement convenience. DRAFTED (review pending). Effort: M.**
+`/build-fleet:next-feature` resolves the next unblocked feature via the **same M3.2 resolver**
+("First PENDING in lowest unblocked phase whose depends-on are all DONE"), pre-checks
+readiness, and emits `BUILD_FLEET_NEXT_FEATURE: {slug, phase}` — collapsing "read `/status` →
+type `/new-feature <slug>`" into one gated step. Depends-on: M3.
+- **Kept optional + convenience-not-policy** to preserve orchestrator-agnosticism: resolver
+  only (no reorder/skip/judgement). **Locked decisions:** (A=a1) M4 **does not run
+  `/new-feature` itself** — it emits the dispatch signal and the dispatcher (upstream caller
+  in headless, human in interactive) starts the feature, keeping dispatch + caller policy with
+  the orchestrator and avoiding any duplication of new-feature's logic; mode-agnostic (no
+  headless-detection needed). (B) **pre-checks the next intent against the M3.3 quality floor**
+  and refuses (`NEEDS_DESC`) rather than letting new-feature STOP-and-ask mid-dispatch.
+  (C) no interactive confirmation — `/next-feature` is itself the explicit advance request.
+- **Refusals:** feature-in-flight, `deadlocked`/`empty` backlog, intent-too-thin. No new
+  resolver/hook/agent code — reuses `scripts/next-feature.sh` (+ its 18-case harness).
 
 ### Design decisions to lock
 

@@ -347,7 +347,19 @@ ran — *not* a CHANGE_REVIEW bounce-back to BUILD), when a product tier exists,
    prose.
 3. **Surfaces — does not auto-start.** Advancement policy stays with the human/orchestrator
    (orchestrator-agnosticism): handoff *reports* the next slug; running
-   `/build-fleet:new-feature <slug>` is an explicit act. The auto-advance convenience is M4.
+   `/build-fleet:new-feature <slug>` is an explicit act.
+
+**The advancement convenience (v0.4 M4) — `/build-fleet:next-feature`.** Optional. It calls
+the **same resolver**, pre-checks readiness (no feature in flight; the next feature's intent
+passes the M3.3 quality floor), and emits a dispatch signal `BUILD_FLEET_NEXT_FEATURE:
+{slug, phase}` — collapsing "read `/status` → type `/new-feature <slug>`" into one gated step.
+It is **convenience, not policy**: resolver only (no reorder/skip/judgement), and it **does
+not run `/build-fleet:new-feature` itself** — the dispatcher (the upstream caller in headless,
+the human in interactive) starts the feature, which keeps dispatch + caller-side policy with
+the orchestrator and avoids duplicating new-feature's logic. If the next feature's intent is
+too thin to start unattended it refuses (`NEEDS_DESC`) rather than letting new-feature
+STOP-and-ask mid-dispatch. *(Distinct from the v0.2 "M4" classifier that sets TIER/BUILD_MODE —
+same label, different milestone series.)*
 
 **Resolver outcomes** (`scripts/next-feature.sh` emits one JSON line):
 `next` (slug + phase) · `complete` (all rows `[x]`, `total>0`) · `deadlocked` (`PENDING`
