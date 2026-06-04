@@ -1,51 +1,187 @@
 # build-fleet
 
 A spec-driven multi-agent software house, packaged as a Claude Code plugin.
-**v0.2.1**
+**v0.4**
 
-build-fleet turns Claude Code into a disciplined software house: a fleet of
-role subagents drives every change through a deterministic state machine —
-**SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF** — with phase
-gates enforced by hooks, not vibes. No source is written until the spec is
-FINALIZED; no handoff until tests pass and the change is reviewed.
+build-fleet turns Claude Code into a disciplined software house. A fleet of role
+subagents drives every change through a deterministic state machine —
+**SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF** — with phase gates
+enforced by hooks, not vibes. No source is written until the spec is FINALIZED;
+no handoff until tests pass and the change is reviewed.
 
-What's new in v0.2:
+**v0.4 adds a product tier *above* the per-feature loop.** A product is planned
+once — vision, a phased backlog, and a single binding **stack-of-record** — then
+**ratified by a human**, and every feature thereafter *inherits* that stack and
+its own one-line intent. The result is two nested cycles: a **PLAN** machine for
+the product, and the **per-feature** machine for each unit of work, joined by a
+**DEVELOPING loop** that advances the backlog one ratified feature at a time.
 
-- **REVIEW runs as a dynamic workflow** — reviewers fan out, cross-examine each
-  other adversarially, and concerns survive only by a survival vote (see
-  [Dynamic workflows](#dynamic-workflows)).
-- **Three-tier routing** — a classifier sizes each feature; trivial work skips
-  REVIEW, large work fans out across partitioned coders.
-- **Tests-first BUILD** — qa writes a failing suite before coder writes a line
-  of source.
-- **Headless-first** — every command emits machine-readable `BUILD_FLEET_*`
-  signals, so an orchestrator (Hermes, the Agent SDK, `claude -p`) can drive the
-  fleet without scraping prose.
+What's new in v0.4:
+
+- **Product tier** — `/build-fleet:new-product` scaffolds `.sdd/_product/`
+  (vision, backlog, stack, ADRs). Greenfield **ratifies** a fresh stack;
+  brownfield **infers** the actual stack from code as a binding baseline.
+- **PLAN machine** — `PLAN → PLAN_REVIEW → PLAN_FINALIZE → DEVELOPING`. Review is
+  **interrogation, not a survival vote** (a strategic plan is weighed, not
+  converged); finalize is a **human ratification gate that never auto-passes**.
+- **Inheritance** — features inherit the binding stack, a per-feature **intent**
+  (a 1–3 line scope sketch from the backlog), and routed **domain skills**.
+- **DEVELOPING loop** — on ship, the backlog row flips to DONE and the next
+  unblocked feature is resolved live; `/build-fleet:next-feature` advances it.
+- **Product memory** — ratification writes a build-fleet block into the repo-root
+  `CLAUDE.md`, non-clobbering and idempotent, so any Claude session inherits the
+  product context.
+
+Carried from v0.2: dynamic-workflow adversarial **REVIEW**, three-tier routing,
+tests-first BUILD, and headless-first machine signals.
+
+---
+
+## The two cycles
+
+```
+        ┌──────────────────────── PRODUCT TIER (.sdd/_product/) ───────────────────────┐
+        │                                                                               │
+        │   PLAN ──▶ PLAN_REVIEW ──▶ PLAN_FINALIZE ──▶ DEVELOPING ───────────────────┐  │
+        │   plan      interrogate      human ratify      (the loop)                  │  │
+        │   (vision,  [plan-review      (never            │                          │  │
+        │    backlog,  workflow]         auto-passes)     │                          │  │
+        │    stack)                                       ▼                          │  │
+        │                                    ┌──── FEATURE TIER (.sdd/<feature>/) ──┐ │  │
+        │                                    │  SPEC ▶ REVIEW ▶ FINALIZE ▶ BUILD ▶  │ │  │
+        │   inherit: binding stack ─────────▶│       [review wf]      [deep-build  │ │  │
+        │           + feature intent         │                          wf]        │ │  │
+        │           + routed skills          │  CHANGE_REVIEW ▶ HANDOFF ───────────┘ │  │
+        │                                    └──────────┬───────────────────────────┘ │  │
+        │                                               │ ship → flip backlog + clear │  │
+        │                                               ▼ ACTIVE + resolve next        │  │
+        │                                    /next-feature ◀────── loop ──────────────┘  │
+        └───────────────────────────────────────────────────────────────────────────────┘
+```
+
+The product tier is **optional and additive** — a repo with no `.sdd/_product/`
+is a plain feature-first project and behaves exactly as v0.2 did.
+
+---
+
+## Greenfield project cycle
+
+A new product from scratch — the architect *ratifies* a forward stack.
+
+```
+GREENFIELD
+
+  /build-fleet:new-product <slug>                          ── PLAN ───────────────
+    │  PO   drafts vision + a phased backlog; each feature row carries a
+    │       1–3 line INTENT (what it is + scope boundary + non-goals)
+    │  arch RATIFIES a fresh stack-of-record + product ADRs (greenfield design)
+    ▼
+  /build-fleet:plan-review        ▷ workflows/plan-review.js        [WORKFLOW]
+    │  product-owner · architect · qa INTERROGATE the plan (scope, phasing,
+    │  dependencies, intent quality) — findings only, NO survival vote, never
+    │  auto-escalates → interrogation report in _product/REVIEW.md; PHASE=PLAN_REVIEW
+    ▼
+  /build-fleet:plan-finalize ratify                ── ratification gate ──────────
+    │  bare call = dry-run + halt (the headless safety stop; never auto-passes)
+    │  `ratify`  = vision + backlog → FINALIZED; STACK → FINALIZED; PHASE=DEVELOPING
+    │           → root CLAUDE.md product-memory block generated (non-clobbering)
+    ▼
+  ══ DEVELOPING loop ════════════════════════════════════════════════════════════
+    │
+    ├─▶ /build-fleet:next-feature   (optional)  resolves the next unblocked feature
+    │        via scripts/next-feature.sh; emits {slug}; the dispatcher starts it
+    ▼
+  /build-fleet:new-feature <slug>                          ── SPEC ───────────────
+    │  inherits the BINDING stack + this feature's backlog INTENT
+    │  classifier → TIER (trivial | standard | large) + a skill manifest
+    ▼
+  /build-fleet:review   (standard / large)    ▷ workflows/review.js    [WORKFLOW]
+    │  fan-out reviewers → adversarial cross-examination → survival vote → scribe
+    │  (trivial skips REVIEW)
+    ▼
+  /build-fleet:finalize                            ── FINALIZE → BUILD ───────────
+    │  gate: zero open blockers → spec FINALIZED
+    │  qa writes a FAILING suite from acceptance.md → coder drives it green
+    │        large: ▷ workflows/deep-build.js   [WORKFLOW]  (partitioned coders)
+    ▼
+  /build-fleet:handoff                             ── CHANGE_REVIEW → HANDOFF ─────
+    │  architect + PO + qa review the diff; tests must pass; devops ships
+    │  on BUILD_FLEET_DEVOPS_OK:
+    │     • backlog row → [x] DONE  handoff:<date>   (phase STATUS recomputed)
+    │     • .sdd/ACTIVE cleared      • resolver surfaces the next unblocked feature
+    └──────────────────────────────▶ loop back to /next-feature  (until backlog complete)
+```
+
+---
+
+## Brownfield project cycle
+
+An existing codebase — the architect *infers* the real stack; only the current
+baseline binds, and any forward/migration direction stays provisional until a
+human promotes it.
+
+```
+BROWNFIELD  (existing source / manifests already present)
+
+  /build-fleet:new-product <slug>                          ── PLAN ───────────────
+    │  PO   drafts a FORWARD-looking backlog (already-built features are NOT rows;
+    │       only planned/next work) — each row with its 1–3 line INTENT
+    │  arch INFERS the actual stack from the code:
+    │        ## Baseline (current)             = the BINDING stack-of-record
+    │        ## Forward direction (PROVISIONAL) = strategy that does NOT bind
+    ▼
+  /build-fleet:plan-review        ▷ workflows/plan-review.js        [WORKFLOW]
+    │  interrogate the plan AND the provisional direction (is the migration
+    │  justified + incremental?) — the binding baseline is never a defect for
+    │  merely existing
+    ▼
+  /build-fleet:plan-finalize ratify                ── ratification gate ──────────
+    │  vision + backlog → FINALIZED; PHASE=DEVELOPING
+    │  PROVISIONAL entries are NEVER auto-promoted (the machine never decides
+    │  strategy) → STACK STATUS flips only if the whole stack is binding
+    │  → product memory reflects the BINDING baseline only
+    ▼
+  ══ DEVELOPING loop (identical to greenfield) ══════════════════════════════════
+    │  features inherit the BINDING BASELINE (not the provisional forward)
+    │  /new-feature → /review ▷[review.js] → /finalize → /handoff → flip + advance
+    │        (large BUILD → ▷[deep-build.js]) — see the greenfield loop for detail
+    │
+    └─ to adopt the forward stack: a human un-tags PROVISIONAL in STACK.md,
+       re-runs /plan-review, and /plan-finalize ratify — then it binds.
+```
+
+The only brownfield-specific behavior is at planning time (infer-not-ratify,
+baseline-binds, forward-is-provisional). Once `DEVELOPING`, the feature loop and
+its workflows are the same as greenfield.
 
 ---
 
 ## What you get
 
-Seven role subagents. The **main session is the orchestrator** — it routes,
+**Seven role subagents.** The **main session is the orchestrator** — it routes,
 gates, and writes `.sdd/` state, but never writes source itself.
 
 | Role | Subagent | Writes | Model |
 |---|---|---|---|
-| Product Owner | `build-fleet:product-owner` | `spec.md`, `acceptance.md` | opus |
-| Architect | `build-fleet:architect` | `DECISIONS.md`, review notes | opus |
+| Product Owner | `build-fleet:product-owner` | `spec.md`, `acceptance.md`, product `vision.md` + `backlog.md` | opus |
+| Architect | `build-fleet:architect` | `DECISIONS.md`, product `STACK.md`, review notes | opus |
 | Coder | `build-fleet:coder` | source, `IMPL_NOTES.md` | sonnet |
 | QA | `build-fleet:qa` | `tests/`, `TEST_PLAN.md` | sonnet |
 | DevOps | `build-fleet:devops` | CI/CD, release notes | sonnet |
-| Classifier | `build-fleet:classifier` | *(read-only — emits a routing verdict)* | sonnet |
-| Scribe | `build-fleet:scribe` | applies workflow state deltas to `.sdd/` | sonnet |
+| Classifier | `build-fleet:classifier` | *(read-only — emits a routing verdict + skill manifest)* | sonnet |
+| Scribe | `build-fleet:scribe` | applies workflow state deltas to `.sdd/` (feature or product scope) | sonnet |
 
-The **classifier** and **scribe** are v0.2 infrastructure agents. The classifier
-sizes incoming work into a routing tier; the scribe is the canonical writer for
+The **classifier** and **scribe** are infrastructure agents. The classifier sizes
+incoming work and routes domain skills; the scribe is the canonical writer for
 state mutations produced by dynamic workflows (workflow scripts cannot touch the
-filesystem directly, so they hand a structured envelope to the scribe).
+filesystem, so they hand a structured envelope to the scribe — which now targets
+either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field).
 
-Plus the shared memory layer under `.sdd/<feature>/`, two dynamic workflows
-(`workflows/review.js`, `workflows/deep-build.js`), and the gate-enforcing hooks.
+**Three dynamic workflows** under `workflows/`: `review.js` (feature REVIEW),
+`plan-review.js` (product PLAN_REVIEW), `deep-build.js` (fan-out BUILD). Plus a
+deterministic shared resolver (`scripts/next-feature.sh`, with an 18-case test
+harness), six craft skills, seven gate-enforcing hooks, and the shared memory
+layer under `.sdd/`.
 
 ---
 
@@ -53,10 +189,10 @@ Plus the shared memory layer under `.sdd/<feature>/`, two dynamic workflows
 
 - **Claude Code v2.1.154 or later**, with the **dynamic workflows** feature
   enabled (`/config` → "Dynamic workflows" on Pro plans; on by default for
-  Max / Team / Enterprise). v0.2 has a **hard** dependency on the `Workflow`
-  tool — REVIEW and deep-build BUILD run as dynamic workflows, and there is no
-  v0.1 command-pipeline fallback. If the runtime is missing, `/build-fleet:review`
-  refuses with `BUILD_FLEET_REFUSE: workflow runtime unavailable` (exit 3).
+  Max / Team / Enterprise). build-fleet has a **hard** dependency on the
+  `Workflow` tool — REVIEW, PLAN_REVIEW, and deep-build run as dynamic workflows,
+  with no command-pipeline fallback. If the runtime is missing, the affected
+  command refuses with `BUILD_FLEET_REFUSE: workflow runtime unavailable` (exit 3).
 - For **headless** callers, `Workflow` must be in the session's allowed tools,
   e.g. `claude -p --allowedTools "Workflow,Read,Edit,Write,Bash,Agent,Task" …`.
 
@@ -92,8 +228,8 @@ claude --plugin-dir /path/to/build-fleet
 
 The plugin cache is **keyed by version** (`.claude-plugin/plugin.json`'s
 `version`). `/reload-plugins` only re-reads the *local* cache — it does **not**
-re-fetch from GitHub. To pull a new release you must update the marketplace
-clone and reinstall:
+re-fetch from GitHub. To pull a new release you must update the marketplace clone
+and reinstall:
 
 ```
 /plugin marketplace update build-fleet   # re-fetches the repo
@@ -108,24 +244,86 @@ take effect on an installed instance.
 
 ## Quickstart
 
+### Product-first (the v0.4 flow)
+
 ```
-# 1. describe the feature → scaffold + classify
-/build-fleet:new-feature my-feature
+# 1. plan the product → scaffold vision + phased backlog + stack
+/build-fleet:new-product my-product
 
-# 2. (standard/large only) adversarial review workflow
-/build-fleet:review
+# 2. interrogate the plan (workflow)
+/build-fleet:plan-review
 
-# 3. gate the spec, then run tests-first BUILD
+# 3. ratify it (human gate) → unlocks the DEVELOPING loop + writes product memory
+/build-fleet:plan-finalize ratify
+
+# 4. start the next backlog feature (or run /new-feature <slug> directly)
+/build-fleet:next-feature        # resolves it; then:
+/build-fleet:new-feature <slug>  # inherits the stack + the feature's intent
+/build-fleet:review              # standard/large
 /build-fleet:finalize
+/build-fleet:handoff             # ships, flips the backlog, advances the loop
+```
 
-# 4. change-review the diff, then ship
+### Feature-only (no product tier)
+
+```
+/build-fleet:new-feature my-feature   # asks what it should do if not in context
+/build-fleet:review                   # standard/large only
+/build-fleet:finalize
 /build-fleet:handoff
 ```
 
 `new-feature` will **ask you what the feature should do** if it can't find a
-description in the conversation — the slug alone is never treated as a spec.
+description in the conversation *or* a usable backlog intent — the slug alone is
+never treated as a spec. The exact path depends on the routing tier (below).
 
-The exact path depends on the routing tier the classifier assigns (below).
+---
+
+## The product tier (v0.4)
+
+A product lives in a reserved `.sdd/_product/` namespace, inherited read-only by
+every feature.
+
+**The PLAN machine.** `PLAN → PLAN_REVIEW → PLAN_FINALIZE → DEVELOPING`, mirroring
+the feature machine one level up but with an inverted temperament:
+
+- **PLAN_REVIEW is interrogation, not a survival vote.** A feature spec is a
+  contract the machine can adversarially *converge*; a product plan is a strategic
+  bet a human must *weigh*. So `plan-review.js` fans out product-owner / architect
+  / qa to surface questions, risks, and gaps (including **intent quality** — are
+  the per-feature scopes clear and cleanly bounded?). Nothing is auto-killed and it
+  never auto-escalates.
+- **PLAN_FINALIZE is a human ratification gate that never auto-passes** — even with
+  zero findings. Bare `/plan-finalize` is a dry-run that prints the report and
+  halts; `ratify` flips state only with zero open blockers; `ratify force`
+  overrides them on the record. It **never promotes** a `PROVISIONAL` stack entry —
+  ratification finalizes the plan *as written*.
+
+**Inheritance.** When `/build-fleet:new-feature` runs inside a product tier, the
+feature inherits:
+
+- the **binding stack-of-record** (everything in `STACK.md` not tagged provisional)
+  — preventing two features from picking conflicting stacks;
+- its **backlog intent** — a 1–3 line sketch (*what + scope boundary + non-goals*)
+  that seeds the spec so the PO realizes the plan's intent instead of re-guessing
+  from the slug. It stays boundary-level — **never** acceptance criteria or
+  interfaces; those remain the feature's reviewed `spec.md`;
+- routed **domain skills** (below).
+
+**The DEVELOPING loop.** A full `/build-fleet:handoff` (devops success) atomically
+flips the feature's backlog row to `[x] DONE`, recomputes its phase status, and
+**clears `.sdd/ACTIVE`** so the next feature can start. The next unblocked feature
+("first PENDING in the lowest phase whose `depends-on` are all DONE") is re-resolved
+**live** from the backlog by the shared `scripts/next-feature.sh` — never a cached
+index. `/build-fleet:next-feature` is the optional convenience that resolves +
+gates the next one and emits a dispatch signal; it **surfaces, it doesn't
+auto-advance** (advancement policy stays with you / the orchestrator).
+
+**Product memory.** Ratification (and `/build-fleet:product-memory`) writes a
+delimited `<!-- BEGIN/END build-fleet:product -->` block into the repo-root
+`CLAUDE.md` — vision one-liner, binding stack, conventions — **non-clobbering**
+(anything outside the markers is preserved) and **idempotent** (re-running
+replaces the block in place). Your own notes live outside the markers and survive.
 
 ---
 
@@ -142,7 +340,8 @@ writes `TIER` + `BUILD_MODE` into `PROGRESS.md`:
 
 The classifier is deliberately conservative: a **false-trivial is the dangerous
 miss**, so anything touching auth, billing, or CI is never trivial, and a malformed
-classifier verdict falls back to `standard`. Re-check or override at any time:
+verdict falls back to `standard`. It also emits a **skill manifest** (below).
+Re-check or override at any time:
 
 - `/build-fleet:dispatch` — re-runs the classifier on the active feature
   (query-only; doesn't change state).
@@ -150,55 +349,84 @@ classifier verdict falls back to `standard`. Re-check or override at any time:
 
 ---
 
+## Skill routing
+
+build-fleet stays **process machinery** — it ships no domain-craft skills. What it
+ships is a routing convention (the **`skill-routing`** skill): the classifier maps
+a feature's stack + type to the *names* of domain skills (generic role-craft names,
+e.g. `api-design`, `cli-testing`), persists them to `SKILL_MANIFEST.md`, and the
+BUILD roles **load them if available**. An unavailable skill is a no-op — recorded
+(`skill-unavailable: <name>`) and the role proceeds with normal craft. Routing is
+advisory; it never changes the tier or build mode.
+
+---
+
 ## Dynamic workflows
 
-Two phases run as Claude Code **dynamic workflows** (JS scripts under
+Three phases run as Claude Code **dynamic workflows** (JS scripts under
 `workflows/` executed by the Workflow runtime), not direct Task fan-outs:
 
 - **`/build-fleet:review` → `workflows/review.js`.** Fan-out reviewers
   (architect/qa/coder) → adversarial **cross-examination** → **survival vote** →
   scribe applies the verdict. A concern survives only if it is *not* refuted by a
-  different-role reviewer citing a specific `spec.md`/`acceptance.md` section.
-  This kills plausible-but-unfounded concerns before they block finalize.
+  different-role reviewer citing a specific `spec.md`/`acceptance.md` section. This
+  kills plausible-but-unfounded concerns before they block finalize.
+- **`/build-fleet:plan-review` → `workflows/plan-review.js`.** The product
+  counterpart — product-owner/architect/qa **interrogate** the plan. **Forked, not
+  parameterized:** no cross-examination, no survival vote, no auto-escalation. It
+  produces an interrogation report; the human ratifies. The scribe writes the
+  product workspace via `workspace_dir=".sdd/_product/"`.
 - **deep-build → `workflows/deep-build.js`** (BUILD for `large` features).
-  Architect partitions the work across files; coders fan out in parallel;
-  overlap detection prevents two coders racing on the same file; an in-workflow
-  adversarial review catches integration gaps before BUILD declares complete.
+  Architect partitions the work across files; coders fan out in parallel; overlap
+  detection prevents two coders racing on the same file; an in-workflow adversarial
+  review catches integration gaps before BUILD declares complete.
 
 Because a workflow can't write files, it emits a structured envelope that the
-**scribe** applies to `.sdd/`. While a workflow is running, a
-`.sdd/<feature>/.workflow-in-flight` marker tells the per-reviewer hooks to
-stand down (the workflow's own post-conditions replace them); the scribe deletes
-the marker on completion, and a Stop hook reaps any orphaned markers older than
+**scribe** applies. While a workflow runs, a `.workflow-in-flight` marker tells the
+per-reviewer hooks to stand down (the workflow's post-conditions replace them); the
+scribe deletes it on completion, and a Stop hook reaps orphaned markers older than
 an hour.
 
 > CYCLE counts **workflow runs**, not command invocations — cross-examination
-> rounds inside a single run do not bump it. Review cycles are bounded (default
-> 3); the 4th unresolved cycle writes `ESCALATION.md` and halts for a human.
+> rounds inside a single run do not bump it. Feature review cycles are bounded
+> (default 3); the 4th unresolved cycle writes `ESCALATION.md` and halts for a
+> human. PLAN_REVIEW does not auto-escalate — only a human halts a plan.
 
 ---
 
 ## Command reference
 
+**Product tier (v0.4):**
+
 | Command | Phase | What it does |
 |---|---|---|
-| `/build-fleet:new-feature <slug>` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` + `acceptance.md`. Asks for a description if none is in context. |
+| `/build-fleet:new-product <slug>` | PLAN | Scaffolds `.sdd/_product/`; PO drafts vision + phased backlog (with intents); architect ratifies (greenfield) or infers (brownfield) the stack. |
+| `/build-fleet:plan-review` | PLAN_REVIEW | Runs the interrogation workflow over the plan. |
+| `/build-fleet:plan-finalize [ratify [force]]` | PLAN_FINALIZE → DEVELOPING | Ratification gate. Bare = dry-run + halt; `ratify` flips to DEVELOPING + writes product memory; `ratify force` overrides open blockers. |
+| `/build-fleet:product-memory` | — | (Re)generates the `CLAUDE.md` product block (non-clobbering, idempotent). |
+| `/build-fleet:next-feature` | — | Resolves + gates the next unblocked backlog feature; emits a dispatch signal (does not auto-start). |
+
+**Feature tier:**
+
+| Command | Phase | What it does |
+|---|---|---|
+| `/build-fleet:new-feature <slug>` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` + `acceptance.md`. Inherits the product stack + backlog intent if present; asks for a description otherwise. |
 | `/build-fleet:dispatch` | — | Re-classifies the active feature (query-only). |
 | `/build-fleet:review` | REVIEW | Runs the adversarial review workflow. (Skipped for trivial.) |
 | `/build-fleet:finalize` | FINALIZE → BUILD | Gate: refuses on open blockers. On pass, flips spec to FINALIZED and orchestrates BUILD (qa-first, then coder; routes to deep-build for large). |
 | `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by finalize). |
-| `/build-fleet:handoff` | CHANGE_REVIEW → HANDOFF | architect + PO + qa review the diff; refuses if tests are missing/failing. On pass, devops ships. |
-| `/build-fleet:status` | — | Prints `.sdd/ACTIVE`, `PROGRESS.md`, open concerns, cycle counts, and any escalation. |
+| `/build-fleet:handoff` | CHANGE_REVIEW → HANDOFF | architect + PO + qa review the diff; refuses if tests are missing/failing. On pass devops ships, the backlog flips, and the loop advances. |
+| `/build-fleet:status` | — | Prints active feature state, open concerns, cycle counts, the product backlog, and the next unblocked feature. |
 
 ---
 
 ## Tests-first BUILD
 
 In standard BUILD, `/build-fleet:finalize` sequences **qa before coder**: qa
-authors a failing test suite from `acceptance.md` first, and coder refuses to
-begin until those tests exist. CHANGE_REVIEW then applies a counterfactual gate
-— *would each test fail without coder's change?* — so the suite actually pins the
-behavior rather than rubber-stamping it.
+authors a failing test suite from `acceptance.md` first, and coder refuses to begin
+until those tests exist. CHANGE_REVIEW then applies a counterfactual gate — *would
+each test fail without coder's change?* — so the suite actually pins the behavior
+rather than rubber-stamping it.
 
 ---
 
@@ -208,26 +436,40 @@ Every command prints machine-readable `BUILD_FLEET_*:` JSON lines **before** any
 human prose, so an orchestrator can drive build-fleet non-interactively (e.g.
 `claude -p`, the Agent SDK, or a Hermes profile) by parsing those signals.
 
-Representative signals: `BUILD_FLEET_CLASSIFICATION`,
-`BUILD_FLEET_CLASSIFIER_FALLBACK`, `BUILD_FLEET_WORKFLOW_LAUNCHED`,
-`BUILD_FLEET_FINALIZE_PASS` / `_REFUSE`, `BUILD_FLEET_FINALIZE_TRIVIAL_FAST_PATH`,
-`BUILD_FLEET_BUILD_ROUTE`, `BUILD_FLEET_QA_TESTS_READY`, `BUILD_FLEET_CODER_REFUSE`,
-`BUILD_FLEET_BUILD_COMPLETE` / `_INCOMPLETE`, `BUILD_FLEET_REFUSE`.
+Representative signals: `BUILD_FLEET_CLASSIFICATION`, `BUILD_FLEET_WORKFLOW_LAUNCHED`,
+`BUILD_FLEET_FINALIZE_PASS` / `_REFUSE`, `BUILD_FLEET_BUILD_COMPLETE`,
+`BUILD_FLEET_PLAN_FINALIZE_DRYRUN` / `_PASS` / `_REFUSE`,
+`BUILD_FLEET_BACKLOG_FLIP`, `BUILD_FLEET_LOOP_ADVANCE`, `BUILD_FLEET_NEXT_FEATURE`
+(+ `_REFUSE` / `_NEEDS_DESC`), `BUILD_FLEET_DEVOPS_OK` / `_REFUSED`,
+`BUILD_FLEET_REFUSE`.
+
+`plan-finalize` is the headless safety stop: a bare call emits the report and halts
+— it can never ratify itself, so a `claude -p` run cannot commit a product plan
+without an explicit `ratify` token.
 
 ---
 
 ## State lives in the target project
 
-Everything the fleet produces for a feature lives in `.sdd/<feature>/` in the
-**target project's** working directory — never inside the plugin:
+Everything the fleet produces lives in `.sdd/` in the **target project's** working
+directory — never inside the plugin:
 
 ```
 .sdd/
-  ACTIVE                 # the one feature in flight
+  ACTIVE                 # the one feature in flight (emptied on ship)
+  PRODUCT                # product slug marker (if a product tier exists)
+  _product/              # the product tier (optional, v0.4)
+    vision.md            # PO — Overview / Goals (+ OUTCOME for standard/large)
+    backlog.md           # PO — phased feature rows + per-feature intent lines
+    STACK.md             # architect — the binding stack-of-record (inherited)
+    DECISIONS.md         # architect — append-only product ADR log
+    PROGRESS.md          # PRODUCT / SIZE / PHASE / CYCLE / UPDATED
+    REVIEW.md            # append-only PLAN_REVIEW interrogation log
   <feature>/
     spec.md              # PO — STATUS: DRAFT|IN_REVIEW|FINALIZED|BLOCKED
     acceptance.md        # PO — testable criteria
     DECISIONS.md         # architect — append-only ADRs
+    SKILL_MANIFEST.md    # routed domain skills for this feature (advisory)
     TEST_PLAN.md         # qa
     IMPL_NOTES.md        # coder
     REVIEW.md            # append-only review log (every cycle)
@@ -236,7 +478,7 @@ Everything the fleet produces for a feature lives in `.sdd/<feature>/` in the
     .workflow-in-flight  # transient marker while a workflow runs
 ```
 
-`PROGRESS.md` carries the v0.2 routing fields:
+`<feature>/PROGRESS.md` carries the routing fields:
 
 ```
 FEATURE: <slug>
@@ -248,8 +490,18 @@ BUILD_MODE: standard | deep-build | pending
 UPDATED: <iso8601>
 ```
 
-The plugin tree itself is read-only and re-installable; wiping and reinstalling
-the plugin never touches your `.sdd/` state.
+`_product/PROGRESS.md` carries the PLAN-machine fields:
+
+```
+PRODUCT: <slug>
+SIZE:    small | standard | large
+PHASE:   PLAN | PLAN_REVIEW | DEVELOPING | ESCALATED
+CYCLE:   <plan-review runs>
+UPDATED: <iso8601>
+```
+
+The plugin tree itself is read-only and re-installable; wiping and reinstalling the
+plugin never touches your `.sdd/` state.
 
 ---
 
@@ -260,29 +512,39 @@ the plugin never touches your `.sdd/` state.
 | `block-source-before-finalized` | Blocks writes outside `.sdd/` until `spec.md` is FINALIZED. |
 | `restrict-reviewer-writes` | Confines writes to `.sdd/<active>/` during REVIEW / CHANGE_REVIEW. |
 | `validate-spec-status` | Rejects a `spec.md` missing its STATUS line or required sections. |
+| `validate-backlog-status` | Rejects a `_product/backlog.md` missing its `PRODUCT:` header, STATUS line, or phase headings. |
 | `check-review-written` | Rejects a reviewer that stops without logging to `REVIEW.md`. |
 | `stop-tests` | During BUILD / CHANGE_REVIEW / HANDOFF, blocks stop on a failing suite (tolerates "no tests collected" pre-suite). |
 | `reap-stale-workflow-markers` | Removes orphaned `.workflow-in-flight` markers older than an hour. |
 
 Hooks block with exit code 2 and return actionable feedback. They are the
-deterministic backbone — agents can't talk their way past a gate.
+deterministic backbone — agents can't talk their way past a gate. (Product-tier
+operations refuse cleanly while a feature is mid-review rather than fighting the
+reviewer-write confinement.)
 
 ---
 
 ## The rules live in a skill
 
-The full workflow contract — phase order, gate semantics, the survival-vote
-convergence rule, escalation policy, file ownership, the `PROGRESS.md` schema —
-is encoded in the **`sdd-protocol`** skill, loaded automatically by the commands
-and agents. Read it at `skills/sdd-protocol/SKILL.md`. Supporting craft skills:
-`sdd-spec-template`, `review-rubric`, `adr`, `test-plan`.
+The full workflow contract — both state machines, gate semantics, the
+survival-vote convergence rule, the PLAN interrogation + ratification rules,
+inheritance, the DEVELOPING loop, escalation policy, file ownership, and the
+`PROGRESS.md` schemas — is encoded in the **`sdd-protocol`** skill, loaded
+automatically by the commands and agents. Read it at
+`skills/sdd-protocol/SKILL.md`. Supporting craft skills: `sdd-spec-template`,
+`review-rubric`, `adr`, `test-plan`, and `skill-routing`.
 
 ---
 
 ## Conventions
 
 - One feature in flight per `.sdd/` at a time (named in `.sdd/ACTIVE`).
+- One product tier per repo (in `.sdd/_product/`); it is optional and additive.
+- A product plan is **ratified, not auto-decided**; provisional stack entries never
+  bind until a human promotes them.
 - Reviewers append to `REVIEW.md`; they never overwrite it.
 - Every surviving design decision becomes an ADR in `DECISIONS.md`.
 - The orchestrator (main session) never writes source — it routes and gates.
-- Human escalation is a first-class outcome, not a failure.
+- Advancement is surfaced, never forced — the human/orchestrator chooses.
+- Human escalation (and human ratification) is a first-class outcome, not a failure.
+

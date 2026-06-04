@@ -1,7 +1,7 @@
 {
   "name": "build-fleet",
-  "version": "0.2.1",
-  "description": "Spec-driven multi-agent software house. Ships product-owner, architect, coder, qa, devops, scribe, and classifier subagents that execute a deterministic SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF state machine. In v0.2 the REVIEW phase runs as a Claude Code dynamic workflow with adversarial cross-examination and survival-vote convergence; BUILD can fan out across partitioned coders. Hook-enforced gates, bounded review cycles, first-class human escalation, headless-mode support for orchestrators (Hermes / Agent SDK).",
+  "version": "0.4.0",
+  "description": "Spec-driven multi-agent software house. Ships product-owner, architect, coder, qa, devops, scribe, and classifier subagents that execute a deterministic SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF state machine. v0.4 adds a product tier above the feature loop: a PLAN → PLAN_REVIEW → PLAN_FINALIZE → DEVELOPING machine where the plan is interrogated (not survival-voted) and ratified by a human, features inherit the binding stack-of-record + a per-feature intent, and a DEVELOPING loop advances the backlog. REVIEW and PLAN_REVIEW run as Claude Code dynamic workflows; BUILD can fan out across partitioned coders. Hook-enforced gates, bounded review cycles, first-class human escalation/ratification, headless-mode support for orchestrators (Hermes / Agent SDK).",
   "author": {
     "name": "Ray Car",
     "email": "raycar@gmail.com"

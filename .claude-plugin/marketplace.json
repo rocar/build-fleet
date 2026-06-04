@@ -8,8 +8,8 @@
     {
       "name": "build-fleet",
       "source": "./",
-      "description": "Spec-driven multi-agent software house. SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF with hook-enforced gates, dynamic-workflow adversarial review, tests-first fan-out builds, three-tier routing, and headless orchestrator support.",
-      "version": "0.2.1",
+      "description": "Spec-driven multi-agent software house. A product tier (PLAN → PLAN_REVIEW → PLAN_FINALIZE → DEVELOPING, human-ratified) above a per-feature SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF machine. Features inherit a binding stack-of-record + per-feature intent; hook-enforced gates, dynamic-workflow adversarial review + plan interrogation, tests-first fan-out builds, three-tier routing, a backlog DEVELOPING loop, and headless orchestrator support.",
+      "version": "0.4.0",
       "category": "development",
       "keywords": [
         "spec-driven",
@@ -17,7 +17,8 @@
         "workflows",
         "code-review",
         "tdd",
-        "orchestration"
+        "orchestration",
+        "product-planning"
       ]
     }
   ]
