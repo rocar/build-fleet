@@ -497,6 +497,41 @@ than the forward path's single FINALIZED condition, never weaker. `_lib.sh` also
 committed harnesses (`require-reproducing-test.test.sh`, `block-source-before-finalized.test.sh`
 — the latter locks in AC-17's byte-identical forward behavior as a regression).
 
+### M3 — REPRODUCE + DIAGNOSE (the confirmation workflow)
+
+Two commands carry a bug from a reproduction to a confirmed (or refuted) root cause:
+
+- **`/build-fleet:reproduce` (REPORT→REPRODUCE).** Delegates to **qa** to author ≥1 **failing
+  reproduction test** under `tests/` that fails *because of the defect*, records the steps into
+  `diagnosis.md`, and flips its STATUS `REPORTED→REPRODUCING`. qa writes only `tests/` + the
+  `.sdd/` artifact (never source — `require-reproducing-test` blocks source until CONFIRMED).
+
+- **`/build-fleet:diagnose` (REPRODUCE→DIAGNOSE → confirmation workflow).** Gates on a recorded
+  hypothesis (`## Root-cause hypothesis` / `## Blast radius` / `## Fix strategy` must be non-empty
+  — AC-8), flips STATUS `REPRODUCING→DIAGNOSED`, drops the `.workflow-in-flight` marker, and
+  dispatches **`workflows/diagnose.js`** (args `{slug, cycle, now}`).
+
+**`diagnose.js` — an inverted `review.js`.** Reviewer roles `[architect, coder]` (the PO drops
+out). Each tries to **refute** the recorded hypothesis, citing the **reproduction** (the failing
+test / `diagnosis.md` reproduction steps) — not `spec.md`/`acceptance.md`. The substantive-
+refutation floor is reused verbatim (≥40 chars + a citation regex retargeted to
+`(diagnosis\.md §|tests?/|line N)`; self-refutation filtered by role). The **inversion**: where
+a review concern *survives unless refuted*, here the **hypothesis is CONFIRMED iff no refutation
+survives** cross-examination. Verdicts: `confirmed` · `refuted` (`CYCLE < 3` → revise + re-run) ·
+`escalate` (a refutation survives at `CYCLE >= 3`, or the cause genuinely can't be found → scribe
+writes `ESCALATION.md`, `PHASE: ESCALATED`). Cross-examination rounds within one run do not bump
+`CYCLE` (one `/build-fleet:diagnose` = one cycle). The **scribe is reused unchanged** — the
+envelope shape matches `review.js`'s, and a surviving refutation is recorded as a `blocker`.
+
+**Gate-split: the CONFIRMED flip is the `/build-fleet:fix` gate's job, not `/build-fleet:diagnose`
+(a refinement of AC-12 for the async runtime).** `diagnose.js` is async-launched (fire-and-forget,
+like `review.js`); the scribe records the verdict (`REVIEW.md` + `PROGRESS.md` CYCLE) on
+completion. The deterministic `diagnosis.md` STATUS → `CONFIRMED` + `PHASE` → `FIX` flip is applied
+by **`/build-fleet:fix`** when it reads a `confirmed` verdict — exactly as `/build-fleet:finalize`
+(not `/build-fleet:review`) flips a spec to `FINALIZED` after the async review. Moving the flip into
+the synchronous FIX gate keeps the deterministic STATUS write out of the fire-and-forget workflow.
+(`/build-fleet:fix` and the CONFIRMED→FIX→VERIFY→SHIP tail are the next milestone.)
+
 ## PROGRESS.md schema
 
 Exact field names; hooks and commands parse these lines:
