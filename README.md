@@ -43,11 +43,11 @@ tests-first BUILD, and headless-first machine signals.
 flowchart TB
     subgraph PT["🧭 PRODUCT · plan once, ratify once"]
         direction LR
-        PLAN["📋 PLAN<br/>vision · backlog · stack"] --> PREV(["⚙️ plan-review.js"]) --> PFIN{"🙋 ratify"} --> DEV(["🔁 DEVELOPING"])
+        PLAN["📋 PLAN<br/>vision · backlog · stack"] --> PREV(["⚙️ plan-review workflow<br/>PO · architect · qa"]) --> PFIN{"🙋 ratify"} --> DEV(["🔁 DEVELOPING"])
     end
     subgraph FT["🛠️ FEATURE · loop per unit of work"]
         direction LR
-        SPEC["✍️ SPEC"] --> REVIEW(["⚙️ review.js"]) --> FIN["✅ FINALIZE"] --> BUILD(["⚙️ deep-build.js"]) --> CR["🔍 CHANGE_REVIEW"] --> HO["🚀 HANDOFF"]
+        SPEC["✍️ SPEC"] --> REVIEW(["⚙️ review workflow<br/>architect · qa · coder"]) --> FIN["✅ FINALIZE"] --> BUILD(["⚙️ deep-build workflow<br/>architect → coders → qa"]) --> CR["🔍 CHANGE_REVIEW"] --> HO["🚀 HANDOFF"]
     end
     DEV ==>|"inherit stack · intent · skills"| SPEC
     HO ==>|"ship → flip backlog → next"| DEV
@@ -75,12 +75,12 @@ A new product from scratch — the architect *ratifies* a forward stack.
 ```mermaid
 flowchart TD
     NP["🌱 /new-product<br/>vision · backlog · stack"]
-    PR(["⚙️ /plan-review<br/>plan-review.js — interrogate"])
+    PR(["⚙️ /plan-review · plan-review workflow<br/>PO · architect · qa interrogate"])
     PF{"🙋 /plan-finalize ratify<br/>human gate · never auto-passes"}
     NF["✨ /new-feature<br/>inherits stack + intent"]
-    RV(["⚙️ /review<br/>review.js — fan-out · cross-exam · vote"])
+    RV(["⚙️ /review · review workflow<br/>architect · qa · coder → cross-exam → vote"])
     FZ["✅ /finalize<br/>tests-first BUILD"]
-    DB(["⚙️ deep-build.js<br/>large: partitioned coders"])
+    DB(["⚙️ deep-build workflow<br/>architect partitions → coders → qa"])
     HO["🚀 /handoff<br/>change-review → ship"]
     LOOP(["🔁 flip backlog ✓ → resolve next feature"])
 
@@ -110,9 +110,9 @@ human promotes it.
 flowchart TD
     NP["🏗️ /new-product<br/>forward backlog · architect INFERS the stack"]
     STK["📦 STACK.md<br/>✅ baseline = BINDING<br/>🔶 forward = PROVISIONAL"]
-    PR(["⚙️ /plan-review<br/>plan-review.js — interrogate"])
+    PR(["⚙️ /plan-review · plan-review workflow<br/>PO · architect · qa interrogate"])
     PF{"🙋 ratify<br/>provisional never auto-promoted"}
-    LOOP(["🔁 DEVELOPING loop · same as greenfield<br/>new-feature → review.js → finalize → handoff"])
+    LOOP(["🔁 DEVELOPING loop · same as greenfield<br/>new-feature → review workflow → finalize → handoff"])
     PROMOTE(["🔼 adopt forward stack (human)<br/>un-tag → re-plan-review → ratify"])
 
     NP --> STK --> PR --> PF
