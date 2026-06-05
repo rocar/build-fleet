@@ -2,6 +2,44 @@
 
 All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https://keepachangelog.com/) conventions; semver bumps track the plugin's `version` in `.claude-plugin/plugin.json`.
 
+## [0.5.0] — 2026-06-05
+
+### Added
+
+- **Troubleshoot-fix bug lane** — a second, parallel state machine for diagnosing and fixing
+  *unknown-cause* bugs, additive to the forward feature machine (a repo that never files a bug is
+  byte-for-byte unchanged). Phases: `REPORT → REPRODUCE → DIAGNOSE → FIX → VERIFY → HANDOFF`. Its
+  contract is a new **`diagnosis.md`** artifact (STATUS `REPORTED|REPRODUCING|DIAGNOSED|CONFIRMED|FIXED`),
+  not a spec. Spec of record: `.sdd/troubleshoot-fix/`.
+- **Artifact + validator (M0).** `skills/sdd-diagnosis-template` (the diagnosis.md contract);
+  `hooks/scripts/validate-diagnosis-status.sh` (PostToolUse, keyed on `basename==diagnosis.md`; no
+  cross-fire with the spec validator). `_lib.sh` gains `read_diagnosis_status`, `resolve_lane`,
+  `tests_exist`, `path_in_tests`.
+- **Source-write gates (M2).** `hooks/scripts/require-reproducing-test.sh` (NEW) — a bug source
+  write is blocked unless `diagnosis.md` STATUS==CONFIRMED **and** ≥1 test exists under `tests/`
+  (severity-independent — holds for sev0). `block-source-before-finalized.sh` gains a second unlock
+  (CONFIRMED), the FINALIZED path byte-identical.
+- **Entry (M1).** `/build-fleet:triage <symptom>` scaffolds the bug + runs the classifier in a new
+  **bug mode** (`{severity, cause_known}`); a known-cause bug is bounced to the forward trivial path.
+- **Diagnosis confirmation (M3).** `workflows/diagnose.js` — an inverted `review.js`: architect +
+  coder try to refute the root-cause hypothesis citing the reproduction; CONFIRMED iff no refutation
+  survives. Driven by `/build-fleet:reproduce` + `/build-fleet:diagnose`.
+- **Fix tail (M4).** `/build-fleet:fix` (FIX gate — flips diagnosis.md→CONFIRMED, drives the coder),
+  `/build-fleet:verify` (reuses the CHANGE_REVIEW counterfactual verbatim), `/build-fleet:ship-fix`
+  (devops + clears `.sdd/ACTIVE`). sev0 hotfix fast-path. `/build-fleet:status` is bug-lane-aware.
+- **New PROGRESS bug-lane fields:** `LANE: bug`, `SEV: sev0|sev1|sev2`, `FIX_CYCLE`. New signals
+  include `BUILD_FLEET_TRIAGE`(`_KNOWN_CAUSE`), `BUILD_FLEET_REPRO_READY`,
+  `BUILD_FLEET_DIAGNOSE_SEV0_SKIP`, `BUILD_FLEET_FIX_GATE`/`_DONE`, `BUILD_FLEET_VERIFY`,
+  `BUILD_FLEET_SHIP_FIX`, `BUILD_FLEET_POSTHOC_DIAGNOSIS_DUE`.
+
+### Fixed
+
+- **Hook fail-open under bash 3.2.** The `_lib.sh` STATUS/field readers ended in an unguarded `grep`
+  pipeline that, under `set -euo pipefail`, aborted the hook with exit 1 (non-blocking) on a
+  status-less file instead of reaching exit 2 — letting a source write slip the gate. Guarded all
+  five readers (`read_diagnosis_status`, `read_spec_status`, `read_progress_field`,
+  `read_product_field`, `resolve_product`); closes a latent `spec.md` bypass dating to v0.2.
+
 ## [0.2.1] — 2026-05-30
 
 ### Fixed

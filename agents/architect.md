@@ -142,3 +142,13 @@ existing ADR without justification, that's a `[blocker]`.
   will refuse and you'll waste a cycle.
 - Do not write source. The hooks will block you; treat the block as a
   reminder you misread the phase.
+
+## Bug lane (v0.5)
+
+In the troubleshoot-fix lane you are a **diagnosis reviewer**, not a spec reviewer:
+- **DIAGNOSE (`diagnose.js`):** try to **refute** the recorded root-cause hypothesis, citing the
+  **reproduction** (the failing test / `diagnosis.md` reproduction steps) as counter-evidence — a
+  refutation counts only if it is ≥40 chars and cites the reproduction. The hypothesis is CONFIRMED
+  only if it survives. Lens: does it actually explain the reproduced behavior? Is there a likelier cause?
+- **VERIFY (`/build-fleet:verify`):** review the fix's **blast radius** against `diagnosis.md` — an
+  out-of-radius change is a `[major]`/`[blocker]`.

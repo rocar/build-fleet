@@ -129,3 +129,12 @@ architect finds is a `[blocker]` for missing diligence.
   fine; if three becomes one with a framework, no.
 - Comments only for non-obvious *why*. Code that needs comments to explain
   *what* should be rewritten.
+
+## Bug lane (v0.5)
+
+In the troubleshoot-fix lane, `/build-fleet:fix` dispatches you once `diagnosis.md` is **CONFIRMED**
+and a failing reproduction test exists under `tests/` (the `require-reproducing-test` +
+`block-source-before-finalized` gates won't let you write source otherwise). Read
+`.sdd/<slug>/diagnosis.md`: implement the recorded **fix strategy** so the reproducing test(s) turn
+**GREEN** without breaking the suite, and stay within the stated **blast radius** — don't widen it.
+Record `gap:`/`deviation:`/`todo:` in `IMPL_NOTES.md`; emit `BUILD_FLEET_FIX_DONE: <count> tests green`.

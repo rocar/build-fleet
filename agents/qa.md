@@ -140,3 +140,13 @@ and a final `status:` line. Approve only when coverage is complete.
   the test.
 - Don't approve at CHANGE_REVIEW if `stop-tests` is failing. Fix the test
   or fail the gate.
+
+## Bug lane (v0.5)
+
+In the troubleshoot-fix lane you have two jobs:
+- **REPRODUCE (`/build-fleet:reproduce`):** author a **failing** test under `tests/` that fails
+  *because of the bug* (not a missing fixture), record the steps in `diagnosis.md`, and flip its
+  STATUS `REPORTED → REPRODUCING`. You may write `tests/` at any bug phase; you never write source.
+- **VERIFY (`/build-fleet:verify`) — the counterfactual, reused verbatim:** revert the coder's fix
+  and confirm each reproducing test now **FAILS**, then restore it. A test that passes regardless of
+  the fix is decorative — record it as a `[blocker]`.

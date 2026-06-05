@@ -1,7 +1,7 @@
 # build-fleet
 
 A spec-driven multi-agent software house, packaged as a Claude Code plugin.
-**v0.4**
+**v0.5**
 
 build-fleet turns Claude Code into a disciplined software house. A fleet of role
 subagents drives every change through a deterministic state machine —
@@ -304,6 +304,48 @@ replaces the block in place). Your own notes live outside the markers and surviv
 
 ---
 
+## The troubleshoot & bug-fix lane (v0.5)
+
+Everything above is *forward engineering* — the spec is the contract. **v0.5 adds a second,
+parallel state machine for the inverse: a bug whose cause is unknown.** It is purely additive — a
+repo that never files a bug behaves exactly as before.
+
+```mermaid
+flowchart LR
+    T["🐛 /triage<br/>symptom → diagnosis.md"] --> RP["🔬 /reproduce<br/>qa writes the RED test"]
+    RP --> DG(["⚙️ /diagnose · diagnose.js<br/>architect + coder refute the hypothesis"])
+    DG --> FX["🔧 /fix<br/>CONFIRMED → coder turns it GREEN"]
+    FX --> VF["✅ /verify<br/>counterfactual: red-if-reverted"]
+    VF --> SH["🚀 /ship-fix<br/>devops · clear lock"]
+
+    classDef js fill:#f7df1e,color:#000,stroke:#000,stroke-width:2px,font-weight:bold;
+    class DG js;
+```
+
+The inversion runs deep:
+
+| | Forward feature machine | Bug lane |
+|---|---|---|
+| **Trigger** | a desired capability | a symptom |
+| **Contract** | `spec.md` (FINALIZED) | `diagnosis.md` (CONFIRMED) |
+| **The unknown** | *how* to build it | *why* it breaks (diagnosis **is** the work) |
+| **Confirmation** | review survival-vote (a concern survives unless refuted) | `diagnose.js` — **inverted**: a hypothesis is CONFIRMED iff **no** refutation survives |
+| **Verification** | acceptance criteria | the **counterfactual** — each reproducing test must fail if the fix is reverted |
+| **Routing axis** | size (trivial/standard/large) | severity (sev0/sev1/sev2) |
+
+**The keystone — the reproducing test is inviolable.** No fix source lands until `diagnosis.md` is
+CONFIRMED **and** a test that reproduces the bug exists (a new hard hook,
+`require-reproducing-test`). This holds even for a **sev0 hotfix**, which *may* skip the adversarial
+confirmation workflow (recording a post-hoc obligation) but **never** the reproducing test. The
+forward machine's keystones are reused verbatim: the CHANGE_REVIEW counterfactual becomes VERIFY,
+and the survival-vote engine is forked-and-inverted for diagnosis confirmation.
+
+**Sharp boundary with the trivial path.** A *known-cause* one-liner stays on the forward trivial
+fast-path; only an *unknown-cause* bug enters this lane. `/build-fleet:triage`'s classifier routes
+on cause-known-vs-unknown and bounces the known-cause case back out.
+
+---
+
 ## Three-tier routing
 
 When you run `/build-fleet:new-feature`, the **classifier** sizes the work and
@@ -393,7 +435,18 @@ an hour.
 | `/build-fleet:finalize` | FINALIZE → BUILD | Gate: refuses on open blockers. On pass, flips spec to FINALIZED and orchestrates BUILD (qa-first, then coder; routes to deep-build for large). |
 | `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by finalize). |
 | `/build-fleet:handoff` | CHANGE_REVIEW → HANDOFF | architect + PO + qa review the diff; refuses if tests are missing/failing. On pass devops ships, the backlog flips, and the loop advances. |
-| `/build-fleet:status` | — | Prints active feature state, open concerns, cycle counts, the product backlog, and the next unblocked feature. |
+| `/build-fleet:status` | — | Prints active feature state, open concerns, cycle counts, the product backlog, and the next unblocked feature. **Bug-lane aware:** `LANE: bug` → phase / `SEV` / `diagnosis.md` STATUS / cycles. |
+
+**Bug lane (v0.5):**
+
+| Command | Phase | What it does |
+|---|---|---|
+| `/build-fleet:triage <symptom>` | → REPORT | Scaffolds `.sdd/<bug-slug>/diagnosis.md`; runs the bug-mode classifier (severity + cause-known); bounces a known-cause bug to the forward trivial path. |
+| `/build-fleet:reproduce` | REPORT → REPRODUCE | qa writes a failing reproduction test under `tests/`; flips `diagnosis.md` `REPORTED→REPRODUCING`. |
+| `/build-fleet:diagnose` | REPRODUCE → DIAGNOSE | Gates on a recorded root-cause hypothesis, then runs the `diagnose.js` confirmation workflow (sev0 short-circuits to the fast-path). |
+| `/build-fleet:fix` | DIAGNOSE (confirmed) → FIX | Flips `diagnosis.md` → CONFIRMED (unlocks source), drives the coder to turn the reproducing test green. sev0 hotfix fast-path. |
+| `/build-fleet:verify` | FIX → VERIFY | Reuses the counterfactual: each reproducing test must fail if the fix is reverted. Clean → `diagnosis.md` → FIXED. |
+| `/build-fleet:ship-fix` | VERIFY → HANDOFF | devops ships (sev0 = hotfix); clears `.sdd/ACTIVE`. |
 
 ---
 

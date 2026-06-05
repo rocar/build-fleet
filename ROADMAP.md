@@ -288,6 +288,28 @@ type `/new-feature <slug>`" into one gated step. Depends-on: M3.
 
 ---
 
+## v0.5 — troubleshoot-fix bug lane (shipped 2026-06-05)
+
+**What landed:** a second, parallel state machine for diagnosing and fixing *unknown-cause* bugs,
+additive to the forward feature machine. `REPORT → REPRODUCE → DIAGNOSE → FIX → VERIFY → HANDOFF`,
+with a new `diagnosis.md` contract (not a spec). Built in five milestones:
+- **M0** — the `diagnosis.md` artifact + `sdd-diagnosis-template` skill + `validate-diagnosis-status`
+  hook + dormant lane resolvers in `_lib.sh`.
+- **M2** — the inviolable `require-reproducing-test` gate + a CONFIRMED second unlock on
+  `block-source-before-finalized` (also fixed a latent fail-open in the `_lib.sh` STATUS readers).
+- **M1** — `/build-fleet:triage` + a bug-mode classifier (`{severity, cause_known}`).
+- **M3** — `diagnose.js`, an inverted `review.js` (refute the hypothesis citing the reproduction;
+  CONFIRMED iff no refutation survives) + `/reproduce` + `/diagnose`.
+- **M4** — the `/fix → /verify → /ship-fix` tail (the counterfactual reused verbatim) + the sev0
+  hotfix fast-path + a bug-lane-aware `/status`.
+
+**Design spine:** the gates-vs-judgments split is preserved — the reproducing-test gate and the
+source-write unlock are deterministic **hooks**; diagnosis confirmation is an adversarial
+**workflow**. The forward machine is untouched; a repo that never files a bug is byte-for-byte
+unchanged.
+
+---
+
 ## Durable principles (apply to every version)
 
 - **Spec is the contract.** No implementation begins until a spec is FINALIZED.

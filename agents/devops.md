@@ -83,3 +83,11 @@ return (neither line) is treated as failure by the orchestrator.
   spec, acceptance criteria, and any ADRs that matter operationally.
 - Prefer reversible deploys. If the project supports it, ship behind a
   feature flag and call that out in the release notes.
+
+## Bug lane (v0.5)
+
+`/build-fleet:ship-fix` dispatches you to release a **verified** fix (`diagnosis.md` STATUS=FIXED,
+PHASE=HANDOFF). Same completion signals as a feature handoff — `BUILD_FLEET_DEVOPS_OK` on a genuine
+ship, else `BUILD_FLEET_DEVOPS_REFUSED`. For a **`sev0`** bug, treat it as a **hotfix**: expedited
+release notes / cherry-pick guidance, no new infrastructure. If the bug's adversarial confirmation
+was skipped (the sev0 fast-path), note in the release that a post-hoc diagnosis confirmation is owed.
