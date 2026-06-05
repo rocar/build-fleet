@@ -31,6 +31,13 @@ fi
 # and the FINALIZED logic below stays byte-identical. require-reproducing-test.sh layers
 # the reproducing-test precondition on top, so a bug needs CONFIRMED *and* a test.
 if [ "$(resolve_lane "$slug")" = "bug" ]; then
+  # tests/ is always writable for a bug — the reproducing test must land at REPRODUCE,
+  # BEFORE the diagnosis is CONFIRMED (and the reproducing test is itself the precondition
+  # for ever reaching CONFIRMED). Mirrors require-reproducing-test.sh and AC-7; without it
+  # the two PreToolUse gates AND to a deadlock at REPRODUCE.
+  if path_in_tests "$file_path"; then
+    exit 0
+  fi
   dstatus=$(read_diagnosis_status "$slug")
   if [ "$dstatus" = "CONFIRMED" ]; then
     exit 0

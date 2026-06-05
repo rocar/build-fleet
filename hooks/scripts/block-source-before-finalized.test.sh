@@ -42,6 +42,9 @@ check "bug-not-confirmed-blocks-source" "$p" "src/app.py" 2
 p=$(new_proj b3); printf 'bug\n' > "$p/.sdd/ACTIVE"; mkdir -p "$p/.sdd/bug"; dbody REPORTED > "$p/.sdd/bug/diagnosis.md"
 check "bug-reported-blocks-source" "$p" "src/app.py" 2
 check "bug-sdd-write-always-ok" "$p" ".sdd/bug/diagnosis.md" 0
+# AC-7: a bug's tests/ write is allowed BEFORE CONFIRMED (the reproducing test lands at
+# REPRODUCE; blocking it would deadlock the lane against require-reproducing-test).
+check "bug-tests-write-allowed-pre-confirmed" "$p" "tests/test_x.py" 0
 
 # --- regression (fail-open guard): a status-less diagnosis.md / spec.md must BLOCK ---
 # (exit 2), not fail open (exit 1) under bash 3.2's set -e + pipefail.

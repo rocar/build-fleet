@@ -31,6 +31,10 @@ All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https:
   include `BUILD_FLEET_TRIAGE`(`_KNOWN_CAUSE`), `BUILD_FLEET_REPRO_READY`,
   `BUILD_FLEET_DIAGNOSE_SEV0_SKIP`, `BUILD_FLEET_FIX_GATE`/`_DONE`, `BUILD_FLEET_VERIFY`,
   `BUILD_FLEET_SHIP_FIX`, `BUILD_FLEET_POSTHOC_DIAGNOSIS_DUE`.
+- **Planted-bug smoke test** (`docs/v0.5/smoke/`) — a fixture (a paginator with a floor-division
+  bug) + a driver that walks the bug through the lane's deterministic backbone (the hook gates +
+  the STATUS lifecycle + RED→GREEN + the VERIFY counterfactual) against the **actual** hooks, plus
+  a live-run `WALKTHROUGH.md` for the LLM-driven classifier + `diagnose.js` parts.
 
 ### Fixed
 
@@ -39,6 +43,11 @@ All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https:
   status-less file instead of reaching exit 2 — letting a source write slip the gate. Guarded all
   five readers (`read_diagnosis_status`, `read_spec_status`, `read_progress_field`,
   `read_product_field`, `resolve_product`); closes a latent `spec.md` bypass dating to v0.2.
+- **Bug-lane `tests/` deadlock (AC-7).** `block-source-before-finalized` blocked a bug's `tests/`
+  writes until CONFIRMED — but the reproducing test, written at REPRODUCE *before* CONFIRMED, is the
+  precondition for ever reaching CONFIRMED, so the lane deadlocked at REPRODUCE. Taught the bug
+  branch to permit `tests/` (mirroring `require-reproducing-test`). Caught by the new planted-bug
+  smoke test; now a regression case in `block-source-before-finalized.test.sh`.
 
 ## [0.2.1] — 2026-05-30
 
