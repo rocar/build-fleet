@@ -25,7 +25,7 @@ read_progress_field() {
   local slug="$1" field="$2"
   local f=".sdd/${slug}/PROGRESS.md"
   [ -f "$f" ] || return 0
-  grep -m1 "^${field}:" "$f" 2>/dev/null \
+  { grep -m1 "^${field}:" "$f" 2>/dev/null || true; } \
     | sed -E "s/^${field}:[[:space:]]*//" \
     | tr -d '\r '
 }
@@ -43,7 +43,7 @@ resolve_product() {
   fi
   local prog=".sdd/_product/PROGRESS.md"
   [ -f "$prog" ] || return 0
-  grep -m1 "^PRODUCT:" "$prog" 2>/dev/null \
+  { grep -m1 "^PRODUCT:" "$prog" 2>/dev/null || true; } \
     | sed -E 's/^PRODUCT:[[:space:]]*//' \
     | tr -d '\r '
 }
@@ -54,7 +54,7 @@ read_product_field() {
   local field="$1"
   local f=".sdd/_product/PROGRESS.md"
   [ -f "$f" ] || return 0
-  grep -m1 "^${field}:" "$f" 2>/dev/null \
+  { grep -m1 "^${field}:" "$f" 2>/dev/null || true; } \
     | sed -E "s/^${field}:[[:space:]]*//" \
     | tr -d '\r '
 }
@@ -66,8 +66,7 @@ read_spec_status() {
   local slug="$1"
   local f=".sdd/${slug}/spec.md"
   [ -f "$f" ] || return 0
-  head -n30 "$f" 2>/dev/null \
-    | grep -m1 "^STATUS:" \
+  { head -n30 "$f" 2>/dev/null | grep -m1 "^STATUS:" || true; } \
     | sed -E 's/^STATUS:[[:space:]]*//' \
     | tr -d '\r '
 }
@@ -86,8 +85,7 @@ read_diagnosis_status() {
   local slug="$1"
   local f=".sdd/${slug}/diagnosis.md"
   [ -f "$f" ] || return 0
-  head -n30 "$f" 2>/dev/null \
-    | grep -m1 "^STATUS:" \
+  { head -n30 "$f" 2>/dev/null | grep -m1 "^STATUS:" || true; } \
     | sed -E 's/^STATUS:[[:space:]]*//' \
     | tr -d '\r '
 }
@@ -135,6 +133,18 @@ path_in_active_sdd() {
   local phys; phys=$(pwd -P 2>/dev/null)
   case "$p" in
     .sdd/"${slug}"/*|./.sdd/"${slug}"/*|"$PWD/.sdd/${slug}/"*|"$phys/.sdd/${slug}/"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Return 0 if the path lives under tests/ (the bug lane's reproducing-test home,
+# always writable — even before CONFIRMED). Mirrors path_in_sdd's relative +
+# symlinked/physical-cwd handling. Usage: path_in_tests <file_path>
+path_in_tests() {
+  local p="$1"
+  local phys; phys=$(pwd -P 2>/dev/null)
+  case "$p" in
+    tests/*|./tests/*|"$PWD/tests/"*|"$phys/tests/"*) return 0 ;;
     *) return 1 ;;
   esac
 }

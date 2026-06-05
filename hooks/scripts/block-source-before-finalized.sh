@@ -25,6 +25,21 @@ if path_in_sdd "$file_path"; then
   exit 0
 fi
 
+# Bug lane (v0.5 M2 — second unlock, B8): when the active item is a bug, its source
+# writes unlock on diagnosis.md STATUS==CONFIRMED, mirroring the spec FINALIZED unlock.
+# A forward feature has no diagnosis.md (resolve_lane==feature), so it skips this branch
+# and the FINALIZED logic below stays byte-identical. require-reproducing-test.sh layers
+# the reproducing-test precondition on top, so a bug needs CONFIRMED *and* a test.
+if [ "$(resolve_lane "$slug")" = "bug" ]; then
+  dstatus=$(read_diagnosis_status "$slug")
+  if [ "$dstatus" = "CONFIRMED" ]; then
+    exit 0
+  fi
+  echo "build-fleet: active bug '${slug}' has diagnosis STATUS=${dstatus:-<none>}. Source writes are blocked until the root cause is CONFIRMED (run /build-fleet:diagnose)." >&2
+  echo "Refused write: ${file_path}" >&2
+  exit 2
+fi
+
 status=$(read_spec_status "$slug")
 
 if [ -z "$status" ]; then
