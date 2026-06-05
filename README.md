@@ -39,24 +39,21 @@ tests-first BUILD, and headless-first machine signals.
 
 ## The two cycles
 
-```
-        ┌──────────────────────── PRODUCT TIER (.sdd/_product/) ───────────────────────┐
-        │                                                                               │
-        │   PLAN ──▶ PLAN_REVIEW ──▶ PLAN_FINALIZE ──▶ DEVELOPING ───────────────────┐  │
-        │   plan      interrogate      human ratify      (the loop)                  │  │
-        │   (vision,  [plan-review      (never            │                          │  │
-        │    backlog,  workflow]         auto-passes)     │                          │  │
-        │    stack)                                       ▼                          │  │
-        │                                    ┌──── FEATURE TIER (.sdd/<feature>/) ──┐ │  │
-        │                                    │  SPEC ▶ REVIEW ▶ FINALIZE ▶ BUILD ▶  │ │  │
-        │   inherit: binding stack ─────────▶│       [review wf]      [deep-build  │ │  │
-        │           + feature intent         │                          wf]        │ │  │
-        │           + routed skills          │  CHANGE_REVIEW ▶ HANDOFF ───────────┘ │  │
-        │                                    └──────────┬───────────────────────────┘ │  │
-        │                                               │ ship → flip backlog + clear │  │
-        │                                               ▼ ACTIVE + resolve next        │  │
-        │                                    /next-feature ◀────── loop ──────────────┘  │
-        └───────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph PT["Product tier — .sdd/_product/"]
+        direction LR
+        PLAN["PLAN<br/>vision · backlog · stack"] --> PREV[["PLAN_REVIEW<br/>plan-review.js"]] --> PFIN{"PLAN_FINALIZE<br/>human ratify"} --> DEV(["DEVELOPING<br/>the loop"])
+    end
+    subgraph FT["Feature tier — .sdd/feature/"]
+        direction LR
+        SPEC["SPEC"] --> REVIEW[["REVIEW<br/>review.js"]] --> FINAL["FINALIZE"] --> BUILD[["BUILD<br/>deep-build.js (large)"]] --> CR["CHANGE_REVIEW"] --> HO["HANDOFF"]
+    end
+    DEV -->|"inherit stack + intent + skills"| SPEC
+    HO -->|"ship → flip backlog · clear ACTIVE · resolve next"| DEV
+
+    classDef wf fill:#1f6feb,color:#fff,stroke:#1158c7;
+    class PREV,REVIEW,BUILD wf;
 ```
 
 The product tier is **optional and additive** — a repo with no `.sdd/_product/`
@@ -68,48 +65,29 @@ is a plain feature-first project and behaves exactly as v0.2 did.
 
 A new product from scratch — the architect *ratifies* a forward stack.
 
-```
-GREENFIELD
+```mermaid
+flowchart TD
+    NP["/new-product slug<br/>vision · phased backlog + intents<br/>architect RATIFIES the stack"]
+    PR[["/plan-review<br/>workflows/plan-review.js<br/>interrogate — no survival vote"]]
+    PF{"/plan-finalize ratify<br/>human gate — never auto-passes<br/>+ writes CLAUDE.md product memory"}
+    NX(["/next-feature (optional)<br/>resolve next unblocked feature"])
+    NF["/new-feature slug<br/>inherits stack + intent + skills"]
+    RV[["/review<br/>workflows/review.js<br/>fan-out → cross-exam → survival vote"]]
+    FZ["/finalize<br/>spec FINALIZED → tests-first BUILD"]
+    DB[["large BUILD<br/>workflows/deep-build.js<br/>partitioned coders"]]
+    HO["/handoff<br/>change-review → devops ships"]
+    ADV(["flip backlog ✓ DONE · clear ACTIVE<br/>resolve next feature"])
 
-  /build-fleet:new-product <slug>                          ── PLAN ───────────────
-    │  PO   drafts vision + a phased backlog; each feature row carries a
-    │       1–3 line INTENT (what it is + scope boundary + non-goals)
-    │  arch RATIFIES a fresh stack-of-record + product ADRs (greenfield design)
-    ▼
-  /build-fleet:plan-review        ▷ workflows/plan-review.js        [WORKFLOW]
-    │  product-owner · architect · qa INTERROGATE the plan (scope, phasing,
-    │  dependencies, intent quality) — findings only, NO survival vote, never
-    │  auto-escalates → interrogation report in _product/REVIEW.md; PHASE=PLAN_REVIEW
-    ▼
-  /build-fleet:plan-finalize ratify                ── ratification gate ──────────
-    │  bare call = dry-run + halt (the headless safety stop; never auto-passes)
-    │  `ratify`  = vision + backlog → FINALIZED; STACK → FINALIZED; PHASE=DEVELOPING
-    │           → root CLAUDE.md product-memory block generated (non-clobbering)
-    ▼
-  ══ DEVELOPING loop ════════════════════════════════════════════════════════════
-    │
-    ├─▶ /build-fleet:next-feature   (optional)  resolves the next unblocked feature
-    │        via scripts/next-feature.sh; emits {slug}; the dispatcher starts it
-    ▼
-  /build-fleet:new-feature <slug>                          ── SPEC ───────────────
-    │  inherits the BINDING stack + this feature's backlog INTENT
-    │  classifier → TIER (trivial | standard | large) + a skill manifest
-    ▼
-  /build-fleet:review   (standard / large)    ▷ workflows/review.js    [WORKFLOW]
-    │  fan-out reviewers → adversarial cross-examination → survival vote → scribe
-    │  (trivial skips REVIEW)
-    ▼
-  /build-fleet:finalize                            ── FINALIZE → BUILD ───────────
-    │  gate: zero open blockers → spec FINALIZED
-    │  qa writes a FAILING suite from acceptance.md → coder drives it green
-    │        large: ▷ workflows/deep-build.js   [WORKFLOW]  (partitioned coders)
-    ▼
-  /build-fleet:handoff                             ── CHANGE_REVIEW → HANDOFF ─────
-    │  architect + PO + qa review the diff; tests must pass; devops ships
-    │  on BUILD_FLEET_DEVOPS_OK:
-    │     • backlog row → [x] DONE  handoff:<date>   (phase STATUS recomputed)
-    │     • .sdd/ACTIVE cleared      • resolver surfaces the next unblocked feature
-    └──────────────────────────────▶ loop back to /next-feature  (until backlog complete)
+    NP --> PR --> PF
+    PF -->|DEVELOPING| NX --> NF
+    NF -->|"standard / large"| RV --> FZ
+    NF -.->|"trivial: skip REVIEW"| FZ
+    FZ -->|large| DB --> HO
+    FZ -->|standard| HO
+    HO --> ADV -->|"next unblocked feature (until backlog complete)"| NX
+
+    classDef wf fill:#1f6feb,color:#fff,stroke:#1158c7;
+    class PR,RV,DB wf;
 ```
 
 ---
@@ -120,34 +98,23 @@ An existing codebase — the architect *infers* the real stack; only the current
 baseline binds, and any forward/migration direction stays provisional until a
 human promotes it.
 
-```
-BROWNFIELD  (existing source / manifests already present)
+```mermaid
+flowchart TD
+    NP["/new-product slug<br/>FORWARD backlog (built features excluded)<br/>architect INFERS the stack from the code"]
+    STK["STACK.md<br/>Baseline (current) = BINDING<br/>Forward direction = PROVISIONAL — does NOT bind"]
+    PR[["/plan-review<br/>workflows/plan-review.js<br/>interrogate plan + the provisional direction"]]
+    PF{"/plan-finalize ratify<br/>PROVISIONAL never auto-promoted"}
+    LOOP["DEVELOPING loop — same as greenfield<br/>features inherit the BINDING baseline<br/>/new-feature → /review (review.js) → /finalize → /handoff<br/>(large BUILD → deep-build.js) → flip + advance"]
+    PROMOTE(["adopt the forward stack (human):<br/>un-tag PROVISIONAL → re-/plan-review → ratify"])
 
-  /build-fleet:new-product <slug>                          ── PLAN ───────────────
-    │  PO   drafts a FORWARD-looking backlog (already-built features are NOT rows;
-    │       only planned/next work) — each row with its 1–3 line INTENT
-    │  arch INFERS the actual stack from the code:
-    │        ## Baseline (current)             = the BINDING stack-of-record
-    │        ## Forward direction (PROVISIONAL) = strategy that does NOT bind
-    ▼
-  /build-fleet:plan-review        ▷ workflows/plan-review.js        [WORKFLOW]
-    │  interrogate the plan AND the provisional direction (is the migration
-    │  justified + incremental?) — the binding baseline is never a defect for
-    │  merely existing
-    ▼
-  /build-fleet:plan-finalize ratify                ── ratification gate ──────────
-    │  vision + backlog → FINALIZED; PHASE=DEVELOPING
-    │  PROVISIONAL entries are NEVER auto-promoted (the machine never decides
-    │  strategy) → STACK STATUS flips only if the whole stack is binding
-    │  → product memory reflects the BINDING baseline only
-    ▼
-  ══ DEVELOPING loop (identical to greenfield) ══════════════════════════════════
-    │  features inherit the BINDING BASELINE (not the provisional forward)
-    │  /new-feature → /review ▷[review.js] → /finalize → /handoff → flip + advance
-    │        (large BUILD → ▷[deep-build.js]) — see the greenfield loop for detail
-    │
-    └─ to adopt the forward stack: a human un-tags PROVISIONAL in STACK.md,
-       re-runs /plan-review, and /plan-finalize ratify — then it binds.
+    NP --> STK --> PR --> PF -->|DEVELOPING| LOOP
+    LOOP -.->|"optional, human-driven"| PROMOTE
+    PROMOTE -.-> PR
+
+    classDef wf fill:#1f6feb,color:#fff,stroke:#1158c7;
+    classDef bind fill:#196c2e,color:#fff,stroke:#0f5323;
+    class PR wf;
+    class STK bind;
 ```
 
 The only brownfield-specific behavior is at planning time (infer-not-ratify,
