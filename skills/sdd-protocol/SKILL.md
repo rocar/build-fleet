@@ -488,12 +488,15 @@ writes for an active bug. A forward feature has no `diagnosis.md`, so `resolve_l
   CONFIRMED. The gate is **severity-independent** (it never reads `SEV`): it holds even for sev0.
 - **`block-source-before-finalized.sh` (MODIFIED — second unlock, B8).** Before the existing
   `read_spec_status`/FINALIZED branch, a bug-lane branch: a CONFIRMED bug's source write exits 0;
-  a non-CONFIRMED bug's is blocked. The **FINALIZED branch is byte-identical** — a forward
-  feature never enters the bug branch, so its behavior is unchanged (AC-17).
+  a non-CONFIRMED bug's is blocked. **A bug's `tests/` write is always permitted** (the bug branch
+  short-circuits on `path_in_tests`) — the reproducing test must land at REPRODUCE, *before*
+  CONFIRMED, so blocking it would deadlock the lane against `require-reproducing-test` (AC-7). The
+  **FINALIZED branch is byte-identical** — a forward feature never enters the bug branch, so its
+  behavior is unchanged (AC-17).
 
 Layered, a bug source write requires `CONFIRMED` **and** a reproducing test — strictly stronger
 than the forward path's single FINALIZED condition, never weaker. `_lib.sh` also gains
-`path_in_tests` (mirrors `path_in_sdd`) so the gate always permits test writes. Both hooks carry
+`path_in_tests` (mirrors `path_in_sdd`) so **both** bug-lane gates always permit `tests/` writes. Both hooks carry
 committed harnesses (`require-reproducing-test.test.sh`, `block-source-before-finalized.test.sh`
 — the latter locks in AC-17's byte-identical forward behavior as a regression).
 
