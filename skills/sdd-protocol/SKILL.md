@@ -526,11 +526,43 @@ envelope shape matches `review.js`'s, and a surviving refutation is recorded as 
 **Gate-split: the CONFIRMED flip is the `/build-fleet:fix` gate's job, not `/build-fleet:diagnose`
 (a refinement of AC-12 for the async runtime).** `diagnose.js` is async-launched (fire-and-forget,
 like `review.js`); the scribe records the verdict (`REVIEW.md` + `PROGRESS.md` CYCLE) on
-completion. The deterministic `diagnosis.md` STATUS → `CONFIRMED` + `PHASE` → `FIX` flip is applied
-by **`/build-fleet:fix`** when it reads a `confirmed` verdict — exactly as `/build-fleet:finalize`
-(not `/build-fleet:review`) flips a spec to `FINALIZED` after the async review. Moving the flip into
-the synchronous FIX gate keeps the deterministic STATUS write out of the fire-and-forget workflow.
-(`/build-fleet:fix` and the CONFIRMED→FIX→VERIFY→SHIP tail are the next milestone.)
+completion. On `confirmed` the workflow advances `PHASE` → `FIX` (the scribe writes PROGRESS PHASE,
+like `review.js`); the **`/build-fleet:fix`** gate then flips the `diagnosis.md` STATUS → `CONFIRMED`
+*content* — the write the scribe must not do — exactly as `/build-fleet:finalize` (not
+`/build-fleet:review`) flips a spec to `FINALIZED` after the async review. Keeping the deterministic
+STATUS write in a synchronous gate keeps it out of the fire-and-forget workflow.
+
+### M4 — FIX → VERIFY → HANDOFF (the fix tail)
+
+Three gate commands carry a confirmed bug to a shipped fix, completing the lane:
+
+- **`/build-fleet:fix` (the FIX gate — the bug-lane `/build-fleet:finalize`).** On a `confirmed`
+  bug (`PHASE: FIX`, set by `diagnose.js`) it flips `diagnosis.md` STATUS → `CONFIRMED` (the
+  content write that unlocks source — `block-source`'s second unlock + `require-reproducing-test`
+  now both pass, since the REPRODUCE test exists), then delegates to **coder** to implement the
+  recorded fix strategy and turn the reproducing test GREEN without breaking the suite. Emits
+  `BUILD_FLEET_FIX_DONE`.
+  - **sev0 hotfix fast-path (B11).** `SEV: sev0` may run `/build-fleet:fix` directly from
+    `PHASE: DIAGNOSE` / STATUS `DIAGNOSED`, skipping the `diagnose.js` confirmation — but it
+    records a **post-hoc obligation** (`BUILD_FLEET_POSTHOC_DIAGNOSIS_DUE` + a `diagnosis.md`
+    note) and **never** skips the reproducing-test gate. `sev1`/`sev2` get no fast-path.
+
+- **`/build-fleet:verify` (the VERIFY gate — the bug-lane CHANGE_REVIEW).** Reuses the
+  **counterfactual verbatim**: qa reverts the coder's change and confirms each reproducing test
+  FAILS (a test that passes regardless of the fix is decorative — a `[blocker]`); architect
+  reviews blast radius against `diagnosis.md`. Clean → flip `diagnosis.md` STATUS → `FIXED`,
+  `PHASE: HANDOFF`. Bounce → `PHASE: FIX`, `FIX_CYCLE++` (bounded at 3, then ESCALATE — B12).
+  Emits `BUILD_FLEET_VERIFY`.
+
+- **`/build-fleet:ship-fix` (HANDOFF).** devops ships the verified fix (sev0 = hotfix urgency);
+  on `BUILD_FLEET_DEVOPS_OK` it emits `BUILD_FLEET_SHIP_FIX` and **clears `.sdd/ACTIVE`** (the
+  lock-clear that unblocks the next item) — **no** product-backlog flip or DEVELOPING-loop advance
+  (a bug is not a backlog feature). A missing/`_REFUSED` devops signal leaves the lock set and the
+  fix unshipped (the safe default).
+
+`/build-fleet:status` is bug-lane-aware (`LANE: bug` → prints phase / `SEV` / `diagnosis.md` STATUS
+/ `CYCLE` / `FIX_CYCLE`). The lane is now end-to-end:
+`REPORT → REPRODUCE → DIAGNOSE → FIX → VERIFY → HANDOFF`.
 
 ## PROGRESS.md schema
 

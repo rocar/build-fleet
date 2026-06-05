@@ -302,9 +302,11 @@ function buildEnvelope({ slug, cycle, now, refutals, judged, verdict }) {
         }
       : null;
 
-  // PHASE: the workflow leaves the bug at DIAGNOSE (the /build-fleet:diagnose command flips
-  // diagnosis.md STATUS→CONFIRMED + PHASE→FIX on a `confirmed` verdict, the same division of
-  // labor as /build-fleet:finalize flipping spec.md). Only `escalate` sets a terminal PHASE.
+  // PHASE advance (the scribe writes PROGRESS PHASE, like review.js — it never writes the
+  // diagnosis.md body): `confirmed` advances to FIX; the /build-fleet:fix gate then flips
+  // diagnosis.md STATUS → CONFIRMED (the content write the scribe must not do, mirroring how
+  // /build-fleet:finalize flips spec.md after review). `refuted` stays at DIAGNOSE for a
+  // re-run; `escalate` is terminal.
   return {
     build_fleet_version: "0.5",
     feature: slug,            // scribe targets .sdd/<feature>/ — here the bug slug
@@ -314,7 +316,7 @@ function buildEnvelope({ slug, cycle, now, refutals, judged, verdict }) {
     surviving_concerns: judged,
     review_entries: reviewEntries,
     state_delta: {
-      PHASE: verdict === "escalate" ? "ESCALATED" : "DIAGNOSE",
+      PHASE: verdict === "escalate" ? "ESCALATED" : verdict === "confirmed" ? "FIX" : "DIAGNOSE",
       CYCLE: cycle,
       UPDATED: now,
     },

@@ -18,6 +18,22 @@ not mutate anything.
    - Otherwise report "no active feature" and stop. Suggest
      `/build-fleet:new-feature <slug>`.
 
+1b. **Bug lane (v0.5 M4).** Read `.sdd/<active>/PROGRESS.md`. If it carries `LANE: bug`, the
+   active item is a troubleshoot-fix **bug**, not a forward feature — report the **bug view** and
+   **skip steps 2–4** (a bug has no `spec.md` or spec-review cycle):
+   - Bug slug; `PHASE` (`REPORT|REPRODUCE|DIAGNOSE|FIX|VERIFY|HANDOFF|ESCALATED`); `SEV`.
+   - `diagnosis.md` STATUS (`REPORTED|REPRODUCING|DIAGNOSED|CONFIRMED|FIXED`).
+   - `CYCLE` (diagnose-confirmation cycles) and `FIX_CYCLE` (verify→fix bounces); `UPDATED`.
+   - The count of test files under `tests/` (read-only — status never runs the suite; the
+     `diagnosis.md` STATUS conveys the red→green lifecycle).
+   - The most recent `.sdd/<slug>/REVIEW.md` diagnose block(s), if any (verbatim verdict lines).
+   - Then do the ESCALATION check (step 5) and recommend the next bug-lane command by `PHASE`:
+     `REPORT`→`/build-fleet:reproduce`; `REPRODUCE`→record a hypothesis, then `/build-fleet:diagnose`;
+     `DIAGNOSE`→`/build-fleet:diagnose` again (if refuted) or `/build-fleet:fix` (if confirmed —
+     PHASE will read `FIX`); `FIX`→`/build-fleet:fix` then `/build-fleet:verify`;
+     `VERIFY`→`/build-fleet:verify`; `HANDOFF`→`/build-fleet:ship-fix`; `ESCALATED`→human only.
+   Then **stop** — do not run the forward-feature steps below.
+
 2. **Read `.sdd/<active>/PROGRESS.md`.** Print:
    - Feature slug.
    - PHASE.

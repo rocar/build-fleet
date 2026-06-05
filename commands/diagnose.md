@@ -48,6 +48,18 @@ The `Workflow` tool must be available (Claude Code v2.1.154+, workflows enabled;
    (keep all four `##` sections). Edit `.sdd/<slug>/PROGRESS.md` `PHASE: → DIAGNOSE`, refresh
    `UPDATED`. (Both are `.sdd/` writes — always gate-permitted.)
 
+6b. **sev0 hotfix fast-path (B11 / AC-22) — skip the confirmation workflow.** Read `SEV` from
+   PROGRESS.md. If `SEV == sev0`, the hotfix path **may skip** the adversarial confirmation. After
+   the DIAGNOSED advance (step 6), do **not** drop the marker or dispatch `diagnose.js`. Emit:
+   ```
+   BUILD_FLEET_DIAGNOSE_SEV0_SKIP: {"slug":"<slug>","reason":"sev0 hotfix — adversarial confirmation deferred to post-ship"}
+   ```
+   and tell the user to run **`/build-fleet:fix`** directly — it takes the bug from
+   `PHASE: DIAGNOSE` / STATUS `DIAGNOSED`, flips `diagnosis.md` → `CONFIRMED` via the fast-path, and
+   records the post-hoc obligation (`BUILD_FLEET_POSTHOC_DIAGNOSIS_DUE`). The reproducing-test gate
+   still holds. **Stop here** (no workflow). `sev1`/`sev2` continue to step 7. *(An operator who
+   wants full confirmation on a `sev0` can lower `SEV` in PROGRESS.md before re-running.)*
+
 7. **Check the cycle budget.** Read `CYCLE`. If `CYCLE >= 3` and the most recent diagnose cycle
    in `REVIEW.md` still records a surviving refutation, refuse — the next run would escalate;
    let the workflow own that write only on a fresh attempt. Exit 2:

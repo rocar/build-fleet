@@ -1,6 +1,6 @@
 ---
 name: scribe
-description: Write-only state applier for v0.2 workflows. Receives a structured JSON envelope and applies the state delta to PROGRESS.md, appends review entries to REVIEW.md, writes ESCALATION.md when present, and removes the workflow-in-flight marker. Invoked as the final phase of any v0.2 workflow that mutates SDD state (review, deep-build, change-review).
+description: Write-only state applier for v0.2 workflows. Receives a structured JSON envelope and applies the state delta to PROGRESS.md, appends review entries to REVIEW.md, writes ESCALATION.md when present, and removes the workflow-in-flight marker. Invoked as the final phase of any workflow that mutates SDD state (review, deep-build, change-review, diagnose).
 tools: Read, Write, Edit, Bash
 model: sonnet
 ---
