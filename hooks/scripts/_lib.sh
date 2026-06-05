@@ -72,6 +72,47 @@ read_spec_status() {
     | tr -d '\r '
 }
 
+# --- Troubleshoot-fix bug lane (v0.5 M0 foundations — DORMANT until M2) ---
+# The bug lane's source-of-truth artifact is diagnosis.md (the analog of spec.md).
+# These mirror the forward-machine resolvers. No M0 hook keys off them; M2 wires
+# read_diagnosis_status + resolve_lane into block-source-before-finalized's second
+# unlock and require-reproducing-test.sh, which also consumes tests_exist. Added in
+# foundations, same dormant-helper pattern as resolve_product/read_product_field.
+
+# Echo the diagnosis STATUS (REPORTED|REPRODUCING|DIAGNOSED|CONFIRMED|FIXED) for the
+# active bug, or empty if diagnosis.md or its STATUS line is absent. Mirrors
+# read_spec_status. Usage: read_diagnosis_status <slug>
+read_diagnosis_status() {
+  local slug="$1"
+  local f=".sdd/${slug}/diagnosis.md"
+  [ -f "$f" ] || return 0
+  head -n30 "$f" 2>/dev/null \
+    | grep -m1 "^STATUS:" \
+    | sed -E 's/^STATUS:[[:space:]]*//' \
+    | tr -d '\r '
+}
+
+# Echo "bug" if the slug's workspace carries a diagnosis.md (the bug lane's
+# source-of-truth artifact), else "feature". Presence of diagnosis.md is the
+# structural discriminator; the PROGRESS `LANE:` field is the parseable mirror.
+# Usage: resolve_lane <slug>
+resolve_lane() {
+  local slug="$1"
+  if [ -f ".sdd/${slug}/diagnosis.md" ]; then
+    printf 'bug'
+  else
+    printf 'feature'
+  fi
+}
+
+# Return 0 if at least one regular file exists under tests/, else 1. The
+# reproducing-test precondition for M2's require-reproducing-test.sh: a bug source
+# write requires a reproduction to already exist. Usage: tests_exist
+tests_exist() {
+  [ -d tests ] || return 1
+  [ -n "$(find tests -type f 2>/dev/null | head -n1)" ]
+}
+
 # Return 0 if the path lives anywhere under .sdd/.
 # Usage: path_in_sdd <file_path>
 # Matches relative forms plus both the symlinked ($PWD) and physical (pwd -P)

@@ -408,6 +408,49 @@ scope); wiring it into the `deep-build` workflow's `AgentDefinition.tools` is a 
 increment. See the `skill-routing` skill for the manifest schema and the stack→skill
 mapping table.
 
+## Troubleshoot-fix bug lane (v0.5 M0) — foundations
+
+build-fleet is gaining a **second state machine** for diagnosing and fixing bugs whose
+*cause is unknown*, parallel to (never replacing) the forward feature machine. Where the
+forward machine's contract artifact is `spec.md`, the bug lane's is **`diagnosis.md`**. The
+full lane is `REPORT → REPRODUCE → DIAGNOSE → FIX → VERIFY → HANDOFF`; its spec of record
+lives at `.sdd/troubleshoot-fix/`. **M0 ships foundations only** — the artifact contract, its
+structural validator, and the dormant lane-resolution helpers. There is **no**
+`/build-fleet:triage` command, no `diagnose.js` workflow, and **no gate keys off the bug lane
+yet**; M0 is purely additive and inert (mirroring the product-tier M0 "inherited context
+only" stance — a repo that never files a bug behaves byte-for-byte as today).
+
+**The `diagnosis.md` artifact.** The bug-lane analog of `spec.md`. Its first non-blank line is
+a STATUS line whose value is one of `REPORTED | REPRODUCING | DIAGNOSED | CONFIRMED | FIXED`,
+advancing monotonically across the phases. Required `##` sections (validated structurally):
+`## Symptom + reproduction steps`, `## Root-cause hypothesis`, `## Blast radius`,
+`## Fix strategy`. The canonical structure lives in the **`sdd-diagnosis-template`** skill.
+`CONFIRMED` is the bug-lane analog of a `FINALIZED` spec — the point at which source writes
+unlock (B7/B8, wired in M2).
+
+**`validate-diagnosis-status` (PostToolUse Write|Edit).** The bug-lane analog of
+`validate-spec-status`, keyed on `basename == diagnosis.md` under `.sdd/`. Rejects (exit 2) a
+write whose STATUS is missing or not one of the five tokens, or any of whose four required
+headings is absent. Feature dirs have no `diagnosis.md` and bug dirs have no `spec.md`, so the
+two validators never cross-fire.
+
+**Lane resolution helpers (DORMANT in M0).** `_lib.sh` gains, mirroring the forward resolvers:
+- `read_diagnosis_status <slug>` — echoes the diagnosis STATUS (scan first 30 lines), empty if
+  absent. Mirrors `read_spec_status`.
+- `resolve_lane <slug>` — echoes `bug` when `.sdd/<slug>/diagnosis.md` exists, else `feature`.
+  Presence of `diagnosis.md` is the **structural** discriminator; the PROGRESS `LANE:` field is
+  the parseable mirror.
+- `tests_exist` — succeeds iff ≥1 regular file exists under `tests/`.
+No M0 hook calls these; M2 wires `read_diagnosis_status` + `resolve_lane` into
+`block-source-before-finalized`'s second unlock and `require-reproducing-test.sh` (which also
+consumes `tests_exist`). Same dormant-foundations pattern as `resolve_product`.
+
+**Bug-lane PROGRESS.md fields (forward-compat).** A bug's `PROGRESS.md` (written by
+`/build-fleet:triage` in M1) carries
+`PHASE: REPORT | REPRODUCE | DIAGNOSE | FIX | VERIFY | HANDOFF | ESCALATED`, plus new
+`SEV: sev0|sev1|sev2`, `FIX_CYCLE: <int>`, and `LANE: bug`. A forward feature carries no `LANE`
+field (absence reads as a feature) and its schema below is unchanged.
+
 ## PROGRESS.md schema
 
 Exact field names; hooks and commands parse these lines:
