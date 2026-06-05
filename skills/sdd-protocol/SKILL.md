@@ -451,6 +451,30 @@ consumes `tests_exist`). Same dormant-foundations pattern as `resolve_product`.
 `SEV: sev0|sev1|sev2`, `FIX_CYCLE: <int>`, and `LANE: bug`. A forward feature carries no `LANE`
 field (absence reads as a feature) and its schema below is unchanged.
 
+### M1 — entry (REPORT): `/build-fleet:triage`
+
+`/build-fleet:triage <symptom>` is the lane's **sole entry** (the bug-lane analog of
+`/build-fleet:new-feature`). It refuses while `.sdd/ACTIVE` is non-empty — **a bug and a
+forward feature share the single `.sdd/ACTIVE` lock** (the Q2 decision: one item in flight,
+the simplest correct rule; there is no second `ACTIVE_BUG` lane, so a sev0 cannot preempt a
+mid-flight feature — the human parks the feature first). On a clean lock it:
+1. derives a kebab-case `bug-<…>` slug and scaffolds `.sdd/<slug>/` with **`diagnosis.md`**
+   (`STATUS: REPORTED`, the symptom verbatim under `## Symptom + reproduction steps`) and a
+   bug-lane `PROGRESS.md` (`LANE: bug`, `PHASE: REPORT`, `SEV: pending`, `CYCLE: 0`,
+   `FIX_CYCLE: 0`) — and **no** `spec.md`/`acceptance.md`;
+2. writes the slug to `.sdd/ACTIVE`;
+3. runs the **triage classifier** — the `classifier` agent in **bug mode** (see
+   `agents/classifier.md` § Bug-mode) — for `{severity, cause_known}`;
+4. **routes on `cause_known`:** `true` → the cause is obvious from the report; emit
+   `BUILD_FLEET_TRIAGE_KNOWN_CAUSE`, **delete the scaffold, clear `.sdd/ACTIVE`**, and send the
+   user to the forward `/build-fleet:new-feature` trivial path (the sharp boundary). `false` →
+   stay in the lane: write `SEV`, keep `PHASE: REPORT`, emit `BUILD_FLEET_TRIAGE`. Next command:
+   `/build-fleet:reproduce`.
+
+A bug `PROGRESS.md` carries **no** `TIER`/`BUILD_MODE` (forward-machine fields); the bug-lane
+hooks never read them, and the M2 fail-open fix makes a reader of an absent field return empty
+rather than abort, so their absence is safe.
+
 ### M2 — the source-write gates (live)
 
 M2 activates the dormant helpers into two PreToolUse(Write|Edit) hooks that gate **source**
