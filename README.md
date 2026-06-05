@@ -41,20 +41,27 @@ tests-first BUILD, and headless-first machine signals.
 
 ```mermaid
 flowchart TB
-    subgraph PT["Product tier — .sdd/_product/"]
+    subgraph PT["🧭 PRODUCT · plan once, ratify once"]
         direction LR
-        PLAN["PLAN<br/>vision · backlog · stack"] --> PREV[["PLAN_REVIEW<br/>plan-review.js"]] --> PFIN{"PLAN_FINALIZE<br/>human ratify"} --> DEV(["DEVELOPING<br/>the loop"])
+        PLAN["📋 PLAN<br/>vision · backlog · stack"] --> PREV(["⚙️ plan-review.js"]) --> PFIN{"🙋 ratify"} --> DEV(["🔁 DEVELOPING"])
     end
-    subgraph FT["Feature tier — .sdd/feature/"]
+    subgraph FT["🛠️ FEATURE · loop per unit of work"]
         direction LR
-        SPEC["SPEC"] --> REVIEW[["REVIEW<br/>review.js"]] --> FINAL["FINALIZE"] --> BUILD[["BUILD<br/>deep-build.js (large)"]] --> CR["CHANGE_REVIEW"] --> HO["HANDOFF"]
+        SPEC["✍️ SPEC"] --> REVIEW(["⚙️ review.js"]) --> FIN["✅ FINALIZE"] --> BUILD(["⚙️ deep-build.js"]) --> CR["🔍 CHANGE_REVIEW"] --> HO["🚀 HANDOFF"]
     end
-    DEV -->|"inherit stack + intent + skills"| SPEC
-    HO -->|"ship → flip backlog · clear ACTIVE · resolve next"| DEV
+    DEV ==>|"inherit stack · intent · skills"| SPEC
+    HO ==>|"ship → flip backlog → next"| DEV
 
-    classDef wf fill:#1f6feb,color:#fff,stroke:#1158c7;
-    class PREV,REVIEW,BUILD wf;
+    classDef js fill:#f7df1e,color:#000,stroke:#000,stroke-width:2px,font-weight:bold;
+    classDef gate fill:#ff8a65,color:#000,stroke:#d84315,stroke-width:2px;
+    class PREV,REVIEW,BUILD js;
+    class PFIN gate;
 ```
+
+> 🟡 **The yellow nodes are real JavaScript.** `review.js`, `plan-review.js`, and
+> `deep-build.js` are dynamic-workflow scripts — each one fans out a whole team of
+> agents, cross-examines them, and votes on the result. The workflow *is* code, not
+> a prompt. That's the engine. (🙋 = a human gate.)
 
 The product tier is **optional and additive** — a repo with no `.sdd/_product/`
 is a plain feature-first project and behaves exactly as v0.2 did.
@@ -67,27 +74,28 @@ A new product from scratch — the architect *ratifies* a forward stack.
 
 ```mermaid
 flowchart TD
-    NP["/new-product slug<br/>vision · phased backlog + intents<br/>architect RATIFIES the stack"]
-    PR[["/plan-review<br/>workflows/plan-review.js<br/>interrogate — no survival vote"]]
-    PF{"/plan-finalize ratify<br/>human gate — never auto-passes<br/>+ writes CLAUDE.md product memory"}
-    NX(["/next-feature (optional)<br/>resolve next unblocked feature"])
-    NF["/new-feature slug<br/>inherits stack + intent + skills"]
-    RV[["/review<br/>workflows/review.js<br/>fan-out → cross-exam → survival vote"]]
-    FZ["/finalize<br/>spec FINALIZED → tests-first BUILD"]
-    DB[["large BUILD<br/>workflows/deep-build.js<br/>partitioned coders"]]
-    HO["/handoff<br/>change-review → devops ships"]
-    ADV(["flip backlog ✓ DONE · clear ACTIVE<br/>resolve next feature"])
+    NP["🌱 /new-product<br/>vision · backlog · stack"]
+    PR(["⚙️ /plan-review<br/>plan-review.js — interrogate"])
+    PF{"🙋 /plan-finalize ratify<br/>human gate · never auto-passes"}
+    NF["✨ /new-feature<br/>inherits stack + intent"]
+    RV(["⚙️ /review<br/>review.js — fan-out · cross-exam · vote"])
+    FZ["✅ /finalize<br/>tests-first BUILD"]
+    DB(["⚙️ deep-build.js<br/>large: partitioned coders"])
+    HO["🚀 /handoff<br/>change-review → ship"]
+    LOOP(["🔁 flip backlog ✓ → resolve next feature"])
 
     NP --> PR --> PF
-    PF -->|DEVELOPING| NX --> NF
-    NF -->|"standard / large"| RV --> FZ
-    NF -.->|"trivial: skip REVIEW"| FZ
+    PF ==>|DEVELOPING| NF
+    NF --> RV --> FZ
+    NF -.->|trivial| FZ
     FZ -->|large| DB --> HO
     FZ -->|standard| HO
-    HO --> ADV -->|"next unblocked feature (until backlog complete)"| NX
+    HO --> LOOP ==> NF
 
-    classDef wf fill:#1f6feb,color:#fff,stroke:#1158c7;
-    class PR,RV,DB wf;
+    classDef js fill:#f7df1e,color:#000,stroke:#000,stroke-width:2px,font-weight:bold;
+    classDef gate fill:#ff8a65,color:#000,stroke:#d84315,stroke-width:2px;
+    class PR,RV,DB js;
+    class PF gate;
 ```
 
 ---
@@ -100,20 +108,22 @@ human promotes it.
 
 ```mermaid
 flowchart TD
-    NP["/new-product slug<br/>FORWARD backlog (built features excluded)<br/>architect INFERS the stack from the code"]
-    STK["STACK.md<br/>Baseline (current) = BINDING<br/>Forward direction = PROVISIONAL — does NOT bind"]
-    PR[["/plan-review<br/>workflows/plan-review.js<br/>interrogate plan + the provisional direction"]]
-    PF{"/plan-finalize ratify<br/>PROVISIONAL never auto-promoted"}
-    LOOP["DEVELOPING loop — same as greenfield<br/>features inherit the BINDING baseline<br/>/new-feature → /review (review.js) → /finalize → /handoff<br/>(large BUILD → deep-build.js) → flip + advance"]
-    PROMOTE(["adopt the forward stack (human):<br/>un-tag PROVISIONAL → re-/plan-review → ratify"])
+    NP["🏗️ /new-product<br/>forward backlog · architect INFERS the stack"]
+    STK["📦 STACK.md<br/>✅ baseline = BINDING<br/>🔶 forward = PROVISIONAL"]
+    PR(["⚙️ /plan-review<br/>plan-review.js — interrogate"])
+    PF{"🙋 ratify<br/>provisional never auto-promoted"}
+    LOOP(["🔁 DEVELOPING loop · same as greenfield<br/>new-feature → review.js → finalize → handoff"])
+    PROMOTE(["🔼 adopt forward stack (human)<br/>un-tag → re-plan-review → ratify"])
 
-    NP --> STK --> PR --> PF -->|DEVELOPING| LOOP
-    LOOP -.->|"optional, human-driven"| PROMOTE
-    PROMOTE -.-> PR
+    NP --> STK --> PR --> PF
+    PF ==>|DEVELOPING| LOOP
+    LOOP -.->|optional| PROMOTE -.-> PR
 
-    classDef wf fill:#1f6feb,color:#fff,stroke:#1158c7;
-    classDef bind fill:#196c2e,color:#fff,stroke:#0f5323;
-    class PR wf;
+    classDef js fill:#f7df1e,color:#000,stroke:#000,stroke-width:2px,font-weight:bold;
+    classDef gate fill:#ff8a65,color:#000,stroke:#d84315,stroke-width:2px;
+    classDef bind fill:#34d399,color:#000,stroke:#059669,stroke-width:2px;
+    class PR js;
+    class PF gate;
     class STK bind;
 ```
 
