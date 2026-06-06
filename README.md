@@ -154,11 +154,12 @@ state mutations produced by dynamic workflows (workflow scripts cannot touch the
 filesystem, so they hand a structured envelope to the scribe — which now targets
 either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field).
 
-**Three dynamic workflows** under `workflows/`: `review.js` (feature REVIEW),
-`plan-review.js` (product PLAN_REVIEW), `deep-build.js` (fan-out BUILD). Plus a
-deterministic shared resolver (`scripts/next-feature.sh`, with an 18-case test
-harness), six craft skills, seven gate-enforcing hooks, and the shared memory
-layer under `.sdd/`.
+**Four dynamic workflows** under `workflows/`: `review.js` (feature REVIEW),
+`plan-review.js` (product PLAN_REVIEW), `deep-build.js` (fan-out BUILD), and
+`diagnose.js` (bug-lane root-cause confirmation — the survival vote, inverted).
+Plus a deterministic shared resolver (`scripts/next-feature.sh`, with an 18-case
+test harness), seven craft skills, nine gate-enforcing hooks, and the shared
+memory layer under `.sdd/`.
 
 ---
 
@@ -382,7 +383,7 @@ advisory; it never changes the tier or build mode.
 
 ## Dynamic workflows
 
-Three phases run as Claude Code **dynamic workflows** (JS scripts under
+Four phases run as Claude Code **dynamic workflows** (JS scripts under
 `workflows/` executed by the Workflow runtime), not direct Task fan-outs:
 
 - **`/build-fleet:review` → `workflows/review.js`.** Fan-out reviewers
@@ -399,6 +400,13 @@ Three phases run as Claude Code **dynamic workflows** (JS scripts under
   Architect partitions the work across files; coders fan out in parallel; overlap
   detection prevents two coders racing on the same file; an in-workflow adversarial
   review catches integration gaps before BUILD declares complete.
+- **`/build-fleet:diagnose` → `workflows/diagnose.js`** (bug-lane DIAGNOSE). The
+  survival-vote engine **forked and inverted**: architect + coder try to *refute*
+  the recorded root-cause hypothesis, each citing the reproduction (`diagnosis.md`
+  §, a `tests/` file, or a line number). The hypothesis is **CONFIRMED iff no
+  substantive refutation survives** — the mirror image of `review.js`, where a
+  concern survives unless refuted. The scribe records the verdict and advances to
+  FIX; a **sev0** bug short-circuits the workflow entirely (post-hoc obligation).
 
 Because a workflow can't write files, it emits a structured envelope that the
 **scribe** applies. While a workflow runs, a `.workflow-in-flight` marker tells the
@@ -506,6 +514,11 @@ directory — never inside the plugin:
     PROGRESS.md          # orchestrator — phase, TIER, BUILD_MODE, handoff state
     ESCALATION.md        # only if review cycles exhausted
     .workflow-in-flight  # transient marker while a workflow runs
+  <bug-slug>/            # bug lane (v0.5) — a /triage'd bug, same dir shape
+    diagnosis.md         # the contract — STATUS: REPORTED|REPRODUCING|DIAGNOSED|CONFIRMED|FIXED
+    PROGRESS.md          # LANE: bug · SEV · PHASE: REPORT…HANDOFF · CYCLE/FIX_CYCLE
+    REVIEW.md            # append-only diagnose-workflow log
+    DECISIONS.md         # architect — ADRs (shared format)
 ```
 
 `<feature>/PROGRESS.md` carries the routing fields:
@@ -543,6 +556,8 @@ plugin never touches your `.sdd/` state.
 | `restrict-reviewer-writes` | Confines writes to `.sdd/<active>/` during REVIEW / CHANGE_REVIEW. |
 | `validate-spec-status` | Rejects a `spec.md` missing its STATUS line or required sections. |
 | `validate-backlog-status` | Rejects a `_product/backlog.md` missing its `PRODUCT:` header, STATUS line, or phase headings. |
+| `validate-diagnosis-status` | *(v0.5)* Rejects a `diagnosis.md` missing its STATUS line or required sections (the bug lane's `validate-spec-status`). |
+| `require-reproducing-test` | *(v0.5)* Blocks a bug's fix source until `diagnosis.md` is CONFIRMED **and** a reproducing test exists under `tests/` — holds even for sev0. |
 | `check-review-written` | Rejects a reviewer that stops without logging to `REVIEW.md`. |
 | `stop-tests` | During BUILD / CHANGE_REVIEW / HANDOFF, blocks stop on a failing suite (tolerates "no tests collected" pre-suite). |
 | `reap-stale-workflow-markers` | Removes orphaned `.workflow-in-flight` markers older than an hour. |
@@ -562,7 +577,8 @@ inheritance, the DEVELOPING loop, escalation policy, file ownership, and the
 `PROGRESS.md` schemas — is encoded in the **`sdd-protocol`** skill, loaded
 automatically by the commands and agents. Read it at
 `skills/sdd-protocol/SKILL.md`. Supporting craft skills: `sdd-spec-template`,
-`review-rubric`, `adr`, `test-plan`, and `skill-routing`.
+`sdd-diagnosis-template` (the bug lane's `diagnosis.md` contract), `review-rubric`,
+`adr`, `test-plan`, and `skill-routing`.
 
 ---
 
