@@ -96,6 +96,26 @@ not mutate anything.
    - `HANDOFF` → devops shipping; no command needed.
    - `ESCALATED` → human-in-the-loop required; no command can advance.
 
+## Machine-readable snapshot (orchestrators / polling)
+
+For a non-interactive caller (an external orchestrator polling project state), the
+human report above is the wrong shape and too costly — it spawns a model. Use the
+deterministic, LLM-free resolver instead:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/status-snapshot.sh"
+```
+
+It reads the same `.sdd/` state this command narrates and emits **exactly one JSON
+object** (`schema: build-fleet/status-snapshot@1`) on stdout — the product tier
+(vision/stack one-liners, backlog counts + per-feature rows, next unblocked feature)
+and the active item (feature or bug lane: phase, status, cycles, escalation).
+Read-only; run from the repo root. `product` is `null` with no product tier;
+`active` is `null` with nothing in flight. Backlog resolution + counts reuse
+`scripts/next-feature.sh` (one source of truth). **build-fleet ships no publishing
+path** — where (or whether) the snapshot goes is the orchestrator's concern
+(orchestrator-agnostic).
+
 ## Hard rules
 
 - This command **never** writes any file. Read-only. (It may invoke the read-only

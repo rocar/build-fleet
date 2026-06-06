@@ -65,7 +65,40 @@ Output gates M1–M4.
 
 ---
 
-## v0.3 — orchestrator-mediated human intervention (forecast)
+## v0.3 — orchestrator integration
+
+> Split in two. **v0.3a (status export)** ships the lightweight, one-directional
+> observability slice — the plugin emits a machine-readable status snapshot an
+> external orchestrator can poll. **v0.3b (human intervention)** is the original
+> bidirectional forecast below, **deferred** (depends on platform pause/resume
+> maturity; v0.4/v0.5 delivered first). v0.3a is the foundation v0.3b builds on —
+> an orchestrator can't mediate review of work it can't see.
+
+### v0.3a — pollable status snapshot (in build, 2026-06-06)
+
+**Half A — plugin side (shipped, orchestrator-agnostic).** `scripts/status-snapshot.sh`:
+a deterministic, LLM-free emitter of one JSON object (`schema:
+build-fleet/status-snapshot@1`) describing a project's `.sdd/` state — product tier
+(vision/stack one-liners, backlog counts + per-feature rows, next unblocked feature)
+and the active item (feature or bug lane: phase, status, cycles, escalation). Backlog
+**resolution + counts reuse `next-feature.sh`** (the v0.4 resolver — single source of
+truth); the snapshot only adds the per-feature row listing, using the same matching
+rules so the two never disagree. 48-case harness (`scripts/status-snapshot.test.sh`);
+`/build-fleet:status` documents it as the machine-readable path. **The plugin ships no
+publish path** — where the snapshot goes is the caller's concern.
+
+**Half B — adapter (outside the plugin, e.g. Hermes; operator-gated).** A stateful
+poller diffs successive snapshots into durable milestone events. Per project it keeps
+**one** knowledge-base page (stable slug, overwrite-in-place, write-only-if-changed)
+for current state, and appends a **timeline** on detected transitions —
+`started` / `finalized spec` / `shipped` / `ESCALATED` (feature) and `bug confirmed` /
+`fixed` (bug). First run sets a baseline (no event flood); state saved after the
+timeline writes (at-least-once, deduped by date+text). The snapshot is the
+current-state spine; the derived timeline is what plays to a synthesis/staleness-aware
+KB's strengths. Activation (poll cron + KB namespace) lives entirely in the
+orchestrator's config — never in the plugin.
+
+### v0.3b — orchestrator-mediated human intervention (forecast, deferred)
 
 ### Direction
 
