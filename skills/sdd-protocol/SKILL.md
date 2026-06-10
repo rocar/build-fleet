@@ -323,6 +323,17 @@ the scope from a bare slug. M3.3 adds an **indented 1–3 line intent** under ea
   line) all ignore them — the flip preserves the intent untouched.
 - **Backward-compatible.** A legacy slug-only row (no intent) works exactly as before; the
   PO drafts from the user's description.
+- **Quality floor (canonical definition — the commands defer here).** An intent is
+  **usable** only if it carries at least **2 of its 3 components**: *what the feature is*,
+  *its scope boundary*, *its non-goals/deferrals*. A missing intent, or a bare
+  slug-restatement with no boundary ("the API client"), is **too thin** — it cannot seed a
+  spec, and `/build-fleet:new-feature` STOP-and-asks instead. The single executable
+  encoding of both the block grammar and this floor is `scripts/intent-block.sh`
+  (`INTENT_VERDICT: usable|too-thin`), called by both `/build-fleet:new-feature` and
+  `/build-fleet:next-feature` so they can never disagree.
+  <!-- T7 NOTE (audit §3.26): when restructuring this skill, keep this paragraph as the
+       floor's single prose home — the command files deliberately carry only a short
+       summary + a pointer here. -->
 
 ## DEVELOPING loop (v0.4 M3.2)
 
@@ -394,7 +405,7 @@ them **if available**. Flow:
   `.sdd/<feature>/SKILL_MANIFEST.md`. An empty/null manifest writes no file — absence
   means "no routing," and BUILD runs exactly as plain v0.2 (additive/backward-compatible).
 - **coder / qa** read `SKILL_MANIFEST.md` at BUILD and load+apply the skills listed
-  for their role; the orchestrator's BUILD delegation (`/build-fleet:finalize`, and the
+  for their role; the orchestrator's BUILD delegation (`/build-fleet:build`, and the
   `deep-build` workflow's coder prompt) also points them at it. Skills load by
   name-mention in the agent's reasoning, not frontmatter — so it works in every
   execution mode (incl. agent-team mode, which ignores per-agent frontmatter skills).
@@ -550,6 +561,10 @@ Three gate commands carry a confirmed bug to a shipped fix, completing the lane:
     records a **post-hoc obligation** (`BUILD_FLEET_POSTHOC_DIAGNOSIS_DUE` + a `diagnosis.md`
     note) and **never** skips the reproducing-test gate. `sev1`/`sev2` get no fast-path.
 
+<!-- T7 NOTE (audit §3.28): update this counterfactual description to match the
+     corrected verify.md/qa.md procedure — mandatory `git stash create` snapshot SHA
+     recorded in IMPL_NOTES.md before any revert; restore verified against the
+     recorded ref before evaluating; bare `git checkout` of the fix forbidden. -->
 - **`/build-fleet:verify` (the VERIFY gate — the bug-lane CHANGE_REVIEW).** Reuses the
   **counterfactual verbatim**: qa reverts the coder's change and confirms each reproducing test
   FAILS (a test that passes regardless of the fix is decorative — a `[blocker]`); architect
@@ -577,7 +592,7 @@ PHASE: SPEC | REVIEW | FINALIZE | BUILD | CHANGE_REVIEW | HANDOFF | ESCALATED
 CYCLE: <int>          # spec-review cycles consumed (one increment per /build-fleet:review workflow run; cross-examination rounds inside a run do not bump CYCLE)
 CHANGE_CYCLE: <int>   # change-review cycles consumed (one increment per /build-fleet:handoff invocation; still command-driven in v0.2 until M3 converts CHANGE_REVIEW to a workflow)
 TIER: trivial | standard | large    # v0.2 M4 — set by the classifier subagent at /build-fleet:new-feature time. `trivial` opts into the REVIEW-skipping fast-path through finalize. `pending` until classifier runs.
-BUILD_MODE: standard | deep-build   # v0.2 M3 — selects /build-fleet:finalize's BUILD orchestration. `standard` = sequential qa→coder via Task tool. `deep-build` = dispatch workflows/deep-build.js. M4's classifier sets this to `deep-build` for tier=large. `pending` until classifier runs.
+BUILD_MODE: standard | deep-build   # v0.2 M3 — selects /build-fleet:build's BUILD orchestration. `standard` = sequential qa→coder via Task tool. `deep-build` = dispatch workflows/deep-build.js. M4's classifier sets this to `deep-build` for tier=large. `pending` until classifier runs.
 UPDATED: <iso8601>
 ```
 
@@ -644,8 +659,8 @@ Exit: a non-empty spec with all required sections exists.
 
 **M4 trivial fast-path.** Features classified `trivial` skip the REVIEW phase
 entirely. The user invokes `/build-fleet:finalize` directly after PO drafts the
-skeleton spec; finalize recognizes `TIER=trivial` and proceeds to BUILD without
-requiring a completed review cycle. This saves the review tokens for changes
+skeleton spec; finalize recognizes `TIER=trivial` and flips the spec without
+requiring a completed review cycle (`/build-fleet:build` then runs BUILD). This saves the review tokens for changes
 genuinely small enough that the gate cost exceeds the gate value (typo fixes,
 dependency bumps, single-line bug fixes). See `agents/classifier.md` for the
 criteria and disqualifiers; the classifier errs toward `standard` because
@@ -691,12 +706,13 @@ Verdict semantics:
 The v0.1 cycle-3 agent-team fallback is retired entirely — workflow cross-examination
 replaces it.
 
-**FINALIZE.** `/finalize` runs the finalize gate. Permitted only when the most recent
-review cycle is fully approved with no open blockers. On success: set STATUS=FINALIZED,
-PHASE=BUILD. The source-write block lifts at this point and not before.
+**FINALIZE.** `/build-fleet:finalize` runs the finalize gate — the gate ONLY (it is
+idempotent; the BUILD orchestration is `/build-fleet:build`'s). Permitted only when
+the most recent review cycle is fully approved with no open blockers. On success: set
+STATUS=FINALIZED, PHASE=BUILD. The source-write block lifts at this point and not before.
 
 **BUILD.** Sequential, tests-first (v0.2 M2 ordering — replaces v0.1 parallel BUILD).
-`/build-fleet:finalize`, on a successful gate, dispatches qa first then coder:
+`/build-fleet:build` (run after the finalize gate passes) dispatches qa first then coder:
 
 1. **qa drafts TEST_PLAN.md + writes failing tests.** Per the `test-plan` skill, qa
    builds the coverage matrix from acceptance.md and implements the test suite under
@@ -722,11 +738,11 @@ possible via direct PROGRESS.md edit or by invoking `/build-fleet:deep-build`
 explicitly:
 
 - **`BUILD_MODE: standard`** — the M2 sequential qa-then-coder pattern described
-  above. `/build-fleet:finalize` orchestrates it via the Task tool. v0.2 M4's
+  above. `/build-fleet:build` orchestrates it via the Task tool. v0.2 M4's
   classifier sets this for `tier=trivial` and `tier=standard`; manual override
   via direct PROGRESS.md edit is supported.
 - **`BUILD_MODE: deep-build`** — for multi-file / multi-package features.
-  `/build-fleet:finalize` runs qa first (same as standard), then routes the
+  `/build-fleet:build` runs qa first (same as standard), then routes the
   implementation phase to the `workflows/deep-build.js` workflow. The workflow's
   architect subagent designs a file partition; N coders (default 3, max 8) fan out
   in parallel against M2's pre-existing failing tests; an adversarial review
@@ -736,7 +752,7 @@ explicitly:
 
   Until M4's classifier ships, `BUILD_MODE` is set manually (either by editing
   PROGRESS.md or by invoking `/build-fleet:deep-build [N]` directly, bypassing
-  finalize's routing logic).
+  `/build-fleet:build`'s routing logic).
 
   Verdicts:
   - `clean` → next is `/build-fleet:handoff`.

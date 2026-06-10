@@ -1,6 +1,5 @@
 ---
 description: Run a product-tier PLAN_REVIEW on .sdd/_product/ — interrogate the plan (vision, backlog, stack) from each role's lens, consolidate findings, apply via scribe. No survival vote; the human ratifies at /build-fleet:plan-finalize.
-argument-hint: ""
 allowed-tools: Read, Write, Edit, Workflow
 ---
 
@@ -21,22 +20,25 @@ is ratified at `/build-fleet:plan-finalize`, not auto-decided here.
 ## Workflow runtime requirement
 
 The `Workflow` tool must be available (Claude Code v2.1.154+, workflows enabled,
-`Workflow` in `allowedTools`). If absent, refuse with exit code 3 and tell the
-user how to enable workflows — there is no v0.1-style fallback.
+`Workflow` in `allowedTools`). If absent, refuse with the
+`workflow-runtime-unavailable` signal and tell the user how to enable
+workflows — there is no v0.1-style fallback.
 
 ## What you do
 
 1. **Verify the workflow runtime.** If the `Workflow` tool is unavailable, refuse:
-   > `BUILD_FLEET_REFUSE: workflow runtime unavailable. Plan-review requires Claude Code v2.1.154+ with workflows enabled. Exit 3.`
+   > `BUILD_FLEET_REFUSE: {"command":"plan-review","code":3,"reason":"workflow-runtime-unavailable"}`
+   then tell the user plan-review requires Claude Code v2.1.154+ with workflows enabled.
 
 2. **Resolve the product.** Read `.sdd/PRODUCT` (fall back to the `PRODUCT:` field of
    `.sdd/_product/PROGRESS.md`). If there is no product tier, refuse:
-   > `BUILD_FLEET_REFUSE: no product tier. Run /build-fleet:new-product first. Exit 2.`
+   > `BUILD_FLEET_REFUSE: {"command":"plan-review","code":2,"reason":"no-product","detail":"run /build-fleet:new-product first"}`
 
 3. **Refuse while a feature is mid-review (hook-confinement guard).** Read `.sdd/ACTIVE`;
    if non-empty, read `.sdd/<active>/PROGRESS.md` `PHASE`. If it is `REVIEW` or
    `CHANGE_REVIEW`, refuse:
-   > `BUILD_FLEET_REFUSE: feature '<active>' is in <PHASE>. The restrict-reviewer-writes hook confines all writes to .sdd/<active>/ during feature review, so the product scribe cannot write .sdd/_product/. Finish or escalate the feature review first. Exit 2.`
+   > `BUILD_FLEET_REFUSE: {"command":"plan-review","code":2,"reason":"feature-mid-review","feature":"<active>","phase":"<PHASE>"}`
+   then explain: the restrict-reviewer-writes hook confines all writes to `.sdd/<active>/` during feature review, so the product scribe cannot write `.sdd/_product/`. Finish or escalate the feature review first.
 
    The interrogator roles (`product-owner`, `architect`, `qa`) also overlap the
    feature-reviewer set, so a mid-review feature would mis-fire `check-review-written`
@@ -54,10 +56,11 @@ user how to enable workflows — there is no v0.1-style fallback.
 5. **Check phase.** Read the (now-normalized) `PHASE`. It must be `PLAN` or
    `PLAN_REVIEW`. If `DEVELOPING`, refuse — the plan is already ratified; re-planning
    after ratification is M3.2. If `ESCALATED`, refuse and point at `_product/ESCALATION.md`.
-   Exit 2, naming the actual phase.
+   Refuse naming the actual phase (`{"command":"plan-review","code":2,"reason":"wrong-phase","phase":"<PHASE>"}`).
 
-6. **Check for prior escalation.** If `.sdd/_product/ESCALATION.md` exists, refuse —
-   a human wrote it to halt the plan. Tell the user to resolve and remove it. Exit 2.
+6. **Check for prior escalation.** If `.sdd/_product/ESCALATION.md` exists, refuse
+   (`{"command":"plan-review","code":2,"reason":"escalation-present"}`) —
+   a human wrote it to halt the plan. Tell the user to resolve and remove it.
 
 7. **Pick the new cycle number.** New cycle = `CYCLE + 1`. There is **no cycle-budget
    escalation** here (plan-review never auto-escalates); the counter is the audit
@@ -117,15 +120,6 @@ user how to enable workflows — there is no v0.1-style fallback.
       must report the run as failed with its `scribe_error` — never treat the
       interrogation as recorded or proceed to `/build-fleet:plan-finalize` on its basis.
 
-## Exit codes
-
-| Exit | Meaning |
-|---|---|
-| 0 | Workflow launched; runId emitted |
-| 1 | Workflow tool returned an error field — surface it |
-| 2 | Pre-dispatch validation failed (no product, feature mid-review, wrong phase, escalation present) |
-| 3 | Workflow runtime not available |
-
 ## What this command does NOT do
 
 - Does not bump `PHASE` or `CYCLE` beyond the legacy-tolerance normalization in step 4.
@@ -135,7 +129,14 @@ user how to enable workflows — there is no v0.1-style fallback.
   human halts a plan.
 - Does not vote, refute, or auto-pass. Ratification is `/build-fleet:plan-finalize`.
 
-## Refusal contract
+## Refusal contract (machine-readable)
 
-All refusals begin with `BUILD_FLEET_REFUSE: ` for orchestrator consumption. Exit
-codes as above.
+A slash command runs inside the model session and **cannot set a process exit
+code** — the session exits 0 either way. The `BUILD_FLEET_*` signal lines on
+stdout are the **sole machine contract**. Every refusal emits exactly one
+`BUILD_FLEET_REFUSE:` line whose JSON carries `"code"` (an integer preserving
+the legacy exit-code semantics: `2` = pre-dispatch validation refused, `3` =
+workflow runtime unavailable, `1` = workflow tool launch error) and `"reason"`
+(a kebab-case slug). Orchestrators dispatch on the signal line — and on the
+`BUILD_FLEET_WORKFLOW_LAUNCHED` line for success — never on the process exit
+status.

@@ -1,7 +1,12 @@
 ---
 description: Run CHANGE_REVIEW on the active feature (architect + PO + qa review the diff); on approval delegate to devops
-argument-hint: ""
+allowed-tools: Read, Write, Edit, Bash, Task
 ---
+
+<!-- Deliberately model-invocable (audit §3.22 evaluated): handoff is dispatched
+     by the orchestrator inside the DEVELOPING loop, and its devops leg only
+     advances on an explicit BUILD_FLEET_DEVOPS_OK signal — the human gates live
+     at /build-fleet:finalize and /build-fleet:plan-finalize, not here. -->
 
 # /build-fleet:handoff
 
@@ -15,7 +20,8 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 
 2. **Check phase.** Read PROGRESS.md. PHASE must be `BUILD` or
    `CHANGE_REVIEW`. If it's anything else (especially `SPEC` or `REVIEW`),
-   refuse and tell the user to run `/build-fleet:finalize` first.
+   refuse and tell the user to run `/build-fleet:finalize` then
+   `/build-fleet:build` first.
 
 3. **Check ESCALATION.md.** If it exists, refuse.
 

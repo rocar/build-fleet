@@ -1,8 +1,12 @@
 ---
 description: HANDOFF of the bug lane — devops ships the verified fix (hotfix urgency for sev0); on a successful ship, clears .sdd/ACTIVE so the next item can start
-argument-hint: ""
-allowed-tools: Read, Write, Edit, Bash, Task
+allowed-tools: Read, Write, Edit, Task, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
 ---
+
+<!-- Deliberately model-invocable (audit §3.22 evaluated): ship-fix is the
+     bug-lane leg the orchestrator dispatches after /build-fleet:verify, and it
+     only advances on an explicit BUILD_FLEET_DEVOPS_OK signal — the human
+     decision points in this lane are the gates upstream of it. -->
 
 # /build-fleet:ship-fix
 
@@ -17,10 +21,12 @@ Rulebook: the `sdd-protocol` skill (bug-lane sections); `agents/devops.md` for t
 1. **Resolve the active bug.** `.sdd/ACTIVE` non-empty; PROGRESS `LANE == bug`. Else refuse.
 
 2. **Check phase + status.** `PHASE` must be `HANDOFF`; `diagnosis.md` STATUS must be `FIXED`.
-   `ESCALATION.md` absent. Otherwise refuse and name the actual state. Exit 2.
+   `ESCALATION.md` absent. Otherwise refuse and name the actual state
+   (`BUILD_FLEET_REFUSE: {"command":"ship-fix","code":2,"reason":"<kebab-slug>"}` — the stdout
+   signal is the sole machine contract; a slash command cannot set a process exit code).
 
 3. **Pre-flight.** Tests exist and the full suite passes. If not → refuse (re-run
-   `/build-fleet:verify`). Exit 2.
+   `/build-fleet:verify`).
 
 4. **Delegate to devops.** Use the Task tool to invoke `build-fleet:devops`:
 

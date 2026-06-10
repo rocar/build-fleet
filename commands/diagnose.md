@@ -1,6 +1,5 @@
 ---
 description: DIAGNOSE phase of the bug lane — gate the recorded root-cause hypothesis, then dispatch the diagnose.js confirmation workflow (inverted survival vote; architect + coder try to refute the hypothesis citing the reproduction)
-argument-hint: ""
 allowed-tools: Read, Write, Edit, Workflow
 ---
 
@@ -20,29 +19,32 @@ artifact.
 
 The `Workflow` tool must be available (Claude Code v2.1.154+, workflows enabled; in
 `allowedTools` for headless callers). If absent, refuse:
-> `BUILD_FLEET_REFUSE: workflow runtime unavailable. The bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ with workflows enabled. Exit 3.`
+> `BUILD_FLEET_REFUSE: {"command":"diagnose","code":3,"reason":"workflow-runtime-unavailable"}`
+then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ with workflows enabled.
 
 ## What you do
 
-1. **Verify the workflow runtime.** Absent → refuse, exit 3 (as above).
+1. **Verify the workflow runtime.** Absent → refuse (as above).
 
-2. **Resolve the active bug.** Read `.sdd/ACTIVE`. Empty → `BUILD_FLEET_REFUSE: no active item`, exit 2.
-   Read `.sdd/<slug>/PROGRESS.md`; if `LANE` ≠ `bug` → refuse (`<slug> is a forward feature — use /build-fleet:review`), exit 2.
+2. **Resolve the active bug.** Read `.sdd/ACTIVE`. Empty → `BUILD_FLEET_REFUSE: {"command":"diagnose","code":2,"reason":"no-active-item"}`.
+   Read `.sdd/<slug>/PROGRESS.md`; if `LANE` ≠ `bug` → refuse (`{"command":"diagnose","code":2,"reason":"not-a-bug","detail":"<slug> is a forward feature — use /build-fleet:review"}`).
 
 3. **Check phase.** `PHASE` must be `REPRODUCE` or `DIAGNOSE` (first run advances from
    REPRODUCE; a re-run after a `refuted` verdict is already at DIAGNOSE). Otherwise refuse and
-   name the actual phase, exit 2.
+   name the actual phase (`{"command":"diagnose","code":2,"reason":"wrong-phase","phase":"<PHASE>"}`).
 
-4. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists → refuse; tell the
-   user to read it and either revise the hypothesis (clear it) or abandon the bug. Exit 2.
+4. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists → refuse
+   (`{"command":"diagnose","code":2,"reason":"escalation-present"}`); tell the user to read it
+   and either resolve it with `/build-fleet:resolve-escalation <decision>` (revising the
+   hypothesis) or abandon the bug with `/build-fleet:park <reason>`.
 
 5. **Gate on a recorded hypothesis (AC-8).** Read `.sdd/<slug>/diagnosis.md`. The
    `## Root-cause hypothesis`, `## Blast radius`, and `## Fix strategy` sections must each be
    **non-empty** — i.e. real content, not the `_(empty until DIAGNOSE)_` placeholder. If the
    **hypothesis** section is still empty/placeholder, refuse with a one-line reason naming the
    missing section:
-   > `BUILD_FLEET_REFUSE: diagnosis.md § Root-cause hypothesis is empty — record a hypothesis (and blast radius + fix strategy) before diagnosing.`
-   Exit 2. (Whoever holds the reproduction writes the hypothesis into `diagnosis.md` first.)
+   > `BUILD_FLEET_REFUSE: {"command":"diagnose","code":2,"reason":"hypothesis-empty","detail":"record a root-cause hypothesis (and blast radius + fix strategy) in diagnosis.md before diagnosing"}`
+   (Whoever holds the reproduction writes the hypothesis into `diagnosis.md` first.)
 
 6. **Advance to DIAGNOSED.** If `diagnosis.md` STATUS is `REPRODUCING`, flip it to `DIAGNOSED`
    (keep all four `##` sections). Edit `.sdd/<slug>/PROGRESS.md` `PHASE: → DIAGNOSE`, refresh
@@ -62,8 +64,9 @@ The `Workflow` tool must be available (Claude Code v2.1.154+, workflows enabled;
 
 7. **Check the cycle budget.** Read `CYCLE`. If `CYCLE >= 3` and the most recent diagnose cycle
    in `REVIEW.md` still records a surviving refutation, refuse — the next run would escalate;
-   let the workflow own that write only on a fresh attempt. Exit 2:
-   > `BUILD_FLEET_REFUSE: cycle budget exhausted (CYCLE=<n>); the next /build-fleet:diagnose will escalate. Revise the hypothesis in diagnosis.md or accept the escalation.`
+   let the workflow own that write only on a fresh attempt:
+   > `BUILD_FLEET_REFUSE: {"command":"diagnose","code":2,"reason":"cycle-budget-exhausted","cycle":<n>}`
+   then tell the user: revise the hypothesis in diagnosis.md or accept the escalation.
 
 8. **Pick the new cycle.** `new_cycle = CYCLE + 1`.
 
@@ -127,11 +130,14 @@ synchronous gate command rather than inside the fire-and-forget workflow.
 - Does not append to `REVIEW.md` or write `ESCALATION.md` — the workflow's scribe does, via the envelope.
 - Does not delete `.workflow-in-flight` on success — the scribe does, as the final phase.
 
-## Exit codes
+## Refusal contract (machine-readable)
 
-| Exit | Meaning |
-|---|---|
-| 0 | Workflow launched; runId emitted |
-| 1 | Workflow tool returned an error (e.g. script syntax check failed) — surface it |
-| 2 | Pre-dispatch validation failed (no active bug, wrong phase/lane, no hypothesis, escalation present, budget exhausted) |
-| 3 | Workflow runtime unavailable |
+A slash command runs inside the model session and **cannot set a process exit
+code** — the session exits 0 either way. The `BUILD_FLEET_*` signal lines on
+stdout are the **sole machine contract**. Every refusal emits exactly one
+`BUILD_FLEET_REFUSE:` line whose JSON carries `"code"` (an integer preserving
+the legacy exit-code semantics: `2` = pre-dispatch validation refused, `3` =
+workflow runtime unavailable, `1` = workflow tool launch error) and `"reason"`
+(a kebab-case slug). Orchestrators dispatch on the signal line — and on the
+`BUILD_FLEET_WORKFLOW_LAUNCHED` line for success — never on the process exit
+status.

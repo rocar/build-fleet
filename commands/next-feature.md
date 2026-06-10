@@ -1,7 +1,6 @@
 ---
 description: Resolve the next unblocked backlog feature and gate it for start — the deterministic next (first PENDING in the lowest phase whose depends-on are all DONE), pre-checked for readiness, emitted as a dispatch signal. A convenience over reading /status then typing the slug; adds NO prioritization policy. (v0.4 M4, optional)
-argument-hint: ""
-allowed-tools: Read, Bash
+allowed-tools: Read, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/next-feature.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*)
 ---
 
 # /build-fleet:next-feature
@@ -31,9 +30,8 @@ step 5).
    the protocol allows one feature at a time; finish it (through `/build-fleet:handoff`,
    which clears `.sdd/ACTIVE` on ship) before advancing:
    ```
-   BUILD_FLEET_NEXT_FEATURE_REFUSE: {"reason":"feature-in-flight","active":"<slug>"}
+   BUILD_FLEET_NEXT_FEATURE_REFUSE: {"code":2,"reason":"feature-in-flight","active":"<slug>"}
    ```
-   Exit 2.
 
 2. **Resolve the next feature.** Run the shared resolver (the single source of truth; do
    not re-derive in prose):
@@ -43,36 +41,38 @@ step 5).
    Branch on its `status`:
    - `no-backlog` → no product tier exists; there is nothing to advance. Tell the user to
      use `/build-fleet:new-feature <slug>` directly. Emit
-     `BUILD_FLEET_NEXT_FEATURE: {"status":"no-backlog"}`. Exit 0 (informational no-op).
+     `BUILD_FLEET_NEXT_FEATURE: {"status":"no-backlog"}` (informational no-op).
    - `complete` → the product backlog is fully shipped (`done/total`). Nothing to advance;
      congratulate; note that appending features re-opens the loop. Emit
-     `BUILD_FLEET_NEXT_FEATURE: {"status":"complete","done":<n>,"total":<n>}`. Exit 0.
+     `BUILD_FLEET_NEXT_FEATURE: {"status":"complete","done":<n>,"total":<n>}`.
    - `deadlocked` → `<pending>` features remain but none are unblocked. Refuse and warn the
      user to check `depends-on` / cycles in `backlog.md`. Emit
-     `BUILD_FLEET_NEXT_FEATURE_REFUSE: {"reason":"deadlocked","pending":<k>}`. Exit 2.
+     `BUILD_FLEET_NEXT_FEATURE_REFUSE: {"code":2,"reason":"deadlocked","pending":<k>}`.
    - `empty` → the backlog has no parseable feature rows. Refuse; tell the user to check its
-     format. Emit `BUILD_FLEET_NEXT_FEATURE_REFUSE: {"reason":"empty-backlog"}`. Exit 2.
+     format. Emit `BUILD_FLEET_NEXT_FEATURE_REFUSE: {"code":2,"reason":"empty-backlog"}`.
    - `next` → continue to step 3 with the resolved `slug` + `phase`.
 
-3. **Pre-check the intent (headless-safe gate).** Read the resolved slug's **intent block**
-   from `.sdd/_product/backlog.md` — and read it **exactly as `/build-fleet:new-feature`
-   step 5 does**, so the two reach the same verdict: the run of indented lines (NOT starting
-   with `- [` or `##`) immediately under the `- [ ] <slug>` row, up to the next feature row,
-   the next `## Phase` heading, or a blank line, whichever comes first (1–3 lines). Apply the
-   **M3.3 quality floor**: the intent is *usable* only if it states *what the feature is + its
-   scope boundary*. A missing intent, or a thin slug-restatement with no boundary, is **not**
-   usable. *(M4 and new-feature MUST use the identical block definition + floor — a mismatch
-   would either refuse a feature new-feature would start, or advance one new-feature then
-   STOP-and-asks on, defeating this gate.)*
-
-   If the intent is not usable, **do NOT advance** — `/build-fleet:new-feature` would
-   STOP-and-ask for a description, which deadlocks an unattended (headless) run. Emit:
+3. **Pre-check the intent (headless-safe gate).** Run the shared intent-block extractor —
+   the SAME script `/build-fleet:new-feature` step 5 uses, so the two always reach the same
+   verdict (one grammar, one quality floor, one implementation):
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh" --slug "<slug>" .sdd/_product/backlog.md
    ```
-   BUILD_FLEET_NEXT_FEATURE_NEEDS_DESC: {"slug":"<slug>","reason":"intent-too-thin"}
+   It prints the canonical intent block (the 1–3 indented lines under the feature row) and a
+   final `INTENT_VERDICT: usable|too-thin` line. The quality floor it encodes: an intent is
+   *usable* only with at least 2 of its 3 components (what / scope boundary / non-goals); a
+   missing intent or a thin slug-restatement is `too-thin`. (The canonical prose definition
+   of the floor lives in the `sdd-protocol` skill.)
+
+   If the verdict is `too-thin` (or the script errors), **do NOT advance** —
+   `/build-fleet:new-feature` would STOP-and-ask for a description, which deadlocks an
+   unattended (headless) run. Emit:
+   ```
+   BUILD_FLEET_NEXT_FEATURE_NEEDS_DESC: {"code":2,"slug":"<slug>","reason":"intent-too-thin"}
    ```
    Tell the user: the next feature's backlog intent is too thin to start unattended — run
    `/build-fleet:new-feature <slug>` interactively and provide a description (new-feature
-   will prompt). Exit 2. *(This honors new-feature's own STOP-and-ask floor up front, instead
+   will prompt). *(This honors new-feature's own STOP-and-ask floor up front, instead
    of discovering it mid-dispatch.)*
 
 4. **Emit the dispatch signal and hand off.** The next feature is unblocked, ready, and has
@@ -87,8 +87,6 @@ step 5).
    - **Headless:** the upstream caller reads `BUILD_FLEET_NEXT_FEATURE` and dispatches
      `/build-fleet:new-feature <slug>` itself.
 
-   Exit 0.
-
 ## Hard rules
 
 - **No prioritization policy.** Resolver only; never reorder/skip/judge importance.
@@ -99,9 +97,13 @@ step 5).
 - **Headless contract.** Every branch emits exactly one `BUILD_FLEET_NEXT_FEATURE*:` line
   before any prose.
 
-## Exit codes
+## Refusal contract (machine-readable)
 
-| Exit | Meaning |
-|---|---|
-| 0 | Resolved + signalled `next` (dispatcher starts it); OR informational no-op (`complete` / `no-backlog`) |
-| 2 | Refused — feature in flight, `deadlocked`/`empty` backlog, or intent too thin to start unattended |
+A slash command runs inside the model session and **cannot set a process exit
+code** — the session exits 0 either way. The `BUILD_FLEET_NEXT_FEATURE*` signal
+lines on stdout are the **sole machine contract**: `BUILD_FLEET_NEXT_FEATURE`
+(status `next` / `complete` / `no-backlog`) = resolved or informational no-op;
+`_REFUSE` / `_NEEDS_DESC` = refused, the JSON carrying `"code"` (an integer
+preserving the legacy exit-code semantics: `2` = refused) and `"reason"` (a
+kebab-case slug). Orchestrators dispatch on the signal line, never on the
+process exit status.

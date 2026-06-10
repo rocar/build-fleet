@@ -1,12 +1,24 @@
 ---
 description: Print the current state of the active build-fleet feature — phase, cycles, open concerns, escalation
-argument-hint: ""
+model: haiku
+allowed-tools: Read, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/status-snapshot.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/next-feature.sh":*)
 ---
 
 # /build-fleet:status
 
 You are the **orchestrator**. Read-only command. You report state; you do
 not mutate anything.
+
+## Pre-loaded state (gathered at prompt-build time)
+
+The deterministic snapshot below was injected before you started — narrate
+from it; only Read the underlying `.sdd/` files when you need detail it does
+not carry (e.g. verbatim `[blocker]` text from REVIEW.md, ESCALATION.md
+contents). If the snapshot line is empty or an error (e.g. `jq` missing),
+fall back to reading the files directly per the steps below.
+
+Snapshot (`build-fleet/status-snapshot@1`):
+!`bash "${CLAUDE_PLUGIN_ROOT}/scripts/status-snapshot.sh" 2>&1 || true`
 
 ## What you do
 
@@ -31,7 +43,8 @@ not mutate anything.
      `REPORT`→`/build-fleet:reproduce`; `REPRODUCE`→record a hypothesis, then `/build-fleet:diagnose`;
      `DIAGNOSE`→`/build-fleet:diagnose` again (if refuted) or `/build-fleet:fix` (if confirmed —
      PHASE will read `FIX`); `FIX`→`/build-fleet:fix` then `/build-fleet:verify`;
-     `VERIFY`→`/build-fleet:verify`; `HANDOFF`→`/build-fleet:ship-fix`; `ESCALATED`→human only.
+     `VERIFY`→`/build-fleet:verify`; `HANDOFF`→`/build-fleet:ship-fix`;
+     `ESCALATED`→human only: `/build-fleet:resolve-escalation <decision>` (or `/build-fleet:park <reason>` to abandon).
    Then **stop** — do not run the forward-feature steps below.
 
 2. **Read `.sdd/<active>/PROGRESS.md`.** Print:
@@ -56,8 +69,11 @@ not mutate anything.
 5. **Check for `.sdd/<active>/ESCALATION.md`.** If it exists, print a
    prominent banner: the feature is escalated. Then print the file's
    contents — phase, cycle count, unresolved blockers, conflicting
-   positions. Skip the "next command" recommendation; only a human
-   unblocks an escalation.
+   positions. Skip the "next command" recommendation; only a human unblocks
+   an escalation — by running **`/build-fleet:resolve-escalation <decision>`**
+   (archives the escalation into REVIEW.md, resets the exhausted cycle
+   counter, restores the phase), or **`/build-fleet:park <reason>`** to shelve
+   the item entirely.
 
 5b. **Product backlog (v0.4 M2), if a product tier exists.** If
    `.sdd/_product/backlog.md` exists, summarize it:
@@ -88,13 +104,19 @@ not mutate anything.
      PO signals ready.
    - `REVIEW` with open blockers → PO is revising; re-run
      `/build-fleet:review` once revisions land.
-   - `REVIEW` with all approvals → `/build-fleet:finalize`.
-   - `BUILD` → coder + qa working; run `/build-fleet:handoff` when both
-     signal done.
+   - `REVIEW` with all approvals → `/build-fleet:finalize` (the gate), then
+     `/build-fleet:build` (the BUILD orchestration).
+   - `BUILD` → if the BUILD orchestration has not started (no qa test suite /
+     IMPL_NOTES activity yet), run `/build-fleet:build`; once coder + qa
+     signal done, run `/build-fleet:handoff`.
    - `CHANGE_REVIEW` with open blockers → coder is fixing; re-run
      `/build-fleet:handoff` once fixes land.
    - `HANDOFF` → devops shipping; no command needed.
-   - `ESCALATED` → human-in-the-loop required; no command can advance.
+   - `ESCALATED` → human-in-the-loop required: `/build-fleet:resolve-escalation
+     <decision>` is the sanctioned unblock; `/build-fleet:park <reason>` shelves
+     the item.
+   - `PARKED` → the item was parked (see the `PARKED:` line in PROGRESS.md for
+     when/why); resuming is a deliberate human edit — see `/build-fleet:park`.
 
 ## Machine-readable snapshot (orchestrators / polling)
 

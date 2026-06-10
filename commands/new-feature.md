@@ -1,7 +1,7 @@
 ---
 description: Scaffold a new SDD feature workspace; run the M4 classifier to pick a routing tier (trivial / standard / large); delegate to product-owner to draft the spec (skeleton for trivial, full for standard/large)
 argument-hint: "<feature-slug>"
-allowed-tools: Read, Write, Edit, Task
+allowed-tools: Read, Write, Edit, Task, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*)
 ---
 
 # /build-fleet:new-feature
@@ -56,19 +56,25 @@ and surface that the user must supply a slug.
    - Look back through the conversation for a description the user already gave
      (e.g. "build a celsius→fahrenheit converter that handles negatives").
    - **Check the product backlog for an inherited intent (v0.4 M3.3).** If
-     `.sdd/_product/backlog.md` exists, find the row for this slug
-     (`- [ ] <slug>` / `- [x] <slug>`) and read its **intent block** — the run of
-     indented lines (NOT starting with `- [` or `##`) immediately under the row, up to
-     the next feature row, the next `## Phase` heading, or a blank line, whichever
-     comes first (1–3 lines). If present **and usable**, that intent is the **plan
-     author's starting description** — carry it forward (prefer it over re-deriving
-     from the slug) and label it to the PO as the inherited intent (step 8).
-   - **Quality floor — a thin intent does NOT suppress the gate.** A backlog intent
-     counts as a usable description only if it actually states *what the feature is + its
-     scope boundary*. A bare restatement of the slug ("the API client", "the skeleton")
-     with no boundary is **not** usable — treat it as if absent and fall through to the
-     STOP-and-ask below. (A hand-edited or legacy backlog can carry a vague intent that
-     PLAN_REVIEW never interrogated; the mere presence of a line does not excuse the gate.)
+     `.sdd/_product/backlog.md` exists, run the shared intent-block extractor — the
+     SAME script `/build-fleet:next-feature` uses, so the two always reach the same
+     verdict (one grammar, one quality floor, one implementation):
+     ```bash
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh" --slug "<slug>" .sdd/_product/backlog.md
+     ```
+     It prints the canonical intent block (the 1–3 indented lines under the feature
+     row) and a final `INTENT_VERDICT: usable|too-thin` line. On `usable`, that
+     intent is the **plan author's starting description** — carry it forward (prefer
+     it over re-deriving from the slug) and label it to the PO as the inherited
+     intent (step 8). (If the slug has no backlog row, the script errors — that just
+     means there is no inherited intent; continue.)
+   - **Quality floor — a thin intent does NOT suppress the gate.** The script's
+     verdict encodes the floor: usable = at least 2 of the intent's 3 components
+     (what the feature is / its scope boundary / its non-goals); a missing intent or
+     a bare slug-restatement ("the API client") is `too-thin`. On `too-thin`, treat
+     the intent as absent and fall through to the STOP-and-ask below — the mere
+     presence of a line does not excuse the gate. (The canonical prose definition of
+     the floor lives in the `sdd-protocol` skill.)
    - **If no usable description exists in context *and* no usable backlog intent, STOP and ask the user.**
      Do not infer requirements from the slug — a slug like `celsius-converter`
      names the feature but says nothing about behavior, inputs/outputs, edge
@@ -213,14 +219,16 @@ and surface that the user must supply a slug.
 9. **Report back** to the user with the next-command hint based on tier:
 
    - **trivial:** "Spec drafted as a skeleton (TIER=trivial). REVIEW is skipped
-     for this fast-path. Next command: `/build-fleet:finalize` — it will recognize
-     TIER=trivial and proceed directly to BUILD without requiring a review cycle."
+     for this fast-path. Next commands: `/build-fleet:finalize` (which recognizes
+     TIER=trivial and flips the spec without requiring a review cycle), then
+     `/build-fleet:build`."
    - **standard:** "Spec drafted (TIER=standard). Next command: `/build-fleet:review`
-     to run the adversarial review workflow."
+     to run the adversarial review workflow (then finalize, then build)."
    - **large:** "Spec drafted (TIER=large; BUILD_MODE=deep-build). Next command:
-     `/build-fleet:review` to run the adversarial review workflow. After finalize,
-     the BUILD phase will route to `workflows/deep-build.js` automatically (fan-out
-     coders across file partitions)."
+     `/build-fleet:review` to run the adversarial review workflow. After
+     `/build-fleet:finalize`, `/build-fleet:build` routes the BUILD phase to
+     `workflows/deep-build.js` automatically (fan-out coders across file
+     partitions)."
 
 ## Gates to honor
 

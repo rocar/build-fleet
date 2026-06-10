@@ -79,7 +79,8 @@ flowchart TD
     PF{"🙋 /plan-finalize ratify<br/>human gate · never auto-passes"}
     NF["✨ /new-feature<br/>inherits stack + intent"]
     RV(["⚙️ /review · review workflow<br/>architect · qa · coder → cross-exam → vote"])
-    FZ["✅ /finalize<br/>tests-first BUILD"]
+    FZ["✅ /finalize<br/>gate · flips spec FINALIZED"]
+    BD["🔨 /build<br/>tests-first BUILD"]
     DB(["⚙️ deep-build workflow<br/>architect partitions → coders → qa"])
     HO["🚀 /handoff<br/>change-review → ship"]
     LOOP(["🔁 flip backlog ✓ → resolve next feature"])
@@ -88,8 +89,9 @@ flowchart TD
     PF ==>|DEVELOPING| NF
     NF --> RV --> FZ
     NF -.->|trivial| FZ
-    FZ -->|large| DB --> HO
-    FZ -->|standard| HO
+    FZ --> BD
+    BD -->|large| DB --> HO
+    BD -->|standard| HO
     HO --> LOOP ==> NF
 
     classDef js fill:#f7df1e,color:#000,stroke:#000,stroke-width:2px,font-weight:bold;
@@ -112,7 +114,7 @@ flowchart TD
     STK["📦 STACK.md<br/>✅ baseline = BINDING<br/>🔶 forward = PROVISIONAL"]
     PR(["⚙️ /plan-review · plan-review workflow<br/>PO · architect · qa interrogate"])
     PF{"🙋 ratify<br/>provisional never auto-promoted"}
-    LOOP(["🔁 DEVELOPING loop · same as greenfield<br/>new-feature → review workflow → finalize → handoff"])
+    LOOP(["🔁 DEVELOPING loop · same as greenfield<br/>new-feature → review workflow → finalize → build → handoff"])
     PROMOTE(["🔼 adopt forward stack (human)<br/>un-tag → re-plan-review → ratify"])
 
     NP --> STK --> PR --> PF
@@ -157,9 +159,10 @@ either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field).
 **Four dynamic workflows** under `workflows/`: `review.js` (feature REVIEW),
 `plan-review.js` (product PLAN_REVIEW), `deep-build.js` (fan-out BUILD), and
 `diagnose.js` (bug-lane root-cause confirmation — the survival vote, inverted).
-Plus a deterministic shared resolver (`scripts/next-feature.sh`, with an 18-case
-test harness), seven craft skills, ten gate-enforcing hooks, and the shared
-memory layer under `.sdd/`.
+Plus deterministic shared scripts under `scripts/` (the backlog resolver, the
+intent-block extractor, the product-memory splice, the status snapshot — each
+with its own test harness), seven craft skills, ten gate-enforcing hooks, and
+the shared memory layer under `.sdd/`.
 
 ---
 
@@ -247,7 +250,8 @@ take effect on an installed instance.
 /build-fleet:next-feature        # resolves it; then:
 /build-fleet:new-feature <slug>  # inherits the stack + the feature's intent
 /build-fleet:review              # standard/large
-/build-fleet:finalize
+/build-fleet:finalize            # the gate — flips the spec to FINALIZED
+/build-fleet:build               # tests-first BUILD (qa → coder, or deep-build)
 /build-fleet:handoff             # ships, flips the backlog, advances the loop
 ```
 
@@ -256,7 +260,8 @@ take effect on an installed instance.
 ```
 /build-fleet:new-feature my-feature   # asks what it should do if not in context
 /build-fleet:review                   # standard/large only
-/build-fleet:finalize
+/build-fleet:finalize                 # the gate
+/build-fleet:build                    # tests-first BUILD
 /build-fleet:handoff
 ```
 
@@ -363,7 +368,7 @@ writes `TIER` + `BUILD_MODE` into `PROGRESS.md`:
 
 | Tier | Path | BUILD |
 |---|---|---|
-| **trivial** | skips REVIEW (`/build-fleet:finalize` straight from SPEC) | standard (qa → coder) |
+| **trivial** | skips REVIEW (`/build-fleet:finalize` straight from SPEC, then `/build-fleet:build`) | standard (qa → coder) |
 | **standard** | full SPEC → REVIEW → FINALIZE → BUILD | standard (qa → coder) |
 | **large** | full pipeline, then `BUILD_MODE=deep-build` | fan-out across partitioned coders |
 
@@ -449,10 +454,13 @@ an hour.
 | `/build-fleet:new-feature <slug>` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` + `acceptance.md`. Inherits the product stack + backlog intent if present; asks for a description otherwise. |
 | `/build-fleet:dispatch` | — | Re-classifies the active feature (query-only). |
 | `/build-fleet:review` | REVIEW | Runs the adversarial review workflow. (Skipped for trivial.) |
-| `/build-fleet:finalize` | FINALIZE → BUILD | Gate: refuses on open blockers. On pass, flips spec to FINALIZED and orchestrates BUILD (qa-first, then coder; routes to deep-build for large). |
-| `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by finalize). |
+| `/build-fleet:finalize` | FINALIZE → BUILD | Gate only: refuses on open blockers; on pass flips the spec to FINALIZED. Idempotent — re-running is a safe no-op. |
+| `/build-fleet:build` | BUILD | Orchestrates BUILD: qa drafts the failing suite first, then coder implements (routes to the deep-build workflow when `BUILD_MODE=deep-build`). |
+| `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by `/build-fleet:build`); also the iteration entry point. |
 | `/build-fleet:handoff` | CHANGE_REVIEW → HANDOFF | architect + PO + qa review the diff; refuses if tests are missing/failing. On pass devops ships, the backlog flips, and the loop advances. |
 | `/build-fleet:status` | — | Prints active feature state, open concerns, cycle counts, the product backlog, and the next unblocked feature. **Bug-lane aware:** `LANE: bug` → phase / `SEV` / `diagnosis.md` STATUS / cycles. |
+| `/build-fleet:park <reason>` | any → PARKED | **Human-only** (not model-invocable). Records the parked state in PROGRESS.md and frees `.sdd/ACTIVE` — the sanctioned sev0-preemption path. Workspace stays intact. |
+| `/build-fleet:resolve-escalation [<slug>] <decision>` | ESCALATED → pre-escalation phase | **Human-only** (not model-invocable). Archives ESCALATION.md into REVIEW.md (append-only), resets the exhausted cycle counter, restores the phase. |
 
 **Bug lane (v0.5):**
 
@@ -469,7 +477,7 @@ an hour.
 
 ## Tests-first BUILD
 
-In standard BUILD, `/build-fleet:finalize` sequences **qa before coder**: qa
+In standard BUILD, `/build-fleet:build` sequences **qa before coder**: qa
 authors a failing test suite from `acceptance.md` first, and coder refuses to begin
 until those tests exist. CHANGE_REVIEW then applies a counterfactual gate — *would
 each test fail without coder's change?* — so the suite actually pins the behavior

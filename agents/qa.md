@@ -75,8 +75,8 @@ you must append the block before stopping.
 
 ## During BUILD
 
-**v0.2 M2: you run BEFORE coder.** `/build-fleet:finalize`, on a passing gate,
-dispatches you first. coder refuses to begin until your failing test suite is in place.
+**v0.2 M2: you run BEFORE coder.** `/build-fleet:build` (run after the finalize gate
+passes) dispatches you first. coder refuses to begin until your failing test suite is in place.
 
 **Skill manifest (v0.4 M1).** Before drafting tests, check for
 `.sdd/<active>/SKILL_MANIFEST.md`. If it exists, load and apply the skills listed
@@ -123,10 +123,19 @@ against the diff. Your specific job: **coverage gaps before handoff.**
 - Are tests actually run by the project's test command? If `stop-tests`
   won't catch a regression, the test is decorative.
 - **(v0.2 M2) Counterfactual test.** For each acceptance criterion, verify the
-  corresponding test would FAIL if coder's source change were reverted. Easiest
-  way: temporarily revert the source change, run the suite, confirm the relevant
-  test fails. Then re-apply. A test that passes regardless of coder's diff isn't
-  testing behavior; rate as `[blocker]`.
+  corresponding test would FAIL if coder's source change were reverted. **Snapshot
+  first, always:** before touching the tree, run `git stash create` and record the
+  printed SHA in `.sdd/<active>/IMPL_NOTES.md`
+  (`counterfactual-snapshot: <sha> (<iso8601>)`); if it fails or prints nothing,
+  STOP and surface that — no counterfactual without a recorded snapshot. Then
+  temporarily revert the source change with `git stash` (recoverable), run the
+  suite, confirm the relevant test fails, and restore (`git stash pop`, or
+  `git stash apply <sha>` from the recorded snapshot if anything goes wrong).
+  **Never use a bare `git checkout` of the changed files** — it destroys the
+  uncommitted change with no recovery path. After restoring, confirm `git status`
+  / `git diff <sha>` show the tree back to the snapshot state before you record
+  any verdict. A test that passes regardless of coder's diff isn't testing
+  behavior; rate as `[blocker]`.
 
 Append your CHANGE_REVIEW block to REVIEW.md with severity-tagged items
 and a final `status:` line. Approve only when coverage is complete.
@@ -147,6 +156,9 @@ In the troubleshoot-fix lane you have two jobs:
 - **REPRODUCE (`/build-fleet:reproduce`):** author a **failing** test under `tests/` that fails
   *because of the bug* (not a missing fixture), record the steps in `diagnosis.md`, and flip its
   STATUS `REPORTED → REPRODUCING`. You may write `tests/` at any bug phase; you never write source.
-- **VERIFY (`/build-fleet:verify`) — the counterfactual, reused verbatim:** revert the coder's fix
-  and confirm each reproducing test now **FAILS**, then restore it. A test that passes regardless of
-  the fix is decorative — record it as a `[blocker]`.
+- **VERIFY (`/build-fleet:verify`) — the counterfactual, reused verbatim:** the orchestrator
+  records a `git stash create` snapshot SHA in IMPL_NOTES.md first; you operate against that
+  recorded ref. Revert the coder's fix with `git stash` (never a bare `git checkout` — that
+  destroys the uncommitted fix), confirm each reproducing test now **FAILS**, then restore the
+  fix and confirm the tree matches the snapshot. A test that passes regardless of the fix is
+  decorative — record it as a `[blocker]`.

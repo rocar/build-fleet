@@ -1,8 +1,14 @@
 ---
 description: Ratify the product plan. Bare call is a dry-run (prints the interrogation report + open blockers, then halts). `ratify` flips vision/backlog to FINALIZED and PHASE to DEVELOPING; `ratify force` overrides open blocker-severity findings. Never auto-passes.
 argument-hint: "[ratify [force]]"
-allowed-tools: Read, Write, Edit
+allowed-tools: Read, Write, Edit, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/product-memory-splice.sh":*)
+disable-model-invocation: true
 ---
+
+<!-- disable-model-invocation: this is the human-ratification gate. If the model
+     could self-invoke `/build-fleet:plan-finalize ratify force`, the documented
+     "cannot ratify on its own" headless safety story (below) would be fiction
+     (audit §3.22). A human (or the *external* orchestrator process) types this. -->
 
 # /build-fleet:plan-finalize
 
@@ -40,16 +46,16 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
 
 1. **Resolve the product.** Read `.sdd/PRODUCT` (fall back to `.sdd/_product/PROGRESS.md`
    `PRODUCT:`). If no product tier, refuse:
-   > `BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"reason":"no-product"}` — run `/build-fleet:new-product`. Exit 2.
+   > `BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"code":2,"reason":"no-product"}` — run `/build-fleet:new-product`.
 
 2. **Refuse while a feature is mid-review (hook-confinement guard).** Read `.sdd/ACTIVE`;
    if non-empty and `.sdd/<active>/PROGRESS.md` `PHASE` is `REVIEW` or `CHANGE_REVIEW`,
    refuse — the `restrict-reviewer-writes` hook would block the `STATUS`/`PHASE` flips
    into `.sdd/_product/`:
-   > `BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"reason":"feature-mid-review","feature":"<active>","phase":"<PHASE>"}`. Exit 2.
+   > `BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"code":2,"reason":"feature-mid-review","feature":"<active>","phase":"<PHASE>"}`.
 
 3. **Check escalation.** If `.sdd/_product/ESCALATION.md` exists, refuse — a human
-   halted the plan. Surface its contents. Exit 2.
+   halted the plan. Refuse (`{"code":2,"reason":"escalation-present"}`) and surface its contents.
 
 4. **Read product state.** From `.sdd/_product/PROGRESS.md` extract `PHASE`, `SIZE`,
    `CYCLE`. Determine the legal entry:
@@ -61,10 +67,10 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
      Emit `BUILD_FLEET_PLAN_FINALIZE_FAST_PATH: {"product":"<slug>","size":"small"}`
      before proceeding.
    - **Already ratified.** If `PHASE=DEVELOPING`, refuse:
-     > `BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"product":"<slug>","reason":"already-ratified","phase":"DEVELOPING"}`.
-     Tell the user the plan is already ratified; re-planning after DEVELOPING is M3.2. Exit 2.
+     > `BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"product":"<slug>","code":2,"reason":"already-ratified","phase":"DEVELOPING"}`.
+     Tell the user the plan is already ratified; re-planning after DEVELOPING is M3.2.
    - Any other phase (e.g. `PLAN` for a non-small product) → refuse with
-     `{"reason":"no-interrogation-cycle","detail":"run /build-fleet:plan-review first"}`. Exit 2.
+     `{"code":2,"reason":"no-interrogation-cycle","detail":"run /build-fleet:plan-review first"}`.
    - *(Legacy tier, no `PHASE` field — scaffolded before M3.1.)* The read returns empty,
      which falls into the `no-interrogation-cycle` refusal above — correct, since
      `/build-fleet:plan-review` is also what normalizes a legacy PROGRESS (seeds
@@ -97,11 +103,11 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
 
    **b. `ratify` with `B > 0`.** Refuse — open blockers, no `force`:
    ```
-   BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"product":"<slug>","reason":"open-blockers","open_blockers":<B>}
+   BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"product":"<slug>","code":2,"reason":"open-blockers","open_blockers":<B>}
    ```
    List the open blockers verbatim and tell the user to either resolve them (edit the
    plan and re-run `/build-fleet:plan-review`) or override with
-   `/build-fleet:plan-finalize ratify force`. No state changes. Exit 2.
+   `/build-fleet:plan-finalize ratify force`. No state changes.
 
    **c. `ratify` with `B = 0`, OR `ratify force` (any B).** **Ratify — flip state** (step 7).
 
@@ -151,11 +157,22 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
      Tell the user to run `/build-fleet:product-memory` once the active feature is
      `FINALIZED` or cleared. **This is best-effort: a deferred memory block never fails
      the ratification** — the plan is ratified regardless.
-   - **Otherwise** (no active feature, or its spec is `FINALIZED`) generate/splice the
-     block and emit:
+   - **Otherwise** (no active feature, or its spec is `FINALIZED`) generate the
+     block content (per the skill's distillation algorithm, WITHOUT the markers)
+     and splice it via the tested script — **never** via model-driven Edit
+     (audit §3.29):
+     ```bash
+     printf '%s\n' "<the generated block content>" | \
+       bash "${CLAUDE_PLUGIN_ROOT}/scripts/product-memory-splice.sh" ./CLAUDE.md
+     ```
+     The script prints `created` / `updated-in-place` / `appended` (and refuses,
+     exit 1 with no write, on a corrupt marker pair). Emit its status word:
      ```
      BUILD_FLEET_PLAN_FINALIZE_CLAUDEMD: {"product":"<slug>","status":"<created|updated-in-place|appended>"}
      ```
+     If the script errors, surface its stderr and report the memory block as
+     deferred (`{"status":"deferred","reason":"splice-error"}`) — best-effort,
+     never failing the ratification.
 
 8. **Report.** Tell the user:
    - The product plan is **ratified**; vision + backlog are `FINALIZED`; `PHASE=DEVELOPING`.
@@ -189,10 +206,12 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
 - **Headless contract.** Every branch emits exactly one `BUILD_FLEET_PLAN_FINALIZE_*:`
   line before any prose.
 
-## Exit codes
+## Refusal contract (machine-readable)
 
-| Exit | Meaning |
-|---|---|
-| 0 | Ratified (state flipped) — PASS emitted |
-| 2 | Refused (no product, feature mid-review, escalation, wrong phase, open blockers without force) |
-| (dry-run exits 0; it is a successful no-op report, not a refusal) |
+A slash command runs inside the model session and **cannot set a process exit
+code** — the session exits 0 either way. The `BUILD_FLEET_PLAN_FINALIZE_*`
+signal lines on stdout are the **sole machine contract**: `_PASS` = ratified,
+`_DRYRUN` = no-op report, `_REFUSE` = refused, with the refusal JSON carrying
+`"code"` (an integer preserving the legacy exit-code semantics: `2` =
+precondition refused) and `"reason"` (a kebab-case slug). Orchestrators
+dispatch on the signal line, never on the process exit status.

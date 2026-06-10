@@ -343,6 +343,19 @@ unchanged.
 
 ---
 
+## Future: command namespacing
+
+The flat `commands/` directory is past the ~15-command guidance with confusable
+pairs (`finalize`/`plan-finalize`, `new-feature`/`next-feature`, generic
+`fix`/`verify`). Splitting into `commands/plan/` and `commands/bug/`
+subdirectories (→ `/build-fleet:plan:finalize`, `/build-fleet:bug:fix`, …) is
+the right shape — but it is a **breaking rename of the headless contract**
+(every orchestrator dispatch string + ~30 cross-references), so it is
+deliberately **deferred** to a major version where a migration window can be
+documented, per the 2026-06-09 audit's own staging advice.
+
+---
+
 ## Durable principles (apply to every version)
 
 - **Spec is the contract.** No implementation begins until a spec is FINALIZED.

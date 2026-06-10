@@ -12,10 +12,10 @@ The workflow itself: architect plans an N-way file partition, N coders fan out i
 
 ## When to use this vs. M2 standard BUILD
 
-- **`/build-fleet:finalize`** runs M2 standard BUILD (qa first, then a single coder). Best for single-file or tightly coupled features where partitioning has no benefit.
+- **`/build-fleet:build`** runs standard BUILD (qa first, then a single coder). Best for single-file or tightly coupled features where partitioning has no benefit.
 - **`/build-fleet:deep-build`** runs the fan-out workflow. Best for multi-package monorepos or features spanning many independent files where parallel coders give real time wins.
 
-M4's classifier will set `BUILD_MODE: deep-build` in `PROGRESS.md` for features it routes here, and `/build-fleet:finalize` will dispatch this command automatically. Until M4 ships, this is a manual entry point.
+The classifier sets `BUILD_MODE: deep-build` in `PROGRESS.md` for features it routes here, and `/build-fleet:build` dispatches this workflow automatically. This command is the manual / iteration entry point.
 
 ## Workflow runtime requirement (v0.2)
 
@@ -28,17 +28,18 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
 ## What you do
 
 1. **Verify the workflow runtime.** Check that the `Workflow` tool is available. If absent, refuse:
-   > `BUILD_FLEET_REFUSE: workflow runtime unavailable. v0.2 requires Claude Code v2.1.154+ with workflows enabled. Exit 3.`
+   > `BUILD_FLEET_REFUSE: {"command":"deep-build","code":3,"reason":"workflow-runtime-unavailable"}`
+   then tell the user v0.2 requires Claude Code v2.1.154+ with workflows enabled.
 
-2. **Resolve the active feature.** Read `.sdd/ACTIVE`. If empty, refuse with `BUILD_FLEET_REFUSE: no active feature`. Exit 2.
+2. **Resolve the active feature.** Read `.sdd/ACTIVE`. If empty, refuse with `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"no-active-feature"}`.
 
-3. **Check phase.** Read `.sdd/<slug>/PROGRESS.md`. PHASE must be `BUILD`. STATUS in `spec.md` must be `FINALIZED`. If either fails, refuse and name the actual state. Exit 2.
+3. **Check phase.** Read `.sdd/<slug>/PROGRESS.md`. PHASE must be `BUILD`. STATUS in `spec.md` must be `FINALIZED`. If either fails, refuse and name the actual state (`{"command":"deep-build","code":2,"reason":"not-finalized","status":"<STATUS>","phase":"<PHASE>"}`).
 
-4. **Check tests-first prerequisite.** List files under `tests/`. If empty or absent, refuse with: `BUILD_FLEET_REFUSE: deep-build requires pre-existing failing tests; run /build-fleet:finalize first so qa drafts the suite (M2 ordering).` Exit 2.
+4. **Check tests-first prerequisite.** List files under `tests/`. If empty or absent, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"no-failing-tests","detail":"run /build-fleet:build first so qa drafts the suite (tests-first ordering)"}`.
 
-5. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse. Exit 2.
+5. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"deep-build","code":2,"reason":"escalation-present"}`) — `/build-fleet:resolve-escalation` is the unblock path.
 
-6. **Check the BUILD cycle budget.** Read `BUILD_CYCLE:` from `.sdd/<slug>/PROGRESS.md`. If the field is absent (a feature scaffolded before BUILD_CYCLE existed), add `BUILD_CYCLE: 0` to PROGRESS.md first — the workflow's scribe replaces fields **in place**, so the field must exist before dispatch (an `.sdd/` write; always gate-permitted). The budget is **3 build cycles**, and the workflow escalates **on** the cycle that exhausts it: blocker-severity concerns surviving the adversarial review at cycle 3 make that run write ESCALATION.md and set `PHASE: ESCALATED`. If `BUILD_CYCLE >= 3` AND the last run left surviving blockers, refuse. Exit 2 with: `BUILD_FLEET_REFUSE: build cycle budget exhausted (BUILD_CYCLE=<n>); the budget is 3 cycles and the workflow escalates on the exhausting cycle. Resolve the surviving blockers or accept the escalation.`
+6. **Check the BUILD cycle budget.** Read `BUILD_CYCLE:` from `.sdd/<slug>/PROGRESS.md`. If the field is absent (a feature scaffolded before BUILD_CYCLE existed), add `BUILD_CYCLE: 0` to PROGRESS.md first — the workflow's scribe replaces fields **in place**, so the field must exist before dispatch (an `.sdd/` write; always gate-permitted). The budget is **3 build cycles**, and the workflow escalates **on** the cycle that exhausts it: blocker-severity concerns surviving the adversarial review at cycle 3 make that run write ESCALATION.md and set `PHASE: ESCALATED`. If `BUILD_CYCLE >= 3` AND the last run left surviving blockers, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"build-cycle-budget-exhausted","build_cycle":<n>}` — the budget is 3 cycles and the workflow escalates on the exhausting cycle; resolve the surviving blockers or accept the escalation.
 
 7. **Pick the new cycle number.** New cycle = `BUILD_CYCLE + 1`. Pass it to the workflow as `cycle`; the workflow's scribe writes it back to `BUILD_CYCLE` via the envelope's `state_delta`.
 
@@ -77,30 +78,29 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
       - `invalid-args` → the dispatch args were malformed; nothing ran. Fix the dispatch and re-run.
     - **Scribe-apply failure is a hard failure.** If the completed run's return object carries `scribe_apply: "failed"`, the scribe could not write state even after a retry: IMPL_NOTES.md/PROGRESS.md did **not** land (though coders may have written source) and the marker may remain (delete it if its content matches your run id). Whoever reads that result must report the run as failed with its `scribe_error` — never treat the verdict as applied or advance to `/build-fleet:handoff`.
 
-## Exit codes
-
-| Exit | Meaning |
-|---|---|
-| 0 | Workflow launched successfully |
-| 1 | Workflow tool returned an error field |
-| 2 | Pre-dispatch validation failed (active empty, wrong phase, no tests, escalation present) |
-| 3 | Workflow runtime not available |
-
 ## What this command does NOT do
 
-- Does not draft tests. M2's `/build-fleet:finalize` already dispatched qa for that. Deep-build assumes the failing test suite exists.
+- Does not draft tests. `/build-fleet:build` already dispatched qa for that. Deep-build assumes the failing test suite exists.
 - Does not bump PHASE, `BUILD_CYCLE`, or run CHANGE_REVIEW. The workflow's scribe writes `BUILD_CYCLE` (and the rest of the BUILD-completion delta) via the envelope's `state_delta`; this command only normalizes a missing `BUILD_CYCLE: 0` field pre-dispatch. CHANGE_REVIEW is `/build-fleet:handoff`'s job.
 - Does not write source. Only its coder subagents (inside the workflow) write source — each restricted to its partition.
 - Does not delete `.workflow-in-flight` on success. Scribe does that as the final phase (only when the marker still contains this run's id).
 
 ## Cleanup obligation
 
-If `.workflow-in-flight` was created and the Workflow tool fails to launch (returns `error`), delete the marker — after verifying its content still matches your run id — before exiting with exit code 1. The same ownership rule applies to the post-launch liveness check (step 13): a dead run plus a marker still containing this run's id means you delete it; a marker with different content belongs to a newer dispatch and must be left alone.
+If `.workflow-in-flight` was created and the Workflow tool fails to launch (returns `error`), delete the marker — after verifying its content still matches your run id — then report the failure with `BUILD_FLEET_REFUSE: {"command":"deep-build","code":1,"reason":"workflow-launch-failed"}` and the tool's error. The same ownership rule applies to the post-launch liveness check (step 13): a dead run plus a marker still containing this run's id means you delete it; a marker with different content belongs to a newer dispatch and must be left alone.
 
 ## The BUILD_CYCLE field
 
 `BUILD_CYCLE: <n>` in `.sdd/<slug>/PROGRESS.md` counts completed deep-build runs for the active feature, exactly as `CYCLE` counts REVIEW cycles (and `CHANGE_CYCLE` counts CHANGE_REVIEW cycles). This command reads it and passes `BUILD_CYCLE + 1` as the workflow's `cycle` arg; the workflow's scribe writes the new value back. Budget: 3 — the workflow escalates on the exhausting cycle, and its `needs-iteration` envelope carries `cycles_remaining` so headless orchestrators cannot loop the workflow forever.
 
-## Refusal contract
+## Refusal contract (machine-readable)
 
-All refusals begin with `BUILD_FLEET_REFUSE: ` for orchestrator consumption. Exit codes as above.
+A slash command runs inside the model session and **cannot set a process exit
+code** — the session exits 0 either way. The `BUILD_FLEET_*` signal lines on
+stdout are the **sole machine contract**. Every refusal emits exactly one
+`BUILD_FLEET_REFUSE:` line whose JSON carries `"code"` (an integer preserving
+the legacy exit-code semantics: `2` = pre-dispatch validation refused, `3` =
+workflow runtime unavailable, `1` = workflow tool launch error) and `"reason"`
+(a kebab-case slug). Orchestrators dispatch on the signal line — and on the
+`BUILD_FLEET_WORKFLOW_LAUNCHED` line for success — never on the process exit
+status.

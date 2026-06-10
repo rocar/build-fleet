@@ -498,6 +498,7 @@ Every workflow's *final phase* produces this envelope and passes it to the scrib
   "build_fleet_version": "0.2",       // string — schema version guard
   "feature": "my-feature",            // string — subject slug (feature from .sdd/ACTIVE; product slug for product-scope)
   "workspace_dir": null,              // string | null — v0.4 M3.0. Directory the scribe writes to. null/absent ⇒ ".sdd/<feature>/" (feature scope, v0.2 behavior). ".sdd/_product/" for product-scope workflows (plan-review). Generalizes the scribe off the hardwired feature dir; absent ⇒ byte-identical v0.2 behavior.
+  "run_id": "review-<slug>-c2-<iso>", // string | null — v0.6 marker ownership. The token the dispatching command wrote into .sdd/<...>/.workflow-in-flight. The scribe deletes the marker ONLY if its content still matches this value; null (legacy) ⇒ best-effort unconditional removal.
   "phase": "REVIEW",                  // string — PROGRESS.md PHASE value at run-start
   "cycle": 2,                         // int — CYCLE value AFTER this run's increment
   "verdict": "clean|revise|escalate", // string — terminal outcome of survival vote
@@ -556,6 +557,36 @@ The workflow script validates before passing to scribe:
 
 VERIFY-AT-M1: refutation threshold (40 chars) is a tunable, not a constant. May need adjustment based on first dry-run findings.
 
+### Workflow return object (schema-of-record, v0.6 — the audit-remediation hardening)
+
+Distinct from the scribe envelope: this is what the *workflow script returns* to
+whoever polls the run (the dispatching command, `/build-fleet:status`, or an
+external orchestrator). Every workflow (review / deep-build / diagnose /
+plan-review) returns:
+
+```jsonc
+{
+  "verdict": "clean|revise|escalate|needs-iteration|confirmed|refuted|interrogated|incomplete|invalid-args",
+                                      // "incomplete"  — a transient agent fault (missing/unusable payload):
+                                      //                 PHASE/CYCLE untouched, marker cleaned via a minimal
+                                      //                 cleanup envelope, re-run is safe. NOT an escalation.
+                                      // "invalid-args" — the dispatch args were malformed; nothing ran
+                                      //                 beyond marker cleanup. Fix the dispatch and re-run.
+  "cycles_remaining": 1,              // int — present on bounded workflows (e.g. deep-build
+                                      //       needs-iteration) so headless orchestrators cannot
+                                      //       loop a workflow past its 3-cycle budget.
+  "scribe_apply": "applied|failed",   // "failed" = the scribe could not write state even after one
+                                      //            retry: REVIEW.md/IMPL_NOTES.md/PROGRESS.md did NOT
+                                      //            land and the marker may remain. The reader MUST
+                                      //            report the run as failed with scribe_error — never
+                                      //            treat the verdict as applied or advance.
+  "scribe_error": null,               // string | null — scribe failure detail when scribe_apply=failed
+  "note": null                        // string | null — caller guidance (e.g. deep-build incomplete:
+                                      //                 partial worktree writes may exist; inspect
+                                      //                 git status/diff before re-running)
+}
+```
+
 ---
 
 ## 7. Cost ceiling declaration (DECIDED)
@@ -607,16 +638,30 @@ VERIFY-AT-M1: does the runtime accept `estimatedCost` as a meta field, or does i
 
 5. **Read results.** Hermes reads the scribe's writes from `.sdd/<feature>/` (PROGRESS.md, REVIEW.md, ESCALATION.md). The structured envelope is captured in the workflow transcript at `transcriptDir/scribe.*.json` or similar (VERIFY-AT-M1 — exact transcript layout).
 
-### Command body exit codes
+### Command outcome signals (the SOLE machine contract — supersedes the v0.2 exit-code table)
 
-| Exit | Meaning |
+**A slash command cannot set a process exit code.** The command body is a prompt
+executed inside the model session; `claude -p` exits 0 whether the command
+refused or succeeded. The original v0.2 exit-code table here was unenforceable
+fiction (audit §3.24) — an orchestrator mapping exit codes to kanban transitions
+would mark every refusal successful.
+
+The **`BUILD_FLEET_*` signal lines on stdout are the sole machine contract.**
+Every refusal emits exactly one `BUILD_FLEET_*REFUSE*:` line whose JSON carries:
+
+| Field | Meaning |
 |---|---|
-| 0 | Workflow launched successfully; runId emitted on stdout |
-| 1 | Workflow launch failed (Workflow tool returned `error` field) |
-| 2 | Pre-dispatch validation failed (e.g., `.sdd/ACTIVE` empty, no script at `scriptPath`) |
-| 3 | Workflow runtime not available in this Claude Code version (graceful fallback signal) |
+| `code` | Integer preserving the legacy exit-code semantics: `1` = workflow tool launch error, `2` = pre-dispatch validation refused, `3` = workflow runtime unavailable |
+| `reason` | kebab-case slug (e.g. `no-active-feature`, `cycle-budget-exhausted`, `workflow-runtime-unavailable`) |
 
-Hermes maps exit codes to kanban task state transitions.
+Success paths emit their command-specific signal (`BUILD_FLEET_WORKFLOW_LAUNCHED`,
+`BUILD_FLEET_FINALIZE_PASS`, `BUILD_FLEET_PLAN_FINALIZE_PASS`, …).
+
+Hermes (or any orchestrator) maps **signal lines** — `code`/`reason` on refusal,
+the success signal otherwise — to kanban task state transitions, and must treat
+the process exit status as meaningless. For async workflows, completion outcomes
+come from the workflow **return object** (§6: `verdict`, `cycles_remaining`,
+`scribe_apply`) polled via TaskGet, plus the scribe's `.sdd/` writes.
 
 ### v0.2 does NOT support headless plan-approval gating
 

@@ -1,7 +1,6 @@
 ---
 description: (Re)generate the root ./CLAUDE.md product-memory block from .sdd/_product/ — vision one-liner, binding stack, conventions. Non-clobbering + idempotent. Run after editing the plan, or to recover a deferred generation.
-argument-hint: ""
-allowed-tools: Read, Write, Edit
+allowed-tools: Read, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/product-memory-splice.sh":*)
 ---
 
 # /build-fleet:product-memory
@@ -22,22 +21,22 @@ allowed, but the typical use is post-ratification.
 
 1. **Resolve the product.** Read `.sdd/PRODUCT` (fall back to `.sdd/_product/PROGRESS.md`
    `PRODUCT:`). If there is no product tier, refuse:
-   > `BUILD_FLEET_PRODUCT_MEMORY_REFUSE: {"reason":"no-product"}` — run `/build-fleet:new-product` first. Exit 2.
+   > `BUILD_FLEET_PRODUCT_MEMORY_REFUSE: {"code":2,"reason":"no-product"}` — run `/build-fleet:new-product` first.
 
 2. **Refuse while a feature is mid-review.** Read `.sdd/ACTIVE`; if non-empty and
    `.sdd/<active>/PROGRESS.md` `PHASE` is `REVIEW` or `CHANGE_REVIEW`, refuse — writing
    `.sdd/_product/`-adjacent state mid-review is confined by `restrict-reviewer-writes`,
    and a root write is doubly blocked. Finish or escalate that review first:
-   > `BUILD_FLEET_PRODUCT_MEMORY_REFUSE: {"reason":"feature-mid-review","feature":"<active>","phase":"<PHASE>"}`. Exit 2.
+   > `BUILD_FLEET_PRODUCT_MEMORY_REFUSE: {"code":2,"reason":"feature-mid-review","feature":"<active>","phase":"<PHASE>"}`.
 
 3. **Block-source pre-check (the deferral condition).** `./CLAUDE.md` is **outside**
    `.sdd/`, so `block-source-before-finalized` will block the write if `.sdd/ACTIVE`
    names a feature whose `spec.md` STATUS ≠ `FINALIZED`. Pre-check: if there is an active
    feature and its spec STATUS is not `FINALIZED`, refuse (do not attempt the write):
-   > `BUILD_FLEET_PRODUCT_MEMORY_REFUSE: {"reason":"active-feature-not-finalized","feature":"<active>","spec_status":"<status>"}`
+   > `BUILD_FLEET_PRODUCT_MEMORY_REFUSE: {"code":2,"reason":"active-feature-not-finalized","feature":"<active>","spec_status":"<status>"}`
 
    Tell the user to finish/finalize or clear the active feature (or `/build-fleet:handoff`
-   it), then re-run. Exit 2. *(No active feature, or an active feature whose spec is
+   it), then re-run. *(No active feature, or an active feature whose spec is
    `FINALIZED`, is fine — the write is permitted.)*
 
 4. **Generate the block.** Per the `sdd-protocol` skill's generation algorithm:
@@ -52,22 +51,26 @@ allowed, but the typical use is post-ratification.
      stack is provisional (an un-ratified brownfield forward direction with no binding
      baseline beyond the captured current state), use the `## Baseline (current)` content
      as the binding stack and note that a forward direction exists but is not yet binding.
-   - Wrap the content in the canonical `<!-- BEGIN build-fleet:product -->` / `<!-- END
-     build-fleet:product -->` markers from the skill (the short form — detection is by
-     prefix, so the marker text stays stable while the body carries the generated notice).
+   - Do **not** add the markers yourself — the splice script owns them.
 
-5. **Splice into `./CLAUDE.md` (non-clobbering, idempotent)** — exactly per the skill's
-   generation algorithm. Read `./CLAUDE.md` if it exists, then:
-   - **No file** → `Write` it containing just the block.
-   - **Block present** — detect by **prefix**: a line starting with `<!-- BEGIN build-fleet:product`
-     (do **not** require a full-line literal match — the trailing prose may differ between
-     versions), with the region ending at the next line equal to `<!-- END build-fleet:product -->`.
-     `Edit` that whole region (BEGIN line … END line inclusive) → the new block; everything
-     outside is preserved byte-for-byte by Edit's exact-match.
-   - **Block absent** → **append via `Edit`** (not Read→reconstruct→`Write`): `old_string` =
-     the file's current final line; `new_string` = that line + a blank line + the block. This
-     keeps NON-CLOBBERING structural — pre-existing content is never re-emitted, so it can't
-     be partially lost.
+5. **Splice into `./CLAUDE.md` via the tested script (non-clobbering, idempotent).**
+   Never splice with model-driven `Write`/`Edit` (audit §3.29) — pipe the block
+   content (WITHOUT markers) into `scripts/product-memory-splice.sh`:
+
+   ```bash
+   printf '%s\n' "<the generated block content>" | \
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/product-memory-splice.sh" ./CLAUDE.md
+   ```
+
+   The script handles every case deterministically (and is covered by
+   `scripts/product-memory-splice.test.sh`):
+   - **No file** → creates `./CLAUDE.md` containing just the marked block (`created`).
+   - **Markers present** — BEGIN detected by **prefix** (`<!-- BEGIN build-fleet:product`),
+     END by the exact line `<!-- END build-fleet:product -->` → replaces only that
+     region; everything outside is preserved byte-for-byte (`updated-in-place`).
+   - **No markers** → appends the marked block at EOF after a blank line (`appended`).
+   - **BEGIN without END (or END without BEGIN)** → errors with **no write** — surface
+     the stderr and tell the user to repair the markers by hand, then re-run.
 
 6. **Confirm.** Emit exactly one line, then a short human summary:
    ```
@@ -80,13 +83,17 @@ allowed, but the typical use is post-ratification.
   region is ever rewritten. An existing hand-authored `CLAUDE.md` keeps all its content.
 - **Binding only.** Never copy `PROVISIONAL` / forward-direction entries into the block as
   binding stack.
-- **Never write source or `.sdd/` state.** This command touches only `./CLAUDE.md`.
+- **Never write source or `.sdd/` state.** This command touches only `./CLAUDE.md`, and
+  only through `scripts/product-memory-splice.sh`.
 - **Headless contract.** Every refusal/confirmation begins with a `BUILD_FLEET_PRODUCT_MEMORY_*:`
   line before any prose.
 
-## Exit codes
+## Refusal contract (machine-readable)
 
-| Exit | Meaning |
-|---|---|
-| 0 | Memory block written (created / updated / appended) |
-| 2 | Refused (no product, feature mid-review, active feature not FINALIZED) |
+A slash command runs inside the model session and **cannot set a process exit
+code** — the session exits 0 either way. The `BUILD_FLEET_PRODUCT_MEMORY_*`
+signal lines on stdout are the **sole machine contract**: `_OK` = block written,
+`_REFUSE` = refused, with the refusal JSON carrying `"code"` (an integer
+preserving the legacy exit-code semantics: `2` = precondition refused) and
+`"reason"` (a kebab-case slug). Orchestrators dispatch on the signal line,
+never on the process exit status.

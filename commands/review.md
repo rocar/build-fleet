@@ -1,6 +1,5 @@
 ---
 description: Run a v0.2 review workflow on the active feature — fan-out + cross-examination + survival vote, applied via scribe
-argument-hint: ""
 allowed-tools: Read, Write, Workflow
 ---
 
@@ -16,20 +15,21 @@ The `Workflow` tool must be available. This requires:
 - Workflows enabled in `/config` (Pro plans) — or available by default on Max/Team/Enterprise
 - `Workflow` in the session's `allowedTools` (e.g., for headless callers: `claude -p --allowedTools "Workflow,Read,Edit,Write,Bash,Agent" '/build-fleet:review'`)
 
-v0.2 does not gracefully fall back to v0.1's command pipeline. If the runtime is missing, refuse with exit code 3 (graceful-fallback signal) and tell the user how to enable workflows.
+v0.2 does not gracefully fall back to v0.1's command pipeline. If the runtime is missing, refuse with the `workflow-runtime-unavailable` signal below and tell the user how to enable workflows.
 
 ## What you do
 
 1. **Verify the workflow runtime.** Check that the `Workflow` tool is available. If absent, refuse:
-   > `BUILD_FLEET_REFUSE: workflow runtime unavailable. v0.2 requires Claude Code v2.1.154+ with workflows enabled (see ROADMAP.md). Exit 3.`
+   > `BUILD_FLEET_REFUSE: {"command":"review","code":3,"reason":"workflow-runtime-unavailable"}`
+   then tell the user v0.2 requires Claude Code v2.1.154+ with workflows enabled (see ROADMAP.md).
 
-2. **Resolve the active feature.** Read `.sdd/ACTIVE`. If empty, refuse with `BUILD_FLEET_REFUSE: no active feature`. Exit 2.
+2. **Resolve the active feature.** Read `.sdd/ACTIVE`. If empty, refuse with `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"no-active-feature"}`.
 
-3. **Check phase.** Read `.sdd/<slug>/PROGRESS.md`. If `PHASE` is not `SPEC` or `REVIEW`, refuse and name the actual phase. Exit 2.
+3. **Check phase.** Read `.sdd/<slug>/PROGRESS.md`. If `PHASE` is not `SPEC` or `REVIEW`, refuse (`{"command":"review","code":2,"reason":"wrong-phase","phase":"<PHASE>"}`).
 
-4. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse — tell the user to read it and either resolve the deadlock or start a new feature. Exit 2.
+4. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"review","code":2,"reason":"escalation-present"}`) — tell the user to read it and resolve it with `/build-fleet:resolve-escalation <decision>` (or park the feature).
 
-5. **Check the cycle budget.** Read `CYCLE:` from PROGRESS.md. The budget is **3 review cycles**, and the workflow escalates **on** the cycle that exhausts it: if blockers still survive the survival vote at cycle 3, that run writes ESCALATION.md and sets `PHASE: ESCALATED` (there is no separate "4th cycle" — cycle 3 with surviving blockers is the escalation). This refusal is a belt-and-suspenders guard for the edge where CYCLE is already ≥ 3 without a recorded escalation: if `CYCLE >= 3` AND the most recent REVIEW.md cycle still has open `[blocker]` items, refuse — a further run can only escalate, and the workflow owns that write. Exit 2 with: `BUILD_FLEET_REFUSE: cycle budget exhausted (CYCLE=<n>); the budget is 3 cycles and the workflow escalates on the exhausting cycle. Resolve blockers in spec.md or accept the escalation.`
+5. **Check the cycle budget.** Read `CYCLE:` from PROGRESS.md. The budget is **3 review cycles**, and the workflow escalates **on** the cycle that exhausts it: if blockers still survive the survival vote at cycle 3, that run writes ESCALATION.md and sets `PHASE: ESCALATED` (there is no separate "4th cycle" — cycle 3 with surviving blockers is the escalation). This refusal is a belt-and-suspenders guard for the edge where CYCLE is already ≥ 3 without a recorded escalation: if `CYCLE >= 3` AND the most recent REVIEW.md cycle still has open `[blocker]` items, refuse — a further run can only escalate, and the workflow owns that write. Refuse with: `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cycle-budget-exhausted","cycle":<n>}` — the budget is 3 cycles and the workflow escalates on the exhausting cycle; resolve blockers in spec.md or accept the escalation.
 
 6. **Pick the new cycle number.** New cycle = `CYCLE + 1`. Pass to the workflow.
 
@@ -64,20 +64,11 @@ v0.2 does not gracefully fall back to v0.1's command pipeline. If the runtime is
     - `/workflows` shows progress (in interactive mode).
     - Once it completes, `/build-fleet:status` will show the verdict.
     - Next legal command depends on the workflow's verdict:
-      - `clean` → `/build-fleet:finalize`
+      - `clean` → `/build-fleet:finalize` (the gate), then `/build-fleet:build`
       - `revise` → `/build-fleet:review` again after PO revises spec.md
       - `escalate` → human action on the ESCALATION.md the workflow writes (the budget is 3 cycles; the workflow escalates on the exhausting cycle)
       - `incomplete` / `invalid-args` → a transient agent fault or bad dispatch args; PHASE/CYCLE are unchanged and nothing was written — re-run `/build-fleet:review` (or fix the dispatch args).
     - **Scribe-apply failure is a hard failure.** If the completed run's return object carries `scribe_apply: "failed"`, the scribe could not write state even after a retry: REVIEW.md/PROGRESS.md did **not** land and the marker may remain (delete it if its content matches your run id). Whoever reads that result (you, `/build-fleet:status`, or an orchestrator) must report the run as failed with its `scribe_error` — never treat the verdict as applied or advance to the next command.
-
-## Exit codes
-
-| Exit | Meaning |
-|---|---|
-| 0 | Workflow launched successfully; runId emitted |
-| 1 | Workflow tool returned an error field (e.g., script syntax check failed) — surface the error |
-| 2 | Pre-dispatch validation failed (active empty, wrong phase, escalation present, budget exhausted) |
-| 3 | Workflow runtime not available — caller should upgrade Claude Code or enable workflows |
 
 ## What this command does NOT do
 
@@ -88,4 +79,12 @@ v0.2 does not gracefully fall back to v0.1's command pipeline. If the runtime is
 
 ## Refusal contract (machine-readable)
 
-All refusals begin with a line prefixed `BUILD_FLEET_REFUSE: ` for orchestrator consumption. Exit codes as above.
+A slash command runs inside the model session and **cannot set a process exit
+code** — the session exits 0 either way. The `BUILD_FLEET_*` signal lines on
+stdout are the **sole machine contract**. Every refusal emits exactly one
+`BUILD_FLEET_REFUSE:` line whose JSON carries `"code"` (an integer preserving
+the legacy exit-code semantics: `2` = pre-dispatch validation refused, `3` =
+workflow runtime unavailable, `1` = workflow tool launch error) and `"reason"`
+(a kebab-case slug). Orchestrators dispatch on the signal line — and on the
+`BUILD_FLEET_WORKFLOW_LAUNCHED` line for success — never on the process exit
+status.

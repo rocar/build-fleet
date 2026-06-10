@@ -20,7 +20,7 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
 
 ## What you do
 
-1. **Validate arguments.** `$ARGUMENTS` is the feature description. If empty, refuse with `BUILD_FLEET_REFUSE: dispatch requires a feature description in arguments` and exit 2.
+1. **Validate arguments.** `$ARGUMENTS` is the feature description. If empty, refuse with `BUILD_FLEET_REFUSE: {"command":"dispatch","code":2,"reason":"missing-description"}`.
 
 2. **Invoke the classifier.** First, if `.sdd/_product/STACK.md` exists, read its
    binding stack (everything not marked `PROVISIONAL`) so the classifier derives the
@@ -56,9 +56,9 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
    - Tier with one-line rationale.
    - Confidence level.
    - Routing implications:
-     - `trivial`: `/build-fleet:new-feature <slug>` will scaffold a skeleton spec via PO (using the classifier's `skeleton_spec_hint`); user can run `/build-fleet:finalize` immediately to skip REVIEW.
-     - `standard`: `/build-fleet:new-feature <slug>` will scaffold and PO will draft the full spec; user runs `/build-fleet:review` then `/build-fleet:finalize` as the v0.1 flow.
-     - `large`: same as standard PLUS PROGRESS.md gets `BUILD_MODE=deep-build` so finalize routes the implementation phase to `workflows/deep-build.js`.
+     - `trivial`: `/build-fleet:new-feature <slug>` will scaffold a skeleton spec via PO (using the classifier's `skeleton_spec_hint`); user can run `/build-fleet:finalize` immediately to skip REVIEW (then `/build-fleet:build`).
+     - `standard`: `/build-fleet:new-feature <slug>` will scaffold and PO will draft the full spec; user runs `/build-fleet:review`, `/build-fleet:finalize`, then `/build-fleet:build`.
+     - `large`: same as standard PLUS PROGRESS.md gets `BUILD_MODE=deep-build` so `/build-fleet:build` routes the implementation phase to `workflows/deep-build.js`.
    - If `confidence=low`: surface the rationale and recommend the user either provide a more detailed description or override the tier manually by editing PROGRESS.md after scaffolding.
    - **Skill routing preview (v0.4 M1).** If `skill_manifest` is non-null, show
      `feature_type` and the per-role skill names (coder / qa) it would write to
@@ -69,17 +69,16 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
 
 6. **Cleanup.** No state to clean — this command never wrote any.
 
-## Exit codes
+## Refusal contract (machine-readable)
 
-| Exit | Meaning |
-|---|---|
-| 0 | Classification emitted successfully |
-| 1 | Classifier subagent errored or returned an unparseable verdict |
-| 2 | Missing or invalid arguments |
-
-## Refusal contract
-
-All refusals begin with `BUILD_FLEET_REFUSE: ` for orchestrator consumption.
+A slash command runs inside the model session and **cannot set a process exit
+code** — the session exits 0 either way. The `BUILD_FLEET_*` signal lines on
+stdout are the **sole machine contract**: `BUILD_FLEET_CLASSIFICATION` =
+success; `BUILD_FLEET_REFUSE` = refused, its JSON carrying `"code"` (an integer
+preserving the legacy exit-code semantics: `2` = missing/invalid arguments,
+`1` = classifier errored or returned an unparseable verdict) and `"reason"`
+(a kebab-case slug — e.g. `missing-description`, `classifier-unparseable`).
+Orchestrators dispatch on the signal line, never on the process exit status.
 
 ## Examples
 

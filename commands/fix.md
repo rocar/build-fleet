@@ -1,7 +1,6 @@
 ---
 description: FIX gate of the bug lane — confirm the diagnosis (flip diagnosis.md→CONFIRMED), then delegate to coder to make the reproducing test pass; supports the sev0 hotfix fast-path
-argument-hint: ""
-allowed-tools: Read, Write, Edit, Bash, Task
+allowed-tools: Read, Write, Edit, Task, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
 ---
 
 # /build-fleet:fix
@@ -18,10 +17,11 @@ Rulebook: the `sdd-protocol` skill (bug-lane sections).
 
 ## What you do
 
-1. **Resolve the active bug.** Read `.sdd/ACTIVE` (empty → `BUILD_FLEET_REFUSE: no active item`, exit 2).
+1. **Resolve the active bug.** Read `.sdd/ACTIVE` (empty → `BUILD_FLEET_REFUSE: {"command":"fix","code":2,"reason":"no-active-item"}`).
    Read `.sdd/<slug>/PROGRESS.md`; `LANE` must be `bug` (else refuse — use the forward commands).
 
-2. **Check ESCALATION.** If `.sdd/<slug>/ESCALATION.md` exists → refuse, exit 2.
+2. **Check ESCALATION.** If `.sdd/<slug>/ESCALATION.md` exists → refuse
+   (`{"command":"fix","code":2,"reason":"escalation-present"}`) — `/build-fleet:resolve-escalation` is the unblock path.
 
 3. **The gate — determine the path.** Read `PHASE` + `SEV` from PROGRESS.md and the
    `diagnosis.md` STATUS:
@@ -35,10 +35,10 @@ Rulebook: the `sdd-protocol` skill (bug-lane sections).
    - **Re-entry after a verify bounce.** `PHASE == FIX` with STATUS already `CONFIRMED` →
      proceed (re-dispatch the coder).
    - **Otherwise** (`PHASE == DIAGNOSE` and not sev0, or any other phase) → refuse:
-     `BUILD_FLEET_REFUSE: diagnosis not confirmed — run /build-fleet:diagnose first (sev0 may use the fast-path).` Exit 2.
+     `BUILD_FLEET_REFUSE: {"command":"fix","code":2,"reason":"diagnosis-not-confirmed","detail":"run /build-fleet:diagnose first (sev0 may use the fast-path)"}`.
 
 4. **Pre-flight: the reproducing test must exist.** Confirm ≥1 file under `tests/` (REPRODUCE
-   produced it). If none → refuse: `BUILD_FLEET_REFUSE: no reproducing test under tests/ — run /build-fleet:reproduce first.` Exit 2. (The gate would block source anyway; refusing here is clearer.)
+   produced it). If none → refuse: `BUILD_FLEET_REFUSE: {"command":"fix","code":2,"reason":"no-reproducing-test","detail":"run /build-fleet:reproduce first"}`. (The gate would block source anyway; refusing here is clearer.)
 
 5. **Apply the confirm flip.**
    a. If `diagnosis.md` STATUS ≠ `CONFIRMED`, flip it → `CONFIRMED` (keep all four `##`

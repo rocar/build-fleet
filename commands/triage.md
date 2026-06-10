@@ -1,7 +1,7 @@
 ---
 description: File a bug into the troubleshoot-fix lane — scaffold .sdd/<bug-slug>/ with diagnosis.md, run the triage classifier (severity + cause-known), and route known-cause bugs back to the forward feature path
 argument-hint: "<symptom>"
-allowed-tools: Read, Write, Edit, Task, Bash
+allowed-tools: Read, Write, Edit, Task, Bash(rm -rf .sdd/:*)
 ---
 
 # /build-fleet:triage
@@ -28,7 +28,9 @@ empty, refuse — you cannot triage without a symptom. Emit `BUILD_FLEET_REFUSE`
    ```
    BUILD_FLEET_REFUSE: {"command":"triage","reason":"item-in-flight","active":"<slug>"}
    ```
-   Stop. (A sev0 cannot preempt a mid-flight feature here; the human parks the feature first.)
+   Stop. (A sev0 cannot preempt a mid-flight feature here; the human parks the feature
+   first with `/build-fleet:park <reason>` — the sanctioned preemption path — then re-runs
+   the triage.)
 
 2. **Derive a bug slug.** kebab-case, prefixed `bug-`, a ≤6-word summary of the symptom
    (e.g. `bug-login-500-on-empty-email`). If `.sdd/<bug-slug>/` already exists, append a short
