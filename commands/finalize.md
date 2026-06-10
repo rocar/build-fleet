@@ -223,7 +223,7 @@ refuse with an actionable diff.
       ```
 
       then surface coder's output and stop. STATUS stays FINALIZED, PHASE stays BUILD.
-      This is the v0.2 M2 tests-first violation check (per V0.2-PLAN Phase 2 verification).
+      This is the v0.2 M2 tests-first violation check (per `docs/history/V0.2-PLAN.md` Phase 2 verification).
 
       **Branch — coder completed.** When coder's Task call returns and the source has
       been written, run the test suite one final time. If all tests pass, emit:

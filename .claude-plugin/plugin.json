@@ -1,10 +1,23 @@
 {
   "name": "build-fleet",
   "version": "0.5.1",
-  "description": "Spec-driven multi-agent software house. Ships product-owner, architect, coder, qa, devops, scribe, and classifier subagents that execute a deterministic SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF state machine. v0.4 adds a product tier above the feature loop: a PLAN → PLAN_REVIEW → PLAN_FINALIZE → DEVELOPING machine where the plan is interrogated (not survival-voted) and ratified by a human, features inherit the binding stack-of-record + a per-feature intent, and a DEVELOPING loop advances the backlog. REVIEW and PLAN_REVIEW run as Claude Code dynamic workflows; BUILD can fan out across partitioned coders. Hook-enforced gates, bounded review cycles, first-class human escalation/ratification, headless-mode support for orchestrators (Hermes / Agent SDK). v0.5 adds a parallel troubleshoot-fix bug lane (REPORT → REPRODUCE → DIAGNOSE → FIX → VERIFY → HANDOFF) whose contract is a diagnosis.md, not a spec: an inviolable reproducing-test gate, a CONFIRMED source-write unlock, an inverted-review.js diagnosis-confirmation workflow, and severity-driven tempo with a sev0 hotfix fast-path.",
+  "description": "Spec-driven multi-agent software house: product-owner, architect, coder, qa, devops, scribe, and classifier subagents executing a hook-gated SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF state machine, with a human-ratified product planning tier and a reproducing-test-gated bug lane. Deterministic gates, bounded review cycles, first-class human escalation, headless orchestrator support.",
   "author": {
     "name": "Ray Car",
     "email": "raycar@gmail.com"
   },
+  "homepage": "https://github.com/rocar/build-fleet",
+  "repository": "https://github.com/rocar/build-fleet",
+  "keywords": [
+    "spec-driven",
+    "multi-agent",
+    "workflows",
+    "code-review",
+    "tdd",
+    "orchestration",
+    "product-planning",
+    "bug-fix",
+    "troubleshooting"
+  ],
   "license": "MIT"
 }

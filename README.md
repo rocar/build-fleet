@@ -173,6 +173,15 @@ memory layer under `.sdd/`.
   command refuses with `BUILD_FLEET_REFUSE: workflow runtime unavailable` (exit 3).
 - For **headless** callers, `Workflow` must be in the session's allowed tools,
   e.g. `claude -p --allowedTools "Workflow,Read,Edit,Write,Bash,Agent,Task" …`.
+- **`jq`** — required by every gate hook and by `scripts/status-snapshot.sh`
+  (`brew install jq` / `apt install jq`).
+- **`bash`** — all hooks are bash scripts. On Windows this means **Git Bash or
+  WSL**; without bash the gate layer silently does not run.
+- **`git`** — the target repo must be a git repository (gates, counterfactual
+  verification, and the bug lane all assume it).
+
+**Release channel.** `main` always equals the latest tag — installing from
+`main` installs the latest release.
 
 ---
 

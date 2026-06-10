@@ -1,15 +1,13 @@
 {
   "name": "build-fleet",
   "owner": {
-    "name": "Ray Law",
+    "name": "Ray Car",
     "url": "https://github.com/rocar"
   },
   "plugins": [
     {
       "name": "build-fleet",
       "source": "./",
-      "description": "Spec-driven multi-agent software house. A product tier (PLAN → PLAN_REVIEW → PLAN_FINALIZE → DEVELOPING, human-ratified) above a per-feature SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF machine. Features inherit a binding stack-of-record + per-feature intent; hook-enforced gates, dynamic-workflow adversarial review + plan interrogation, tests-first fan-out builds, three-tier routing, a backlog DEVELOPING loop, and headless orchestrator support. v0.5 adds a parallel troubleshoot-fix bug lane (REPORT → REPRODUCE → DIAGNOSE → FIX → VERIFY → HANDOFF) — diagnosis.md is the contract, with an inviolable reproducing-test gate, an inverted-review.js confirmation workflow, and a sev0 hotfix fast-path.",
-      "version": "0.5.1",
       "license": "MIT",
       "category": "development",
       "keywords": [

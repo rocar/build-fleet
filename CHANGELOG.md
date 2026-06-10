@@ -19,7 +19,7 @@ All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https:
   *unknown-cause* bugs, additive to the forward feature machine (a repo that never files a bug is
   byte-for-byte unchanged). Phases: `REPORT → REPRODUCE → DIAGNOSE → FIX → VERIFY → HANDOFF`. Its
   contract is a new **`diagnosis.md`** artifact (STATUS `REPORTED|REPRODUCING|DIAGNOSED|CONFIRMED|FIXED`),
-  not a spec. Spec of record: `.sdd/troubleshoot-fix/`.
+  not a spec. Spec of record: `docs/v0.5/troubleshoot-fix-spec/`.
 - **Artifact + validator (M0).** `skills/sdd-diagnosis-template` (the diagnosis.md contract);
   `hooks/scripts/validate-diagnosis-status.sh` (PostToolUse, keyed on `basename==diagnosis.md`; no
   cross-fire with the spec validator). `_lib.sh` gains `read_diagnosis_status`, `resolve_lane`,
@@ -57,6 +57,58 @@ All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https:
   precondition for ever reaching CONFIRMED, so the lane deadlocked at REPRODUCE. Taught the bug
   branch to permit `tests/` (mirroring `require-reproducing-test`). Caught by the new planted-bug
   smoke test; now a regression case in `block-source-before-finalized.test.sh`.
+
+## [0.4.0] — 2026-06-05
+
+> **Note:** 0.3.0 was never released. The ROADMAP's v0.3x items (status export,
+> orchestrator-mediated human intervention) ship in later versions; the plugin version
+> jumps 0.2.1 → 0.4.0.
+
+### Added
+
+- **Product tier (M0)** — a reserved `.sdd/_product/` namespace (vision, phased backlog,
+  `STACK.md`, product ADRs) inherited read-only by every feature. The **binding
+  stack-of-record** prevents two features from picking conflicting stacks; greenfield
+  ratifies a fresh stack, brownfield's observed baseline binds while the forward stack
+  stays `PROVISIONAL`. Entry point: `/build-fleet:new-product`. The tier is optional and
+  additive — a repo with no `.sdd/_product/` behaves exactly as before.
+- **PLAN state machine (M3.1).** `PLAN → PLAN_REVIEW → PLAN_FINALIZE → DEVELOPING`,
+  mirroring the feature machine one level up with an inverted temperament. New
+  `workflows/plan-review.js` runs PLAN_REVIEW as **interrogation, not a survival vote**
+  — product-owner / architect / qa surface questions, risks, and gaps (including intent
+  quality); nothing is auto-killed and it never auto-escalates.
+- **Human ratification gate.** `/build-fleet:plan-finalize` **never auto-passes** — even
+  with zero findings. Bare invocation is a dry-run; `ratify` flips state only with zero
+  open blockers; `ratify force` overrides them on the record. It never promotes a
+  `PROVISIONAL` stack entry.
+- **DEVELOPING loop (M2 + M3.2).** A successful `/build-fleet:handoff` flips the
+  feature's backlog row to DONE and **clears `.sdd/ACTIVE`**; the next unblocked feature
+  is re-resolved live by the new deterministic resolver `scripts/next-feature.sh`
+  (with its own test harness) — never a cached index.
+- **Per-feature backlog intent (M3.3)** — a 1–3 line scope sketch (what + scope boundary
+  + non-goals) inherited by `/build-fleet:new-feature` and reviewed at PLAN_REVIEW;
+  seeds the spec so the PO realizes the plan's intent instead of re-guessing from the slug.
+- **`/build-fleet:next-feature` (M4)** — optional advancement convenience: resolves +
+  gates the next backlog feature and emits a dispatch signal. It surfaces, it doesn't
+  auto-advance.
+- **Product memory (M3.1.1).** Ratification (and `/build-fleet:product-memory`) writes a
+  delimited `<!-- BEGIN/END build-fleet:product -->` block into the repo-root `CLAUDE.md`
+  — non-clobbering (everything outside the markers is preserved) and idempotent.
+- **Dynamic skill routing to BUILD roles (M1)** — new `skills/skill-routing` skill +
+  classifier manifest rules route domain skills to coder/qa; routed skills are inherited
+  by product-tier features.
+- **New commands:** `/build-fleet:new-product`, `/build-fleet:plan-review`,
+  `/build-fleet:plan-finalize`, `/build-fleet:next-feature`, `/build-fleet:product-memory`.
+- **New hook:** `hooks/scripts/validate-backlog-status.sh` (validates backlog.md edits).
+- **Scribe `workspace_dir` (M3.0)** — workflow state mutations can now target either
+  `.sdd/<feature>/` or `.sdd/_product/`.
+
+### Fixed
+
+- **Hooks resolve `.sdd` paths under a symlinked cwd.**
+- **Product-stack inheritance keystone hardened (M0)** — brownfield forward stack is
+  `PROVISIONAL`, the observed baseline binds.
+- **Skill-routing precision + dispatch parity (M1).**
 
 ## [0.2.1] — 2026-05-30
 
@@ -107,7 +159,7 @@ All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https:
 
 ### Decisions deferred to a future version
 
-- **`hooks/scripts/restrict-reviewer-writes.sh` is retained** despite V0.2-PLAN's "retire entirely" guidance. CHANGE_REVIEW (`/build-fleet:handoff`) is still v0.1-style and depends on the hook for its reviewer-write-boundary enforcement. The hook will be retired when CHANGE_REVIEW becomes a workflow.
+- **`hooks/scripts/restrict-reviewer-writes.sh` is retained** despite the v0.2 plan's (`docs/history/V0.2-PLAN.md`) "retire entirely" guidance. CHANGE_REVIEW (`/build-fleet:handoff`) is still v0.1-style and depends on the hook for its reviewer-write-boundary enforcement. The hook will be retired when CHANGE_REVIEW becomes a workflow.
 - **`check-review-written.sh` is similarly retained** for the same non-workflow CHANGE_REVIEW path.
 - Several **VERIFY-AT-M1 markers** remain in `workflows/review.js` and `workflows/deep-build.js` — runtime-global signature assumptions (`agent()`, `parallel()`, `phase()`) that will be confirmed against a real `/deep-research` raw script at first dispatch.
 
