@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: |
+          if command -v jq >/dev/null 2>&1; then
+            echo "jq already present: $(jq --version)"
+          elif [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y jq
+          else
+            brew install jq
+          fi
+      - name: Run test suites + smoke
+        run: bash scripts/run-tests.sh
+
+  release-channel:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Assert plugin.json version matches the latest v* tag
+        run: |
+          version=$(jq -r .version .claude-plugin/plugin.json)
+          tag=$(git describe --tags --abbrev=0 --match 'v*')
+          echo "plugin.json version: $version / latest tag: $tag"
+          if [ "v$version" != "$tag" ]; then
+            echo "release-channel drift: plugin.json says $version but the latest tag is $tag" >&2
+            exit 1
+          fi

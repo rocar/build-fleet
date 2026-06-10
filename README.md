@@ -605,6 +605,50 @@ automatically by the commands and agents. Read it at
 
 ---
 
+## Development
+
+Run the full test gauntlet (every hook suite, every `scripts/` suite, and the
+planted-bug smoke test) from the repo root:
+
+```bash
+bash scripts/run-tests.sh
+```
+
+It prints a per-suite breakdown, ends with a `suites: N, failed: M` summary
+line, and exits non-zero if any suite failed. CI (`.github/workflows/ci.yml`)
+runs the same entrypoint on ubuntu (bash 5) and macOS (bash 3.2) for every
+push and PR; a `release-channel` job on `main` additionally asserts that
+`.claude-plugin/plugin.json`'s version matches the latest `v*` tag.
+
+Harness conventions — every `*.test.sh` suite follows the same shape (see
+`hooks/scripts/block-source-before-finalized.test.sh` for the reference
+pattern):
+
+- **mktemp fixture repo.** Each suite builds throwaway project trees under
+  `mktemp -d` (with `.sdd/ACTIVE`, `PROGRESS.md`, `spec.md`/`diagnosis.md` as
+  the case requires) and removes them on EXIT — never run against real repo
+  state.
+- **stdin JSON matching the real hook contract.** Hooks are invoked exactly as
+  Claude Code invokes them: the tool-call payload
+  (`{"tool_input":{"file_path":…}}`; SubagentStop's `{"agent_type":…}`) is
+  piped on stdin.
+- **`CLAUDE_PROJECT_DIR` set per case.** Hooks anchor relative `.sdd/`
+  resolution there; suites point it at the fixture and include a drifted-cwd
+  case where relevant.
+- **Assert exit code, plus stderr where the message is load-bearing.** Exit 0
+  = allow, exit 2 = block-with-feedback; fail-closed hardening cases (missing
+  jq, malformed JSON, unreadable state) must exit 2, never 1.
+- **Summary line + exit status.** Each suite ends with `passed=N failed=M` and
+  exits non-zero on any failure so `run-tests.sh` can aggregate. Keep
+  everything bash-3.2 compatible (macOS `/bin/bash`).
+
+The end-to-end smoke walkthrough for the bug lane lives at
+`docs/v0.5/smoke/` — `smoke.sh` is the scriptable deterministic backbone
+(invoked by `run-tests.sh`), and `WALKTHROUGH.md` drives the LLM-dependent
+parts interactively with `claude --plugin-dir .`.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
