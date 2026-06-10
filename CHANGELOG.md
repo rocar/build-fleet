@@ -2,6 +2,15 @@
 
 All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https://keepachangelog.com/) conventions; semver bumps track the plugin's `version` in `.claude-plugin/plugin.json`.
 
+## [0.5.1] — 2026-06-10
+
+### Added
+
+- **MIT license.** `LICENSE` file at the repo root, `license` fields in `plugin.json` and the
+  marketplace entry, a License section in the README, and SPDX headers on the workflow scripts.
+  Every prior tag shipped without a license (all-rights-reserved by default); v0.5.1 is the first
+  legally adoptable release. No functional changes.
+
 ## [0.5.0] — 2026-06-05
 
 ### Added

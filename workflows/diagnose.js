@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // workflows/diagnose.js
 //
 // build-fleet v0.5 (troubleshoot-fix lane) — DIAGNOSE confirmation workflow.

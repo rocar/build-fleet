@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 // workflows/hello.js
 //
 // M0 EMPIRICAL PROBE — plugin-shipped workflow discovery test.

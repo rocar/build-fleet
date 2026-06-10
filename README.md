@@ -594,3 +594,9 @@ automatically by the commands and agents. Read it at
 - Advancement is surfaced, never forced — the human/orchestrator chooses.
 - Human escalation (and human ratification) is a first-class outcome, not a failure.
 
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
