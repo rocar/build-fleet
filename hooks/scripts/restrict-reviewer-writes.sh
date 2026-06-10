@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# PreToolUse (Write|Edit): during REVIEW and CHANGE_REVIEW phases, restrict
-# all writes to the active feature's .sdd/<slug>/ workspace. Implements the
-# phase-based interpretation of "reviewers may not write outside .sdd/" —
+# PreToolUse (Write|Edit|NotebookEdit): during REVIEW and CHANGE_REVIEW phases,
+# restrict all writes to the active feature's .sdd/<slug>/ workspace. Implements
+# the phase-based interpretation of "reviewers may not write outside .sdd/" —
 # see the build plan's Resolved Decision 1 for rationale.
 set -euo pipefail
+# Fail CLOSED on any unexpected runtime error: exit 1 is non-blocking per the
+# hooks contract (audit §3.5). Every deliberate allow below is an explicit exit 0.
+trap 'echo "build-fleet: gate script errored unexpectedly — failing closed" >&2; exit 2' ERR
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
@@ -29,7 +32,7 @@ case "$phase" in
   *) exit 0 ;;
 esac
 
-file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+file_path=$(extract_file_path "$input")
 [ -n "$file_path" ] || exit 0
 
 if path_in_active_sdd "$file_path" "$slug"; then

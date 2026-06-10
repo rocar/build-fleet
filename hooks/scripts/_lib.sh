@@ -1,15 +1,39 @@
 #!/usr/bin/env bash
-# Shared helpers for build-fleet hooks. Source from each script. Hooks run
-# with the target project's cwd, so all paths below are relative to cwd.
+# Shared helpers for build-fleet hooks. Source from each script. All paths
+# below are relative to the project root, anchored just below.
 
-# Require jq for JSON parsing. If absent, exit 0 (allow) and warn — we do
-# not want to block work because of a missing tool. A sourced `exit` ends
-# the calling script process, which is the intent here.
+# Anchor every relative path (.sdd/ACTIVE, PROGRESS.md, …) at the project
+# root: hooks can be spawned with a drifted cwd, and an empty resolve_active
+# would silently disable every gate (audit §3.3). Claude Code exports
+# CLAUDE_PROJECT_DIR; when it is unset (tests, direct invocation) stay in cwd.
+# A sourced `exit` ends the calling hook process, which is the intent.
+cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || exit 0
+
+# Require jq for JSON parsing. Fail CLOSED while a feature is active: a gate
+# silently converted to a no-op by a missing tool is the audit §3.4 fail-open
+# hole. With no active feature there is nothing to guard — allow (exit 0) so
+# bootstrap and unrelated sessions never block on tooling.
 require_jq() {
   if ! command -v jq >/dev/null 2>&1; then
-    echo "build-fleet: jq not found; hook checks disabled. Install jq to enable enforcement." >&2
+    local slug
+    slug=$(resolve_active) || {
+      echo "build-fleet: jq not found and .sdd/ACTIVE is unreadable — failing closed. Install jq (brew install jq / apt install jq)." >&2
+      exit 2
+    }
+    if [ -n "$slug" ]; then
+      echo "build-fleet: jq is required by the gate hooks while a feature is active. Install jq (brew install jq / apt install jq) to proceed." >&2
+      exit 2
+    fi
+    echo "build-fleet: jq not found; no feature is active so hook checks are skipped. Install jq (brew install jq / apt install jq) to enable enforcement." >&2
     exit 0
   fi
+}
+
+# Echo the file path a Write/Edit/NotebookEdit tool call targets, or empty.
+# NotebookEdit carries notebook_path instead of file_path (audit §3.2).
+# Usage: file_path=$(extract_file_path "$input")
+extract_file_path() {
+  printf '%s' "$1" | jq -r '.tool_input.notebook_path // .tool_input.file_path // empty'
 }
 
 # Echo the active feature slug, or empty string if none.
@@ -118,6 +142,9 @@ tests_exist() {
 # path (e.g. macOS /tmp -> /private/tmp) while $PWD holds the symlinked form.
 path_in_sdd() {
   local p="$1"
+  # Reject any `..` segment before the prefix match — `.sdd/../src/x` must
+  # never count as inside .sdd/ (audit §3.1 path traversal).
+  case "$p" in */../*|../*|*/..|..) return 1 ;; esac
   local phys; phys=$(pwd -P 2>/dev/null)
   case "$p" in
     .sdd/*|./.sdd/*|"$PWD/.sdd/"*|"$phys/.sdd/"*) return 0 ;;
@@ -130,6 +157,8 @@ path_in_sdd() {
 # Same symlinked-vs-physical cwd handling as path_in_sdd.
 path_in_active_sdd() {
   local p="$1" slug="$2"
+  # Reject any `..` segment before the prefix match (audit §3.1).
+  case "$p" in */../*|../*|*/..|..) return 1 ;; esac
   local phys; phys=$(pwd -P 2>/dev/null)
   case "$p" in
     .sdd/"${slug}"/*|./.sdd/"${slug}"/*|"$PWD/.sdd/${slug}/"*|"$phys/.sdd/${slug}/"*) return 0 ;;
@@ -142,6 +171,8 @@ path_in_active_sdd() {
 # symlinked/physical-cwd handling. Usage: path_in_tests <file_path>
 path_in_tests() {
   local p="$1"
+  # Reject any `..` segment before the prefix match (audit §3.1).
+  case "$p" in */../*|../*|*/..|..) return 1 ;; esac
   local phys; phys=$(pwd -P 2>/dev/null)
   case "$p" in
     tests/*|./tests/*|"$PWD/tests/"*|"$phys/tests/"*) return 0 ;;

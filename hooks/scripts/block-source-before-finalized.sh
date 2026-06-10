@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# PreToolUse (Write|Edit): block writes outside .sdd/ unless the active
-# feature's spec.md STATUS is FINALIZED.
+# PreToolUse (Write|Edit|NotebookEdit): while a feature is active, block ALL
+# writes outside .sdd/ — source, docs, config, anything — until the feature's
+# spec.md STATUS is FINALIZED (or, for an active bug, block writes outside
+# .sdd/ and tests/ until diagnosis.md is CONFIRMED).
 set -euo pipefail
+# Fail CLOSED on any unexpected runtime error: exit 1 is non-blocking per the
+# hooks contract (audit §3.5). Every deliberate allow below is an explicit exit 0.
+trap 'echo "build-fleet: gate script errored unexpectedly — failing closed" >&2; exit 2' ERR
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
@@ -15,9 +20,10 @@ slug=$(resolve_active)
 # No active feature → allow. Bootstrap-friendly.
 [ -n "$slug" ] || exit 0
 
-file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+file_path=$(extract_file_path "$input")
 
-# Tool call without a file_path (e.g. Bash) → allow.
+# Tool call without a file/notebook path → allow (Bash has its own gate:
+# guard-bash-writes.sh).
 [ -n "$file_path" ] || exit 0
 
 # Anything inside .sdd/ is always permitted — that's the workspace.

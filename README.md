@@ -158,7 +158,7 @@ either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field).
 `plan-review.js` (product PLAN_REVIEW), `deep-build.js` (fan-out BUILD), and
 `diagnose.js` (bug-lane root-cause confirmation — the survival vote, inverted).
 Plus a deterministic shared resolver (`scripts/next-feature.sh`, with an 18-case
-test harness), seven craft skills, nine gate-enforcing hooks, and the shared
+test harness), seven craft skills, ten gate-enforcing hooks, and the shared
 memory layer under `.sdd/`.
 
 ---

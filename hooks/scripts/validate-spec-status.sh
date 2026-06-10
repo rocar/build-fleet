@@ -3,6 +3,9 @@
 # the STATUS line is present and valid, and that the required section
 # headings from the sdd-spec-template skill are present.
 set -euo pipefail
+# Fail CLOSED on any unexpected runtime error (audit §3.5); deliberate allows
+# below are explicit exit 0.
+trap 'echo "build-fleet: gate script errored unexpectedly — failing closed" >&2; exit 2' ERR
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
@@ -11,7 +14,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 require_jq
 
 input=$(cat)
-file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+file_path=$(extract_file_path "$input")
 [ -n "$file_path" ] || exit 0
 
 base=$(basename "$file_path")

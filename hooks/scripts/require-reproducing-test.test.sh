@@ -22,7 +22,7 @@ new_proj() { local p="$work/$1"; mkdir -p "$p/.sdd"; printf '%s' "$p"; }
 # check <name> <proj> <file_path> <want_rc>  (hook runs with cwd=proj)
 check() {
   local name="$1" proj="$2" fp="$3" want="$4" rc=0
-  ( cd "$proj" && printf '{"tool_input":{"file_path":"%s"}}' "$fp" | bash "$HOOK" >/dev/null 2>&1 ); rc=$?
+  ( cd "$proj" && printf '{"tool_input":{"file_path":"%s"}}' "$fp" | CLAUDE_PROJECT_DIR="$proj" bash "$HOOK" >/dev/null 2>&1 ); rc=$?
   if [ "$rc" -eq "$want" ]; then pass=$((pass+1)); printf 'ok   %-34s rc=%s\n' "$name" "$rc"
   else fail=$((fail+1)); printf 'FAIL %-34s want=%s got=%s\n' "$name" "$want" "$rc"; fi
 }
@@ -70,6 +70,22 @@ check "no-active-item" "$p" "src/app.py" 0
 p=$(new_proj p9); printf 'b1\n' > "$p/.sdd/ACTIVE"; mkdir -p "$p/.sdd/b1"; dbody DIAGNOSED > "$p/.sdd/b1/diagnosis.md"
 rc=0; ( cd "$p" && printf '{"tool_input":{}}' | bash "$HOOK" >/dev/null 2>&1 ); rc=$?
 if [ "$rc" -eq 0 ]; then pass=$((pass+1)); printf 'ok   %-34s rc=0\n' "no-file_path"; else fail=$((fail+1)); printf 'FAIL %-34s got=%s\n' "no-file_path" "$rc"; fi
+
+# --- §3.1: path traversal must never satisfy the .sdd/ or tests/ prefix match ---
+p=$(new_proj t1); printf 'b1\n' > "$p/.sdd/ACTIVE"; mkdir -p "$p/.sdd/b1"; dbody REPORTED > "$p/.sdd/b1/diagnosis.md"
+check "traversal-tests-dotdot-blocked" "$p" "tests/../src/app.py" 2
+check "traversal-sdd-dotdot-blocked" "$p" ".sdd/../src/app.py" 2
+check "traversal-bare-dotdot-blocked" "$p" ".." 2
+check "traversal-sdd-trailing-dotdot" "$p" ".sdd/.." 2
+
+# --- §3.5: unexpected runtime error → fail CLOSED (exit 2, not 1) ---
+# Fault injection: an unreadable .sdd/ACTIVE makes resolve_active's pipeline fail.
+p=$(new_proj e1); printf 'b1\n' > "$p/.sdd/ACTIVE"; mkdir -p "$p/.sdd/b1"; dbody REPORTED > "$p/.sdd/b1/diagnosis.md"
+chmod 000 "$p/.sdd/ACTIVE"
+rc=0; ( cd "$p" && printf '{"tool_input":{"file_path":"src/app.py"}}' | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" >/dev/null 2>&1 ); rc=$?
+chmod 644 "$p/.sdd/ACTIVE"
+if [ "$rc" -eq 2 ]; then pass=$((pass+1)); printf 'ok   %-34s rc=2\n' "unreadable-ACTIVE-fails-closed"
+else fail=$((fail+1)); printf 'FAIL %-34s want=2 got=%s\n' "unreadable-ACTIVE-fails-closed" "$rc"; fi
 
 echo "-----"
 echo "passed=$pass failed=$fail"

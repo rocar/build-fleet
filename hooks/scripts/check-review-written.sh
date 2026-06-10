@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# SubagentStop: during REVIEW or CHANGE_REVIEW, a reviewer subagent must
-# have appended its Cycle <N> block to REVIEW.md attributed to its role
-# before it stops. The hook payload's subagent-identity field name varies
-# across Claude Code versions — we probe a few.
+# SubagentStop (matcher scopes this to the reviewer roles in hooks.json):
+# during REVIEW or CHANGE_REVIEW, a reviewer subagent must have appended its
+# Cycle <N> block to REVIEW.md attributed to its role before it stops. The
+# documented payload field is agent_type; one legacy fallback is kept for
+# older Claude Code versions.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,13 +38,21 @@ case "$phase" in
   *) exit 0 ;;
 esac
 
-# Try several keys for the subagent identity. Empty if none present.
+# Cycle counters come from PROGRESS.md free text — they feed a grep pattern
+# below, so refuse to enforce on a non-integer value rather than wedging the
+# subagent against a pattern that can never match (audit §4 hooks minor).
+case "$cycle" in
+  ''|*[!0-9]*)
+    echo "build-fleet: PROGRESS.md cycle counter for phase ${phase} is not an integer ('${cycle}') — review-written check skipped." >&2
+    exit 0
+    ;;
+esac
+
+# Subagent identity: agent_type is the documented field; subagent_type is a
+# legacy fallback. Empty if neither is present.
 agent=$(printf '%s' "$input" | jq -r '
-  .subagent_type
-  // .agent_type
-  // .agent_name
-  // .subagent_name
-  // .agent
+  .agent_type
+  // .subagent_type
   // empty
 ')
 

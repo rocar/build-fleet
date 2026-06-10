@@ -9,6 +9,9 @@
 # (severity may skip the diagnosis-confirmation workflow's rigor, never this gate).
 # A forward feature (no diagnosis.md) is unaffected: resolve_lane==feature → exit 0.
 set -euo pipefail
+# Fail CLOSED on any unexpected runtime error: exit 1 is non-blocking per the
+# hooks contract (audit §3.5). Every deliberate allow below is an explicit exit 0.
+trap 'echo "build-fleet: gate script errored unexpectedly — failing closed" >&2; exit 2' ERR
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
@@ -26,9 +29,10 @@ slug=$(resolve_active)
 # handles the forward FINALIZED gate.
 [ "$(resolve_lane "$slug")" = "bug" ] || exit 0
 
-file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+file_path=$(extract_file_path "$input")
 
-# Tool call without a file_path (e.g. Bash) → allow.
+# Tool call without a file/notebook path → allow (Bash has its own gate:
+# guard-bash-writes.sh).
 [ -n "$file_path" ] || exit 0
 
 # Workspace (.sdd/) and test (tests/) writes are always permitted.
