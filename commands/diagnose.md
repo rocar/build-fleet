@@ -67,9 +67,13 @@ The `Workflow` tool must be available (Claude Code v2.1.154+, workflows enabled;
 
 8. **Pick the new cycle.** `new_cycle = CYCLE + 1`.
 
-9. **Drop the workflow-in-flight marker.** Write `.sdd/<slug>/.workflow-in-flight` with one
-   iso8601 line. The scribe deletes it in the workflow's final phase. **Cleanup obligation:** if
-   you create the marker and the `Workflow` tool then fails to launch, delete the marker before exiting.
+9. **Compose the run id and drop the workflow-in-flight marker.** Compose a run id:
+   `diagnose-<slug>-c<new_cycle>-<iso8601 now>` (the same `now` you pass in step 11). Write
+   `.sdd/<slug>/.workflow-in-flight` containing exactly that run id as its single line. The
+   marker is **owned by this run**: the scribe deletes it in the workflow's final phase only if
+   its content still matches the envelope's `run_id`. **Cleanup obligation:** if you create the
+   marker and the `Workflow` tool then fails to launch, delete the marker (after verifying its
+   content still matches your run id) before exiting.
 
 10. **Emit the cost preview** (parse the `@cost-ceiling` header comment of
     `${CLAUDE_PLUGIN_ROOT}/workflows/diagnose.js`):
@@ -79,19 +83,34 @@ The `Workflow` tool must be available (Claude Code v2.1.154+, workflows enabled;
 
 11. **Invoke the Workflow tool** with:
     - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/diagnose.js`
-    - `args`: `{ "slug": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>" }`
+    - `args`: `{ "slug": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step 9>" }`
 
 12. **Emit the launch line** once the tool returns:
     ```
     BUILD_FLEET_WORKFLOW_LAUNCHED: {"runId":"<id>","transcriptDir":"<path>","status":"async_launched","slug":"<slug>","cycle":<N>,"workflow":"diagnose"}
     ```
 
-13. **Report and exit.** The workflow runs in the background (`/workflows` shows progress;
+13. **Verify the run is alive (marker ownership).** Poll the launched run once (`TaskGet` on
+    the returned task). If the run has already died (errored/cancelled) before any scribe ran,
+    delete `.sdd/<slug>/.workflow-in-flight` yourself — **only if its content still matches
+    your run id** — then report the failure. Orchestrators polling later must apply the same
+    rule: dead run + marker content matching this run id → delete the marker.
+
+14. **Report and exit.** The workflow runs in the background (`/workflows` shows progress;
     `/build-fleet:status` shows the verdict on completion). Next legal command by verdict:
     - `confirmed` → **`/build-fleet:fix`** — the FIX gate reads the confirmed verdict, flips
       `diagnosis.md` → `CONFIRMED` + `PHASE` → `FIX`, then implements the fix.
     - `refuted` → revise `diagnosis.md`'s hypothesis, then re-run `/build-fleet:diagnose`.
     - `escalate` → human action on the `ESCALATION.md` the workflow's scribe writes.
+    - `incomplete` / `invalid-args` → a transient agent fault or bad dispatch args; PHASE/CYCLE
+      are unchanged and nothing was written — re-run `/build-fleet:diagnose` (or fix the
+      dispatch args).
+
+    **Scribe-apply failure is a hard failure.** If the completed run's return object carries
+    `scribe_apply: "failed"`, the scribe could not write state even after a retry: REVIEW.md/
+    PROGRESS.md did **not** land and the marker may remain (delete it if its content matches
+    your run id). Whoever reads that result must report the run as failed with its
+    `scribe_error` — never treat the verdict as applied or advance to `/build-fleet:fix`.
 
 ## The CONFIRMED flip is the FIX gate's job (not this command)
 

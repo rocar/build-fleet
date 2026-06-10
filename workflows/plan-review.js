@@ -38,23 +38,41 @@ export const meta = {
 };
 
 // ---------- args ----------
-// { product: "<slug>", cycle: <int>, now: "<iso8601>" }
+// { product: "<slug>", cycle: <int>, now: "<iso8601>", run_id: "<marker token>" }
 // `now` is supplied by the command because the script cannot call Date.
+// `run_id` is the token the command wrote into .sdd/_product/.workflow-in-flight
+// at dispatch; the scribe deletes that marker only when its content matches.
 
 const A = typeof args === "string" ? JSON.parse(args) : (args || {});
 
 const product = A.product;
 const cycle = typeof A.cycle === "string" ? parseInt(A.cycle, 10) : A.cycle;
-const now = A.now || "UNKNOWN_TIME";
-
-if (!product || typeof cycle !== "number" || Number.isNaN(cycle)) {
-  throw new Error(
-    "BUILD_FLEET_WORKFLOW_ERROR: args must include {product, cycle, now}. " +
-    "Received args=" + JSON.stringify(args) + " (typeof=" + (typeof args) + ")"
-  );
-}
+const now = A.now;
+const runId = A.run_id || null;
 
 const WORKSPACE = ".sdd/_product/";
+
+// Validation failures are NEVER a bare throw: a throw would strand the
+// .workflow-in-flight marker the command dropped (this script has no filesystem
+// access — only the scribe can delete it). Dispatch a minimal scribe cleanup
+// envelope, then return a structured invalid-args verdict for the orchestrator.
+const argErrors = [];
+if (!product || typeof product !== "string") argErrors.push("product: required non-empty string");
+if (typeof cycle !== "number" || Number.isNaN(cycle)) argErrors.push("cycle: required integer");
+if (!now || typeof now !== "string") argErrors.push("now: required iso8601 string (the dispatching command supplies it — the script cannot call Date)");
+if (argErrors.length > 0) {
+  log(`Invalid args: ${argErrors.join("; ")}. No state advanced.`);
+  if (product && typeof product === "string") {
+    await applyScribe(cleanupEnvelope(product, typeof now === "string" ? now : null, runId));
+  }
+  return {
+    verdict: "invalid-args",
+    errors: argErrors,
+    note: product && typeof product === "string"
+      ? "Marker cleanup dispatched; PHASE/CYCLE unchanged. Fix the dispatch args and re-run /build-fleet:plan-review."
+      : "product unknown — the dispatching command must delete .sdd/_product/.workflow-in-flight itself (only if its content matches the run_id it wrote).",
+  };
+}
 
 // ---------- schema (structured interrogation output) ----------
 //
@@ -119,13 +137,15 @@ for (const r of reports) {
     // carries ONLY `UPDATED` leaves PHASE + CYCLE untouched (the scribe replaces
     // in place, key by key) while still triggering marker removal. Mirrors how
     // review.js always reaches its scribe on the missing-payload path.
-    await applyScribe(cleanupEnvelope(product, now));
+    const scribeResult = await applyScribe(cleanupEnvelope(product, now, runId));
     return {
       verdict: "incomplete",
       reason: "missing-interrogator-payload",
       role: r.role,
       product,
       cycle,
+      scribe_apply: scribeResult.ok ? "applied" : "failed",
+      scribe_error: scribeResult.error,
       note: "No interrogation report written; PHASE/CYCLE unchanged. Re-run /build-fleet:plan-review.",
     };
   }
@@ -149,7 +169,7 @@ log(
 phase("Apply");
 
 const envelope = buildEnvelope({ product, cycle, now, reports, allFindings, counts });
-await applyScribe(envelope);
+const scribeResult = await applyScribe(envelope);
 
 return {
   verdict: "interrogated",
@@ -157,8 +177,12 @@ return {
   cycle,
   findings: allFindings.length,
   open_blockers: counts.blocker,
-  next: envelope.next_legal_commands,
-  note: counts.blocker > 0
+  scribe_apply: scribeResult.ok ? "applied" : "failed",
+  scribe_error: scribeResult.error,
+  next: scribeResult.ok ? envelope.next_legal_commands : [],
+  note: !scribeResult.ok
+    ? "SCRIBE APPLY FAILED after retry — the interrogation report/PROGRESS did NOT land and the .workflow-in-flight marker may remain. The dispatching command must report failure, not success."
+    : counts.blocker > 0
     ? `${counts.blocker} blocker-severity finding(s) open. /build-fleet:plan-finalize will require 'ratify force' to override.`
     : "No blocker-severity findings. /build-fleet:plan-finalize ratify will pass.",
 };
@@ -311,6 +335,7 @@ function buildEnvelope({ product, cycle, now, reports, allFindings, counts }) {
   return {
     build_fleet_version: "0.2",
     feature: product, // scribe uses this for SCRIBE_OK + any ESCALATION title; carries the product slug
+    run_id: runId,
     workspace_dir: WORKSPACE,
     phase: "PLAN_REVIEW",
     cycle,
@@ -327,35 +352,71 @@ function buildEnvelope({ product, cycle, now, reports, allFindings, counts }) {
   };
 }
 
-// Minimal envelope for the incomplete-interrogation path: removes the workflow
-// marker and refreshes UPDATED only. state_delta deliberately OMITS PHASE/CYCLE so
-// the scribe leaves them at their pre-run values (it only replaces keys present).
-function cleanupEnvelope(product, now) {
+// Minimal envelope for the incomplete-interrogation/invalid-args paths: removes
+// the workflow marker (ownership-checked against run_id) and refreshes UPDATED
+// only. state_delta deliberately OMITS PHASE/CYCLE so the scribe leaves them at
+// their pre-run values (it only replaces keys present).
+function cleanupEnvelope(product, now, runId) {
   return {
     build_fleet_version: "0.2",
     feature: product,
+    run_id: runId,
     workspace_dir: WORKSPACE,
     phase: "PLAN_REVIEW",
     cycle: 0,
     verdict: "incomplete",
     surviving_concerns: [],
     review_entries: [], // nothing appended to REVIEW.md
-    state_delta: { UPDATED: now }, // PHASE + CYCLE intentionally preserved
+    state_delta: now ? { UPDATED: now } : {}, // PHASE + CYCLE intentionally preserved
     next_legal_commands: ["/build-fleet:plan-review"],
     escalation_payload: null,
   };
 }
 
+// ---------- verified scribe application ----------
+
+const SCRIBE_RESULT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ok", "error"],
+  properties: {
+    ok: { type: "boolean" },
+    error: { type: ["string", "null"] },
+  },
+};
+
+// The scribe returns a structured {ok, error} aligned with its
+// SCRIBE_OK:/SCRIBE_ERROR: contract (agents/scribe.md). One retry on failure;
+// if still failing, the caller must surface scribe_apply: "failed" — state did
+// NOT land and the dispatching command must refuse/report, never claim success.
 async function applyScribe(envelope) {
-  return await agent(
-    `Apply this build-fleet workflow envelope to ${envelope.workspace_dir} exactly per your instructions in agents/scribe.md. Note the workspace_dir field — you write the PRODUCT workspace, not a feature dir.
+  let lastError = "scribe returned no usable result";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let res = null;
+    try {
+      res = await agent(
+        `Apply this build-fleet workflow envelope to ${envelope.workspace_dir} exactly per your instructions in agents/scribe.md. Note the workspace_dir field — you write the PRODUCT workspace, not a feature dir.
+
+Marker ownership: delete ${envelope.workspace_dir}.workflow-in-flight ONLY if its content matches the envelope's run_id${envelope.run_id ? ` ("${envelope.run_id}")` : " (null — legacy envelope: remove unconditionally, best-effort)"}. If the content differs, leave the marker — it belongs to another run.
+
+Return the structured object {ok, error}: ok=true when the WHOLE envelope landed (your SCRIBE_OK condition), with error=null. ok=false with error="<one-line reason>" otherwise (your SCRIBE_ERROR reason).
 
 ENVELOPE:
 ${JSON.stringify(envelope, null, 2)}`,
-    {
-      label: "scribe",
-      phase: "Apply",
-      agentType: "build-fleet:scribe",
+        {
+          label: attempt === 1 ? "scribe" : "scribe-retry",
+          phase: "Apply",
+          agentType: "build-fleet:scribe",
+          schema: SCRIBE_RESULT_SCHEMA,
+        }
+      );
+    } catch (e) {
+      res = null;
+      lastError = "scribe agent error: " + (e && e.message ? e.message : String(e));
     }
-  );
+    if (res && res.ok === true) return { ok: true, error: null };
+    if (res && typeof res.error === "string" && res.error) lastError = res.error;
+    log(`Scribe apply attempt ${attempt}/2 failed: ${lastError}`);
+  }
+  return { ok: false, error: lastError };
 }

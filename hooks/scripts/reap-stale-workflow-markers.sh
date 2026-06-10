@@ -12,13 +12,15 @@
 # subsequent non-workflow operations. This reaper runs on session stop and
 # removes any marker older than the staleness threshold.
 #
-# Threshold: 1 hour. Workflows that legitimately run longer than that are
-# possible but rare for build-fleet (M1 review ≈ 6 agents; M3 deep-build ≈
-# 12 agents; both well under the threshold in practice). False positives here
-# only re-enable hooks — no data loss.
+# Threshold: 15 minutes (lowered from 1 hour in the 2026-06 audit remediation,
+# §3.14 — markers now carry the dispatching run's id, the scribe deletes only
+# its own marker, and dispatch commands clean up dead runs themselves, so the
+# reaper is a last-resort backstop and can be aggressive). A false positive
+# only re-enables hooks — no data loss; a live run that outlasts the threshold
+# is protected by the run-id ownership check everywhere except this backstop.
 set -euo pipefail
 
-STALE_AFTER_SECONDS=3600
+STALE_AFTER_SECONDS=900
 
 # Operate from cwd (the target project where .sdd/ lives).
 [ -d .sdd ] || exit 0

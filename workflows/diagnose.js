@@ -12,7 +12,7 @@
 //
 // Reviewer roles are [architect, coder] (the product-owner drops out of the bug lane).
 // Evidence is the REPRODUCTION (the failing test / diagnosis.md reproduction steps), not
-// spec.md/acceptance.md — so the substantive-refutation citation regex is retargeted.
+// spec.md/acceptance.md — so the structured citation {file, locator} targets the reproduction.
 //
 // CONTRACT: docs/v0.2/CONTRACT.md (the scribe envelope is reused unchanged).
 //
@@ -33,22 +33,52 @@ export const meta = {
   ],
 };
 
-// ---------- args: { slug, cycle, now } ----------
+// ---------- args: { slug, cycle, now, run_id } ----------
+// `run_id` is the token the command wrote into .sdd/<slug>/.workflow-in-flight
+// at dispatch; the scribe deletes that marker only when its content matches.
 const A = typeof args === "string" ? JSON.parse(args) : (args || {});
 const slug = A.slug;
 const cycle = typeof A.cycle === "string" ? parseInt(A.cycle, 10) : A.cycle;
-const now = A.now || "UNKNOWN_TIME";
+const now = A.now;
+const runId = A.run_id || null;
 
-if (!slug || typeof cycle !== "number" || Number.isNaN(cycle)) {
-  throw new Error(
-    "BUILD_FLEET_WORKFLOW_ERROR: args must include {slug, cycle, now}. " +
-    "Received args=" + JSON.stringify(args) + " (typeof=" + (typeof args) + ")"
-  );
+// Validation failures are NEVER a bare throw: a throw would strand the
+// .workflow-in-flight marker the command dropped (this script has no filesystem
+// access — only the scribe can delete it). Dispatch a minimal scribe cleanup
+// envelope, then return a structured invalid-args verdict for the orchestrator.
+const argErrors = [];
+if (!slug || typeof slug !== "string") argErrors.push("slug: required non-empty string");
+if (typeof cycle !== "number" || Number.isNaN(cycle)) argErrors.push("cycle: required integer");
+if (!now || typeof now !== "string") argErrors.push("now: required iso8601 string (the dispatching command supplies it — the script cannot call Date)");
+if (argErrors.length > 0) {
+  log(`Invalid args: ${argErrors.join("; ")}. No state advanced.`);
+  if (slug && typeof slug === "string") {
+    await applyScribe(cleanupEnvelope(slug, typeof now === "string" ? now : null, runId));
+  }
+  return {
+    verdict: "invalid-args",
+    errors: argErrors,
+    note: slug && typeof slug === "string"
+      ? "Marker cleanup dispatched; PHASE/CYCLE unchanged. Fix the dispatch args and re-run /build-fleet:diagnose."
+      : "slug unknown — the dispatching command must delete .sdd/<slug>/.workflow-in-flight itself (only if its content matches the run_id it wrote).",
+  };
 }
 
 const ROLES = ["architect", "coder"];
 
 // ---------- schemas ----------
+
+// Structured citation shared by both phases: required (validated in JS) on any
+// "refute" verdict; omitted on "affirm".
+const CITATION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["file", "locator"],
+  properties: {
+    file: { type: "string" },
+    locator: { type: "string" },
+  },
+};
 
 // Phase 1: each reviewer attempts to refute the single recorded hypothesis.
 const REFUTE_SCHEMA = {
@@ -59,6 +89,7 @@ const REFUTE_SCHEMA = {
     role: { type: "string", enum: ["architect", "coder"] },
     verdict: { type: "string", enum: ["refute", "affirm"] },
     reason: { type: "string" },
+    citation: CITATION_SCHEMA,
   },
 };
 
@@ -81,6 +112,7 @@ const CROSSEXAM_SCHEMA = {
           // "affirm" = the peer's refutation stands.
           verdict: { type: "string", enum: ["refute", "affirm"] },
           reason: { type: "string" },
+          citation: CITATION_SCHEMA,
         },
       },
     },
@@ -103,14 +135,25 @@ const refuteResults = await parallel(
 );
 
 // Post-condition (mirrors review.js): every reviewer must return a usable payload.
+// A null here is an agent error (timeout / crash / schema failure) — a transient
+// runtime fault, NOT a diagnosis outcome. Do not escalate (ESCALATED +
+// ESCALATION.md is reserved for genuine cycle exhaustion); clean up the marker,
+// leave PHASE/CYCLE untouched, and tell the caller to re-run.
 const refutals = ROLES.map((role, i) => ({ role, payload: refuteResults[i] }));
 for (const r of refutals) {
   if (!r.payload || typeof r.payload.verdict !== "string") {
-    await applyScribe(haltEnvelope(slug, cycle, now, {
+    log(`Diagnosis confirmation incomplete: ${r.role} returned no usable refutation payload. Cleaning up without advancing state.`);
+    const scribeResult = await applyScribe(cleanupEnvelope(slug, now, runId));
+    return {
+      verdict: "incomplete",
       reason: "missing-reviewer-payload",
-      detail: `Reviewer ${r.role} returned no usable refutation payload.`,
-    }));
-    return { verdict: "escalate", reason: "missing-reviewer-payload", role: r.role };
+      role: r.role,
+      slug,
+      cycle,
+      scribe_apply: scribeResult.ok ? "applied" : "failed",
+      scribe_error: scribeResult.error,
+      note: "No REVIEW.md entries written; PHASE/CYCLE unchanged. Re-run /build-fleet:diagnose.",
+    };
   }
 }
 
@@ -157,7 +200,7 @@ log(
 phase("Apply");
 
 const envelope = buildEnvelope({ slug, cycle, now, refutals, judged, verdict });
-await applyScribe(envelope);
+const scribeResult = await applyScribe(envelope);
 
 return {
   verdict,
@@ -165,7 +208,12 @@ return {
   cycle,
   substantive_refutations: challenges.length,
   surviving_refutations: survivingRefutations.length,
-  next: envelope.next_legal_commands,
+  scribe_apply: scribeResult.ok ? "applied" : "failed",
+  scribe_error: scribeResult.error,
+  next: scribeResult.ok ? envelope.next_legal_commands : [],
+  note: scribeResult.ok
+    ? undefined
+    : "SCRIBE APPLY FAILED after retry — REVIEW.md/PROGRESS.md did NOT land and the .workflow-in-flight marker may remain. The dispatching command must report failure, not success.",
 };
 
 // ================= helpers =================
@@ -182,15 +230,19 @@ confirmed only by surviving attack, so default to suspicion. ${role === "archite
     ? "Lens: does the hypothesis actually explain the reproduced behavior? Is the blast radius honest? Is there a more likely cause the reproduction points to?"
     : "Lens: is the fix strategy feasible and does it address THIS root cause? Does the reproduction's actual failure match the claimed mechanism?"}
 
-A refutation only counts if it is substantive: at least ~40 characters of reasoning AND it
-cites the reproduction as counter-evidence — e.g. "diagnosis.md § Symptom", "tests/test_login.py",
-or "line 42". If you cannot substantively refute the hypothesis citing the reproduction, AFFIRM
-it (that is the honest outcome when the diagnosis holds).
+A refutation only counts if it is substantive: at least ~40 characters of reasoning AND a
+structured citation of the reproduction as counter-evidence. On a "refute" verdict, set the
+citation field to { file, locator } — e.g. { "file": "diagnosis.md", "locator": "§ Symptom" }
+or { "file": "tests/test_login.py", "locator": "line 42" }. A refute without a citation is
+discarded by the script. If you cannot substantively refute the hypothesis citing the
+reproduction, AFFIRM it (that is the honest outcome when the diagnosis holds — no citation
+needed on an affirm).
 
 Return the structured object:
 - role: "${role}"
 - verdict: "refute" (the hypothesis is unsound) or "affirm" (it withstands your attack)
-- reason: your reasoning. If refuting, cite the reproduction.`;
+- reason: your reasoning
+- citation: { file, locator } — REQUIRED when verdict is "refute".`;
 }
 
 function crossExamPrompt(role, challenges, slug, cycle) {
@@ -204,35 +256,49 @@ decide whether to REFUTE it (you believe the refutation itself is unsound — i.
 actually still holds against the reproduction) or AFFIRM it (the refutation stands; the
 hypothesis is genuinely in doubt).
 
-A refutation-of-a-refutation only counts if substantive: at least ~40 characters AND it cites
-the reproduction (e.g. "diagnosis.md § Fix strategy", "tests/...", "line N"). If you cannot
-substantively defend the hypothesis, AFFIRM the peer's refutation (the safe default — an
-unsupported hypothesis should not be confirmed).
+A refutation-of-a-refutation only counts if substantive: at least ~40 characters AND a
+structured citation of the reproduction. On a "refute" response, set the citation field to
+{ file, locator } — e.g. { "file": "diagnosis.md", "locator": "§ Fix strategy" } or
+{ "file": "tests/test_login.py", "locator": "line 42" }. A refute without a citation is
+discarded by the script. If you cannot substantively defend the hypothesis, AFFIRM the
+peer's refutation (the safe default — an unsupported hypothesis should not be confirmed;
+no citation needed on an affirm).
 
 Peer refutations:
-${JSON.stringify(peers.map((c) => ({ challenge_id: c.id, raised_by: c.raised_by, reason: c.text })), null, 2)}
+${JSON.stringify(peers.map((c) => ({ challenge_id: c.id, raised_by: c.raised_by, reason: c.text, citation: c.citation })), null, 2)}
 
 Return the structured object:
 - role: "${role}"
-- responses: array of { challenge_id, verdict ("refute"|"affirm"), reason }. One entry per peer refutation.`;
+- responses: array of { challenge_id, verdict ("refute"|"affirm"), reason, citation? }.
+  citation = { file, locator } and is REQUIRED when verdict is "refute".
+  One entry per peer refutation.`;
+}
+
+// A structured citation is valid when both file and locator are non-empty strings.
+// (Deliberately NOT validated against a fixed file list — locators like
+// "§ Symptom" or "line 42" against any cited reproduction artifact are acceptable.)
+function validCitation(c) {
+  return !!c &&
+    typeof c.file === "string" && c.file.trim().length > 0 &&
+    typeof c.locator === "string" && c.locator.trim().length > 0;
 }
 
 // Phase-1 refutations → live challenges (substantive refute verdicts only).
 function toChallenges(refutals) {
-  const REPRO_REF = /(diagnosis\.md\s*§|tests?\/|line\s+\d+)/i;
   const MIN = 40;
   const out = [];
   for (const r of refutals) {
     const p = r.payload;
     if (
       p && p.verdict === "refute" &&
-      typeof p.reason === "string" && p.reason.length >= MIN && REPRO_REF.test(p.reason)
+      typeof p.reason === "string" && p.reason.length >= MIN && validCitation(p.citation)
     ) {
       out.push({
         id: `${r.role}-refutation`,
         severity: "blocker",   // a surviving refutation blocks CONFIRMED (renders in ESCALATION.md)
         raised_by: r.role,
         text: p.reason,
+        citation: p.citation,
         refuted: false,
         refuted_by: null,
         refutation_reason: null,
@@ -252,6 +318,7 @@ function mergeCrossExam(roles, xResults) {
         role,
         verdict: resp.verdict,
         reason: resp.reason,
+        citation: resp.citation || null,
       });
     }
   });
@@ -262,7 +329,6 @@ function mergeCrossExam(roles, xResults) {
 // defended — only by a substantive, different-role, reproduction-citing response. A
 // challenge that survives means the hypothesis is genuinely in doubt.
 function applyHypothesisVote(challenges, crossMap) {
-  const REPRO_REF = /(diagnosis\.md\s*§|tests?\/|line\s+\d+)/i;
   const MIN = 40;
   return challenges.map((c) => {
     const defenses = (crossMap[c.id] || []).filter(
@@ -271,11 +337,11 @@ function applyHypothesisVote(challenges, crossMap) {
         d.role !== c.raised_by &&
         typeof d.reason === "string" &&
         d.reason.length >= MIN &&
-        REPRO_REF.test(d.reason)
+        validCitation(d.citation)
     );
     if (defenses.length === 0) return c;
     const d = defenses[0];
-    return { ...c, refuted: true, refuted_by: d.role, refutation_reason: d.reason };
+    return { ...c, refuted: true, refuted_by: d.role, refutation_reason: d.reason, refutation_citation: d.citation };
   });
 }
 
@@ -284,10 +350,14 @@ function buildEnvelope({ slug, cycle, now, refutals, judged, verdict }) {
     const p = r.payload;
     const lines = [`## Cycle ${cycle} — ${r.role} — ${now}`];
     lines.push(`- verdict: ${p.verdict}`);
-    lines.push(`  ${(p.reason || "").replace(/\n+/g, " ")}`);
+    const cite = validCitation(p.citation) ? ` (cites ${p.citation.file} ${p.citation.locator})` : "";
+    lines.push(`  ${(p.reason || "").replace(/\n+/g, " ")}${cite}`);
     const own = judged.find((c) => c.raised_by === r.role);
     if (own && own.refuted) {
-      lines.push(`  refutation-overturned-by: ${own.refuted_by} — ${own.refutation_reason}`);
+      const dcite = own.refutation_citation
+        ? ` (cites ${own.refutation_citation.file} ${own.refutation_citation.locator})`
+        : "";
+      lines.push(`  refutation-overturned-by: ${own.refuted_by} — ${own.refutation_reason}${dcite}`);
     }
     return lines.join("\n");
   });
@@ -311,6 +381,7 @@ function buildEnvelope({ slug, cycle, now, refutals, judged, verdict }) {
   return {
     build_fleet_version: "0.5",
     feature: slug,            // scribe targets .sdd/<feature>/ — here the bug slug
+    run_id: runId,
     phase: "DIAGNOSE",
     cycle,
     verdict,
@@ -331,31 +402,72 @@ function buildEnvelope({ slug, cycle, now, refutals, judged, verdict }) {
   };
 }
 
-function haltEnvelope(slug, cycle, now, payload) {
+// Minimal envelope for the incomplete/invalid-args paths (pattern ported from
+// plan-review.js): removes the workflow marker (ownership-checked against
+// run_id) and refreshes UPDATED only. state_delta deliberately OMITS PHASE and
+// CYCLE so the scribe leaves them at their pre-run values; nothing is appended
+// to REVIEW.md and no ESCALATION.md is written — ESCALATED is reserved for
+// genuine cycle exhaustion.
+function cleanupEnvelope(slug, now, runId) {
   return {
     build_fleet_version: "0.5",
     feature: slug,
+    run_id: runId,
     phase: "DIAGNOSE",
-    cycle,
-    verdict: "escalate",
+    cycle: 0,
+    verdict: "incomplete",
     surviving_concerns: [],
     review_entries: [],
-    state_delta: { PHASE: "ESCALATED", CYCLE: cycle, UPDATED: now },
-    next_legal_commands: [],
-    escalation_payload: { ...payload, emitted_at: now },
+    state_delta: now ? { UPDATED: now } : {},
+    next_legal_commands: ["/build-fleet:diagnose"],
+    escalation_payload: null,
   };
 }
 
+// ---------- verified scribe application ----------
+
+const SCRIBE_RESULT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ok", "error"],
+  properties: {
+    ok: { type: "boolean" },
+    error: { type: ["string", "null"] },
+  },
+};
+
+// The scribe returns a structured {ok, error} aligned with its
+// SCRIBE_OK:/SCRIBE_ERROR: contract (agents/scribe.md). One retry on failure;
+// if still failing, the caller must surface scribe_apply: "failed" — state did
+// NOT land and the dispatching command must refuse/report, never claim success.
 async function applyScribe(envelope) {
-  return await agent(
-    `Apply this build-fleet workflow envelope to .sdd/${envelope.feature}/ exactly per your instructions in agents/scribe.md.
+  let lastError = "scribe returned no usable result";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let res = null;
+    try {
+      res = await agent(
+        `Apply this build-fleet workflow envelope to .sdd/${envelope.feature}/ exactly per your instructions in agents/scribe.md.
+
+Marker ownership: delete .sdd/${envelope.feature}/.workflow-in-flight ONLY if its content matches the envelope's run_id${envelope.run_id ? ` ("${envelope.run_id}")` : " (null — legacy envelope: remove unconditionally, best-effort)"}. If the content differs, leave the marker — it belongs to another run.
+
+Return the structured object {ok, error}: ok=true when the WHOLE envelope landed (your SCRIBE_OK condition), with error=null. ok=false with error="<one-line reason>" otherwise (your SCRIBE_ERROR reason).
 
 ENVELOPE:
 ${JSON.stringify(envelope, null, 2)}`,
-    {
-      label: "scribe",
-      phase: "Apply",
-      agentType: "build-fleet:scribe",
+        {
+          label: attempt === 1 ? "scribe" : "scribe-retry",
+          phase: "Apply",
+          agentType: "build-fleet:scribe",
+          schema: SCRIBE_RESULT_SCHEMA,
+        }
+      );
+    } catch (e) {
+      res = null;
+      lastError = "scribe agent error: " + (e && e.message ? e.message : String(e));
     }
-  );
+    if (res && res.ok === true) return { ok: true, error: null };
+    if (res && typeof res.error === "string" && res.error) lastError = res.error;
+    log(`Scribe apply attempt ${attempt}/2 failed: ${lastError}`);
+  }
+  return { ok: false, error: lastError };
 }

@@ -30,7 +30,7 @@ workspace it carries the product slug. Everything else is unchanged: absent
 
 ### 1. Apply `state_delta` to PROGRESS.md
 
-For each key in the envelope's `state_delta` object (typically `PHASE`, `CYCLE`, `UPDATED`):
+For each key in the envelope's `state_delta` object (typically `PHASE`, `CYCLE`, `UPDATED`; deep-build envelopes carry `BUILD_CYCLE` and `BUILD_MODE`). An empty `state_delta` object means PROGRESS.md is not touched at all (the workflows' cleanup envelopes use this to preserve PHASE/CYCLE).
 
 - Read `.sdd/<feature>/PROGRESS.md`.
 - Replace the matching field in-place (e.g., `PHASE: REVIEW` ← `PHASE: <new value>`).
@@ -89,37 +89,63 @@ If the envelope's `escalation_payload` is non-null:
 
 If `escalation_payload` is null, do not create ESCALATION.md.
 
-### 4. Remove the workflow-in-flight marker
+### 4. Remove the workflow-in-flight marker (ownership-checked)
 
-Run it **inside the resolved workspace** — `.sdd/_product/` for a product-scope
-envelope, `.sdd/<feature>/` otherwise (substitute the real path; do not run the
-literal `<…>`):
+The marker lives **inside the resolved workspace** — `.sdd/_product/` for a
+product-scope envelope, `.sdd/<feature>/` otherwise. The dispatching command
+wrote its run id into the marker at dispatch, and the envelope carries that id
+in its `run_id` field. **You delete the marker only if you own it** — i.e. only
+if the marker's content matches `run_id` — so a stale or retried run can never
+delete a newer dispatch's marker.
 
-```bash
-rm -f <resolved-workspace>/.workflow-in-flight
-```
+- If the envelope has a non-empty `run_id` (substitute the real paths/values;
+  do not run the literal `<…>`):
 
-This re-enables the per-reviewer hooks (`check-review-written`, `restrict-reviewer-writes`) for the next command invocation. Removal is best-effort — if the marker is absent, that's fine.
+  ```bash
+  marker="<resolved-workspace>/.workflow-in-flight"
+  if [ -f "$marker" ] && [ "$(cat "$marker")" = "<envelope.run_id>" ]; then
+    rm -f "$marker"
+  fi
+  ```
 
-### 5. Confirm with one line
+  A marker whose content differs belongs to another run — **leave it**, and note
+  the skip in your confirmation (it does not make the apply a failure).
 
-Emit a single confirmation line in this exact format:
+- If the envelope has no `run_id` (or it is null — a legacy envelope), fall back
+  to the unconditional best-effort removal: `rm -f <resolved-workspace>/.workflow-in-flight`.
+
+This re-enables the per-reviewer hooks (`check-review-written`, `restrict-reviewer-writes`) for the next command invocation. An absent marker is fine — removal is best-effort.
+
+### 5. Confirm — structured object or one line
+
+The v0.2 workflows invoke you with a **structured-output schema**
+`{ok: boolean, error: string|null}`. When a schema is supplied, return:
+
+- `{"ok": true, "error": null}` — the WHOLE envelope landed (the SCRIBE_OK
+  condition below).
+- `{"ok": false, "error": "<one-line reason>"}` — anything failed or was only
+  partially applicable (the SCRIBE_ERROR condition). Never report `ok: true`
+  unless every step above completed.
+
+When invoked **without** a schema (legacy/manual invocation), emit a single
+confirmation line in this exact format instead:
 
 ```
 SCRIBE_OK: feature=<slug> phase=<state_delta.PHASE> cycle=<state_delta.CYCLE> entries=<N> escalation=<yes|no>
 ```
 
-No additional prose.
+No additional prose. The two forms are the same contract: `ok: true` ⇔ a
+`SCRIBE_OK:` line; `ok: false` + `error` ⇔ a `SCRIBE_ERROR:` line.
 
 ## Error handling
 
-If the JSON envelope is malformed or missing required fields (`feature`, `state_delta`, `review_entries`), halt and emit:
+If the JSON envelope is malformed or missing required fields (`feature`, `state_delta`, `review_entries`), halt and report the error — `{"ok": false, "error": "<one-line reason>"}` under a structured-output schema, or:
 
 ```
 SCRIBE_ERROR: <one-line reason>
 ```
 
-Do not partially apply. Either the whole envelope lands or none of it does. The workflow is responsible for surfacing the error; you only report it.
+Do not partially apply. Either the whole envelope lands or none of it does. The workflow is responsible for surfacing the error (it retries you once, then carries `scribe_apply: "failed"` in its return object); you only report it.
 
 ## Constraints
 

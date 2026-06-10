@@ -29,23 +29,49 @@ export const meta = {
 };
 
 // ---------- args ----------
-// { feature, max_partitions?, partition_hint?, now }
+// { feature, cycle, now, run_id, max_partitions?, partition_hint? }
+// `cycle` is the BUILD cycle number, backed by the BUILD_CYCLE field in
+// PROGRESS.md (the dispatching command reads BUILD_CYCLE, passes BUILD_CYCLE+1,
+// and the scribe writes it back via the envelope's state_delta). Budget is 3 —
+// same semantics as review.js's REVIEW cycles: the run that exhausts the budget
+// with surviving blockers escalates.
+// `run_id` is the token the command wrote into .sdd/<feature>/.workflow-in-flight
+// at dispatch; the scribe deletes that marker only when its content matches.
 
 // The Workflow runtime may deliver `args` as a JSON string rather than a parsed
 // object (confirmed empirically during Phase 6 validation). Normalize.
 const A = typeof args === "string" ? JSON.parse(args) : (args || {});
 
 const feature = A.feature;
+const cycle = typeof A.cycle === "string" ? parseInt(A.cycle, 10) : A.cycle;
 const maxPartitions = Math.min(A.max_partitions || 3, 8);
 const partitionHint = A.partition_hint || null;
-const now = A.now || "UNKNOWN_TIME";
+const now = A.now;
+const runId = A.run_id || null;
 
-if (!feature) {
-  throw new Error(
-    "BUILD_FLEET_WORKFLOW_ERROR: args must include {feature, now}. " +
-    "Received args=" + JSON.stringify(args) + " (typeof=" + (typeof args) + ")"
-  );
+// Validation failures are NEVER a bare throw: a throw would strand the
+// .workflow-in-flight marker the command dropped (this script has no filesystem
+// access — only the scribe can delete it). Dispatch a minimal scribe cleanup
+// envelope, then return a structured invalid-args verdict for the orchestrator.
+const argErrors = [];
+if (!feature || typeof feature !== "string") argErrors.push("feature: required non-empty string");
+if (typeof cycle !== "number" || Number.isNaN(cycle)) argErrors.push("cycle: required integer (BUILD_CYCLE + 1, read from PROGRESS.md by the dispatching command)");
+if (!now || typeof now !== "string") argErrors.push("now: required iso8601 string (the dispatching command supplies it — the script cannot call Date)");
+if (argErrors.length > 0) {
+  log(`Invalid args: ${argErrors.join("; ")}. No state advanced.`);
+  if (feature && typeof feature === "string") {
+    await applyScribe(cleanupEnvelope(feature, typeof now === "string" ? now : null, runId));
+  }
+  return {
+    verdict: "invalid-args",
+    errors: argErrors,
+    note: feature && typeof feature === "string"
+      ? "Marker cleanup dispatched; PHASE/BUILD_CYCLE unchanged. Fix the dispatch args and re-run /build-fleet:deep-build."
+      : "feature unknown — the dispatching command must delete .sdd/<slug>/.workflow-in-flight itself (only if its content matches the run_id it wrote).",
+  };
 }
+
+const CYCLE_BUDGET = 3;
 
 // ---------- schemas ----------
 
@@ -140,11 +166,21 @@ if (partitionHint) {
 }
 
 if (!partitionPlan || !Array.isArray(partitionPlan.partition) || partitionPlan.partition.length === 0) {
-  await applyScribe(haltEnvelope(feature, now, {
+  // Agent fault / unusable plan — NOT a build outcome. Do not escalate
+  // (ESCALATED + ESCALATION.md is reserved for genuine cycle exhaustion);
+  // clean up the marker, leave PHASE/BUILD_CYCLE untouched, re-run.
+  log("Deep-build incomplete: architect produced no usable partition. Cleaning up without advancing state.");
+  const scribeResult = await applyScribe(cleanupEnvelope(feature, now, runId));
+  return {
+    verdict: "incomplete",
     reason: "partition-planning-failed",
     detail: (partitionPlan && partitionPlan.planner_notes) || "Architect produced no valid partition.",
-  }));
-  return { verdict: "escalate", reason: "partition-planning-failed" };
+    feature,
+    cycle,
+    scribe_apply: scribeResult.ok ? "applied" : "failed",
+    scribe_error: scribeResult.error,
+    note: "No coders were dispatched — the worktree is untouched. PHASE/BUILD_CYCLE unchanged. Re-run /build-fleet:deep-build.",
+  };
 }
 
 const partitions = partitionPlan.partition;
@@ -162,11 +198,21 @@ const partitions = partitionPlan.partition;
     }
   }
   if (overlaps.length > 0) {
-    await applyScribe(haltEnvelope(feature, now, {
+    // Planning defect caught pre-fan-out — the worktree is untouched and the
+    // partition is re-planned on every run, so this is recoverable by re-running,
+    // not an escalation.
+    log(`Deep-build incomplete: partition file overlap. Cleaning up without advancing state. ${JSON.stringify(overlaps)}`);
+    const scribeResult = await applyScribe(cleanupEnvelope(feature, now, runId));
+    return {
+      verdict: "incomplete",
       reason: "partition-file-overlap",
       detail: `Partition has overlapping files; coders would race: ${JSON.stringify(overlaps)}`,
-    }));
-    return { verdict: "escalate", reason: "partition-file-overlap" };
+      feature,
+      cycle,
+      scribe_apply: scribeResult.ok ? "applied" : "failed",
+      scribe_error: scribeResult.error,
+      note: "No coders were dispatched — the worktree is untouched. PHASE/BUILD_CYCLE unchanged. Re-run /build-fleet:deep-build (the partition is re-planned each run).",
+    };
   }
 }
 
@@ -190,11 +236,20 @@ const coderRaw = await parallel(
 const coderResults = partitions.map((p, i) => ({ label: p.label, summary: coderRaw[i] }));
 for (const cr of coderResults) {
   if (!cr.summary || typeof cr.summary !== "object") {
-    await applyScribe(haltEnvelope(feature, now, {
+    // Agent fault after coders ran — transient, NOT an escalation. But coders
+    // have already written source, so warn about partial worktree writes.
+    log(`Deep-build incomplete: partition '${cr.label}' returned no usable summary. Cleaning up without advancing state. Partial writes may exist in the worktree.`);
+    const scribeResult = await applyScribe(cleanupEnvelope(feature, now, runId));
+    return {
+      verdict: "incomplete",
       reason: "coder-payload-malformed",
-      detail: `Partition '${cr.label}' returned no usable summary.`,
-    }));
-    return { verdict: "escalate", reason: "coder-payload-malformed", label: cr.label };
+      label: cr.label,
+      feature,
+      cycle,
+      scribe_apply: scribeResult.ok ? "applied" : "failed",
+      scribe_error: scribeResult.error,
+      note: "WARNING: coders already ran — partial writes may exist in the worktree (inspect `git status` / `git diff` before re-running). No IMPL_NOTES.md entry was written; PHASE/BUILD_CYCLE unchanged. Re-run /build-fleet:deep-build after inspecting the worktree.",
+    };
   }
 }
 
@@ -238,11 +293,20 @@ const reviews = [
 ];
 for (const r of reviews) {
   if (!r.payload || !Array.isArray(r.payload.concerns)) {
-    await applyScribe(haltEnvelope(feature, now, {
+    // Agent fault after coders ran — transient, NOT an escalation. Coders have
+    // already written source, so warn about partial worktree writes.
+    log(`Deep-build incomplete: reviewer ${r.role} returned no usable concerns array. Cleaning up without advancing state. Partial writes may exist in the worktree.`);
+    const scribeResult = await applyScribe(cleanupEnvelope(feature, now, runId));
+    return {
+      verdict: "incomplete",
       reason: "missing-reviewer-payload",
-      detail: `Reviewer ${r.role} returned no usable concerns array.`,
-    }));
-    return { verdict: "escalate", reason: "missing-reviewer-payload", role: r.role };
+      role: r.role,
+      feature,
+      cycle,
+      scribe_apply: scribeResult.ok ? "applied" : "failed",
+      scribe_error: scribeResult.error,
+      note: "WARNING: coders already ran — partial writes may exist in the worktree (inspect `git status` / `git diff` before re-running). No IMPL_NOTES.md entry was written; PHASE/BUILD_CYCLE unchanged. Re-run /build-fleet:deep-build after inspecting the worktree.",
+    };
   }
 }
 
@@ -258,25 +322,36 @@ for (const v of violations) {
   });
 }
 const survivingBlockers = surviving.filter((c) => c.severity === "blocker");
-const verdict = survivingBlockers.length > 0 ? "needs-iteration" : "clean";
+// Cycle budget — same semantics as review.js's REVIEW cycles: blockers on the
+// cycle that exhausts the budget (cycle >= 3) escalate; earlier cycles iterate.
+const verdict =
+  survivingBlockers.length > 0 ? (cycle >= CYCLE_BUDGET ? "escalate" : "needs-iteration") : "clean";
+const cyclesRemaining = Math.max(0, CYCLE_BUDGET - cycle);
 
-log(`Build review: ${surviving.length} concerns, ${survivingBlockers.length} blockers → ${verdict}`);
+log(`Build review (cycle ${cycle}/${CYCLE_BUDGET}): ${surviving.length} concerns, ${survivingBlockers.length} blockers → ${verdict}`);
 
 // ---------- Phase 4: apply via scribe ----------
 
 phase("Apply");
 
-const envelope = buildEnvelope({ feature, now, partitions, partitionPlan, coderResults, surviving, verdict });
-await applyScribe(envelope);
+const envelope = buildEnvelope({ feature, cycle, now, partitions, partitionPlan, coderResults, surviving, verdict, cyclesRemaining });
+const scribeResult = await applyScribe(envelope);
 
 return {
   verdict,
   feature,
+  cycle,
+  cycles_remaining: cyclesRemaining,
   partitions: partitions.map((p) => p.label),
   surviving_concerns: surviving.length,
   surviving_blockers: survivingBlockers.length,
   violations: violations.length,
-  next: envelope.next_legal_commands,
+  scribe_apply: scribeResult.ok ? "applied" : "failed",
+  scribe_error: scribeResult.error,
+  next: scribeResult.ok ? envelope.next_legal_commands : [],
+  note: scribeResult.ok
+    ? undefined
+    : "SCRIBE APPLY FAILED after retry — IMPL_NOTES.md/PROGRESS.md did NOT land and the .workflow-in-flight marker may remain. Coders DID run: writes exist in the worktree without a recorded summary. The dispatching command must report failure, not success.",
 };
 
 // ================= helpers =================
@@ -371,9 +446,9 @@ function mergeConcerns(reviews) {
   return out;
 }
 
-function buildEnvelope({ feature, now, partitions, partitionPlan, coderResults, surviving, verdict }) {
+function buildEnvelope({ feature, cycle, now, partitions, partitionPlan, coderResults, surviving, verdict, cyclesRemaining }) {
   const lines = [];
-  lines.push(`## Deep-build run — ${now}`);
+  lines.push(`## Deep-build run — cycle ${cycle} — ${now}`);
   lines.push(``);
   lines.push(`**Partitions:** ${partitions.map((p) => p.label).join(", ")}`);
   lines.push(`**Planner notes:** ${partitionPlan.planner_notes || "(none)"}`);
@@ -391,21 +466,40 @@ function buildEnvelope({ feature, now, partitions, partitionPlan, coderResults, 
   else for (const c of surviving) lines.push(`- [${c.severity}] (${c.raised_by}) ${c.text}`);
   lines.push(``);
   lines.push(`**Verdict:** ${verdict}`);
+  if (verdict === "needs-iteration") {
+    lines.push(``);
+    lines.push(`**Cycle budget:** ${cycle}/${CYCLE_BUDGET} used — ${cyclesRemaining} re-run(s) remaining before escalation.`);
+  }
 
+  // ESCALATED is reachable ONLY here, on genuine cycle exhaustion: blockers
+  // survived the adversarial review on the cycle that exhausted the budget.
   const escalation_payload =
-    verdict === "escalate" ? { reason: "deep-build-escalation", emitted_at: now } : null;
+    verdict === "escalate"
+      ? {
+          reason: "build-cycle-budget-exhausted-with-open-blockers",
+          cycle,
+          surviving_blockers: surviving.filter((c) => c.severity === "blocker"),
+          emitted_at: now,
+        }
+      : null;
 
   return {
     build_fleet_version: "0.2",
     feature,
+    run_id: runId,
     workflow: "deep-build",
     phase: "BUILD",
+    cycle,
     verdict,
+    // The needs-iteration envelope carries the remaining budget so a mechanical
+    // orchestrator can never loop the 400k-token workflow forever.
+    cycles_remaining: cyclesRemaining,
     surviving_concerns: surviving,
     review_entries: [],
     impl_notes_appendix: lines.join("\n"),
     state_delta: {
       PHASE: verdict === "escalate" ? "ESCALATED" : "BUILD",
+      BUILD_CYCLE: cycle,
       BUILD_MODE: "deep-build",
       UPDATED: now,
     },
@@ -419,28 +513,73 @@ function buildEnvelope({ feature, now, partitions, partitionPlan, coderResults, 
   };
 }
 
-function haltEnvelope(feature, now, payload) {
+// Minimal envelope for the incomplete/invalid-args paths (pattern ported from
+// plan-review.js): removes the workflow marker (ownership-checked against
+// run_id) and refreshes UPDATED only. state_delta deliberately OMITS PHASE and
+// BUILD_CYCLE so the scribe leaves them at their pre-run values; nothing is
+// appended to IMPL_NOTES.md and no ESCALATION.md is written — ESCALATED is
+// reserved for genuine cycle exhaustion.
+function cleanupEnvelope(feature, now, runId) {
   return {
     build_fleet_version: "0.2",
     feature,
+    run_id: runId,
     workflow: "deep-build",
     phase: "BUILD",
-    verdict: "escalate",
+    cycle: 0,
+    verdict: "incomplete",
     surviving_concerns: [],
     review_entries: [],
-    impl_notes_appendix: `## Deep-build halt — ${now}\n\nReason: ${payload.reason}\nDetail: ${payload.detail || "(none)"}\n`,
-    state_delta: { PHASE: "ESCALATED", UPDATED: now },
-    next_legal_commands: [],
-    escalation_payload: { ...payload, emitted_at: now },
+    state_delta: now ? { UPDATED: now } : {},
+    next_legal_commands: ["/build-fleet:deep-build"],
+    escalation_payload: null,
   };
 }
 
+// ---------- verified scribe application ----------
+
+const SCRIBE_RESULT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ok", "error"],
+  properties: {
+    ok: { type: "boolean" },
+    error: { type: ["string", "null"] },
+  },
+};
+
+// The scribe returns a structured {ok, error} aligned with its
+// SCRIBE_OK:/SCRIBE_ERROR: contract (agents/scribe.md). One retry on failure;
+// if still failing, the caller must surface scribe_apply: "failed" — state did
+// NOT land and the dispatching command must refuse/report, never claim success.
 async function applyScribe(envelope) {
-  return await agent(
-    `Apply this build-fleet workflow envelope to .sdd/${envelope.feature}/ exactly per agents/scribe.md.
+  let lastError = "scribe returned no usable result";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let res = null;
+    try {
+      res = await agent(
+        `Apply this build-fleet workflow envelope to .sdd/${envelope.feature}/ exactly per agents/scribe.md.
+
+Marker ownership: delete .sdd/${envelope.feature}/.workflow-in-flight ONLY if its content matches the envelope's run_id${envelope.run_id ? ` ("${envelope.run_id}")` : " (null — legacy envelope: remove unconditionally, best-effort)"}. If the content differs, leave the marker — it belongs to another run.
+
+Return the structured object {ok, error}: ok=true when the WHOLE envelope landed (your SCRIBE_OK condition), with error=null. ok=false with error="<one-line reason>" otherwise (your SCRIBE_ERROR reason).
 
 ENVELOPE:
 ${JSON.stringify(envelope, null, 2)}`,
-    { label: "scribe", phase: "Apply", agentType: "build-fleet:scribe" }
-  );
+        {
+          label: attempt === 1 ? "scribe" : "scribe-retry",
+          phase: "Apply",
+          agentType: "build-fleet:scribe",
+          schema: SCRIBE_RESULT_SCHEMA,
+        }
+      );
+    } catch (e) {
+      res = null;
+      lastError = "scribe agent error: " + (e && e.message ? e.message : String(e));
+    }
+    if (res && res.ok === true) return { ok: true, error: null };
+    if (res && typeof res.error === "string" && res.error) lastError = res.error;
+    log(`Scribe apply attempt ${attempt}/2 failed: ${lastError}`);
+  }
+  return { ok: false, error: lastError };
 }

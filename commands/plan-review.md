@@ -65,13 +65,16 @@ user how to enable workflows — there is no v0.1-style fallback.
    interrogated many times and may need a ratification decision rather than another
    cycle — but proceed.
 
-8. **Drop the workflow-in-flight marker.** Write `.sdd/_product/.workflow-in-flight`
-   containing the current iso8601 timestamp. The scribe removes it as the workflow's
-   final phase (it resolves the marker under the envelope's `workspace_dir`). No
-   per-reviewer hook keys off this marker in product scope (step 3's guard handles
-   that), but the marker provides workflow liveness and is reaped if orphaned.
+8. **Compose the run id and drop the workflow-in-flight marker.** Compose a run id:
+   `plan-review-<product>-c<new_cycle>-<iso8601 now>` (the same `now` you pass in
+   step 10). Write `.sdd/_product/.workflow-in-flight` containing exactly that run
+   id as its single line. The marker is **owned by this run**: the scribe removes it
+   as the workflow's final phase (resolved under the envelope's `workspace_dir`)
+   only if its content still matches the envelope's `run_id`. No per-reviewer hook
+   keys off this marker in product scope (step 3's guard handles that), but the
+   marker provides workflow liveness and is reaped if orphaned.
    **Cleanup obligation:** if the `Workflow` tool fails to launch, delete the marker
-   before exiting.
+   (after verifying its content still matches your run id) before exiting.
 
 9. **Emit the cost preview (headless contract).** Parse `@cost-ceiling` from the top
    of `${CLAUDE_PLUGIN_ROOT}/workflows/plan-review.js`. Write exactly one stdout line:
@@ -81,21 +84,38 @@ user how to enable workflows — there is no v0.1-style fallback.
 
 10. **Invoke the Workflow tool** with:
     - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/plan-review.js`
-    - `args`: `{ "product": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>" }`
+    - `args`: `{ "product": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step 8>" }`
 
-    Supply `now` yourself (the script cannot call `Date`). The tool is async-launched.
+    Supply `now` yourself (the script cannot call `Date`); the workflow refuses to
+    run without it. The tool is async-launched.
 
 11. **Emit the launch line (headless contract).** Once the tool returns:
     ```
     BUILD_FLEET_WORKFLOW_LAUNCHED: {"runId":"<id>","transcriptDir":"<path>","status":"async_launched","product":"<slug>","cycle":<N>,"workflow":"plan-review"}
     ```
 
-12. **Report and exit.** Tell the user:
+12. **Verify the run is alive (marker ownership).** Poll the launched run once
+    (`TaskGet` on the returned task). If the run has already died (errored/cancelled)
+    before any scribe ran, delete `.sdd/_product/.workflow-in-flight` yourself —
+    **only if its content still matches your run id** — then report the failure.
+    Orchestrators polling later must apply the same rule: dead run + marker content
+    matching this run id → delete the marker.
+
+13. **Report and exit.** Tell the user:
     - The interrogation is running in the background; `/workflows` shows progress.
     - On completion, `.sdd/_product/REVIEW.md` holds the interrogation report and
       `PHASE` becomes `PLAN_REVIEW`.
     - Next: read the report, revise vision/backlog/STACK as needed and re-run
       `/build-fleet:plan-review`, or ratify with `/build-fleet:plan-finalize`.
+    - A verdict of `incomplete` / `invalid-args` means a transient agent fault or bad
+      dispatch args: PHASE/CYCLE are unchanged, no report was written — re-run
+      `/build-fleet:plan-review` (or fix the dispatch args).
+    - **Scribe-apply failure is a hard failure.** If the completed run's return object
+      carries `scribe_apply: "failed"`, the scribe could not write state even after a
+      retry: the interrogation report and PROGRESS did **not** land and the marker may
+      remain (delete it if its content matches your run id). Whoever reads that result
+      must report the run as failed with its `scribe_error` — never treat the
+      interrogation as recorded or proceed to `/build-fleet:plan-finalize` on its basis.
 
 ## Exit codes
 

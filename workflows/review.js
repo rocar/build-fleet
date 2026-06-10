@@ -35,8 +35,10 @@ export const meta = {
 };
 
 // ---------- args ----------
-// { feature: "<slug>", cycle: <int>, now: "<iso8601>" }
+// { feature: "<slug>", cycle: <int>, now: "<iso8601>", run_id: "<marker token>" }
 // `now` is supplied by the command because the script cannot call Date.
+// `run_id` is the token the command wrote into .sdd/<feature>/.workflow-in-flight
+// at dispatch; the scribe deletes that marker only when its content matches.
 
 // The Workflow runtime may deliver `args` as a JSON string rather than a parsed
 // object (confirmed empirically during Phase 6 validation). Normalize.
@@ -44,13 +46,29 @@ const A = typeof args === "string" ? JSON.parse(args) : (args || {});
 
 const feature = A.feature;
 const cycle = typeof A.cycle === "string" ? parseInt(A.cycle, 10) : A.cycle;
-const now = A.now || "UNKNOWN_TIME";
+const now = A.now;
+const runId = A.run_id || null;
 
-if (!feature || typeof cycle !== "number" || Number.isNaN(cycle)) {
-  throw new Error(
-    "BUILD_FLEET_WORKFLOW_ERROR: args must include {feature, cycle, now}. " +
-    "Received args=" + JSON.stringify(args) + " (typeof=" + (typeof args) + ")"
-  );
+// Validation failures are NEVER a bare throw: a throw would strand the
+// .workflow-in-flight marker the command dropped (this script has no filesystem
+// access — only the scribe can delete it). Dispatch a minimal scribe cleanup
+// envelope, then return a structured invalid-args verdict for the orchestrator.
+const argErrors = [];
+if (!feature || typeof feature !== "string") argErrors.push("feature: required non-empty string");
+if (typeof cycle !== "number" || Number.isNaN(cycle)) argErrors.push("cycle: required integer");
+if (!now || typeof now !== "string") argErrors.push("now: required iso8601 string (the dispatching command supplies it — the script cannot call Date)");
+if (argErrors.length > 0) {
+  log(`Invalid args: ${argErrors.join("; ")}. No state advanced.`);
+  if (feature && typeof feature === "string") {
+    await applyScribe(cleanupEnvelope(feature, typeof now === "string" ? now : null, runId));
+  }
+  return {
+    verdict: "invalid-args",
+    errors: argErrors,
+    note: feature && typeof feature === "string"
+      ? "Marker cleanup dispatched; PHASE/CYCLE unchanged. Fix the dispatch args and re-run /build-fleet:review."
+      : "feature unknown — the dispatching command must delete .sdd/<slug>/.workflow-in-flight itself (only if its content matches the run_id it wrote).",
+  };
 }
 
 // ---------- schemas (structured agent output) ----------
@@ -94,6 +112,16 @@ const REFUTATION_SCHEMA = {
           concern_id: { type: "string" },
           verdict: { type: "string", enum: ["refute", "affirm"] },
           reason: { type: "string" },
+          // Required (validated in JS) when verdict is "refute"; omitted on "affirm".
+          citation: {
+            type: "object",
+            additionalProperties: false,
+            required: ["file", "locator"],
+            properties: {
+              file: { type: "string" },
+              locator: { type: "string" },
+            },
+          },
         },
       },
     },
@@ -119,15 +147,24 @@ const reviewerResults = await parallel(
 
 // Post-condition (replaces the retired check-review-written hook for workflow REVIEW):
 // every reviewer must return a usable structured payload. A null (agent error /
-// skipped) or missing concerns array halts the workflow into escalation.
+// timeout / schema failure) is a transient runtime fault, NOT a review outcome —
+// so it does NOT escalate (ESCALATED + ESCALATION.md is reserved for genuine
+// cycle exhaustion). Clean up the marker, leave PHASE/CYCLE untouched, re-run.
 const reviews = ROLES.map((role, i) => ({ role, payload: reviewerResults[i] }));
 for (const r of reviews) {
   if (!r.payload || !Array.isArray(r.payload.concerns)) {
-    await applyScribe(haltEnvelope(feature, cycle, now, {
+    log(`Review incomplete: ${r.role} returned no usable concerns payload. Cleaning up without advancing state.`);
+    const scribeResult = await applyScribe(cleanupEnvelope(feature, now, runId));
+    return {
+      verdict: "incomplete",
       reason: "missing-reviewer-payload",
-      detail: `Reviewer ${r.role} returned no usable concerns payload.`,
-    }));
-    return { verdict: "escalate", reason: "missing-reviewer-payload", role: r.role };
+      role: r.role,
+      feature,
+      cycle,
+      scribe_apply: scribeResult.ok ? "applied" : "failed",
+      scribe_error: scribeResult.error,
+      note: "No REVIEW.md entries written; PHASE/CYCLE unchanged. Re-run /build-fleet:review.",
+    };
   }
 }
 
@@ -168,7 +205,7 @@ log(
 phase("Apply");
 
 const envelope = buildEnvelope({ feature, cycle, now, reviews, surviving, verdict });
-await applyScribe(envelope);
+const scribeResult = await applyScribe(envelope);
 
 return {
   verdict,
@@ -176,7 +213,12 @@ return {
   cycle,
   surviving_concerns: surviving.length,
   surviving_blockers: survivingBlockers.length,
-  next: envelope.next_legal_commands,
+  scribe_apply: scribeResult.ok ? "applied" : "failed",
+  scribe_error: scribeResult.error,
+  next: scribeResult.ok ? envelope.next_legal_commands : [],
+  note: scribeResult.ok
+    ? undefined
+    : "SCRIBE APPLY FAILED after retry — REVIEW.md/PROGRESS.md did NOT land and the .workflow-in-flight marker may remain. The dispatching command must report failure, not success.",
 };
 
 // ================= helpers =================
@@ -208,9 +250,12 @@ Read .sdd/${feature}/spec.md and .sdd/${feature}/acceptance.md yourself if you n
 Below are concerns raised by OTHER reviewers (not your own). For each, decide whether to
 REFUTE it (you believe it is not a real problem) or AFFIRM it (you agree it stands).
 
-A refutation only counts if it is substantive: at least ~40 characters of reasoning AND it
-cites a specific section of the spec or acceptance (e.g. "spec.md § Constraints" or
-"acceptance.md line 12"). If you cannot substantively refute, AFFIRM — that is the safe default.
+A refutation only counts if it is substantive: at least ~40 characters of reasoning AND a
+structured citation pointing at the evidence. On every "refute" entry, set the citation
+field to { file, locator } — e.g. { "file": "spec.md", "locator": "§ Constraints" } or
+{ "file": "acceptance.md", "locator": "line 12" }. A refute without a citation is
+discarded by the script. If you cannot substantively refute, AFFIRM — that is the safe
+default (no citation needed on an affirm).
 You cannot refute your own concerns (the script filters self-refutation).
 
 Peer concerns:
@@ -218,7 +263,8 @@ ${JSON.stringify(peers, null, 2)}
 
 Return the structured object:
 - role: "${role}"
-- refutations: array of { concern_id, verdict ("refute"|"affirm"), reason }.
+- refutations: array of { concern_id, verdict ("refute"|"affirm"), reason, citation? }.
+  citation = { file, locator } and is REQUIRED when verdict is "refute".
   Include one entry per peer concern.`;
 }
 
@@ -250,14 +296,23 @@ function mergeRefutations(roles, xaResults) {
         role,
         verdict: ref.verdict,
         reason: ref.reason,
+        citation: ref.citation || null,
       });
     }
   });
   return map;
 }
 
+// A structured citation is valid when both file and locator are non-empty strings.
+// (Deliberately NOT validated against a fixed file list — locators like
+// "§ Constraints" or "line 12" against any cited artifact are acceptable.)
+function validCitation(c) {
+  return !!c &&
+    typeof c.file === "string" && c.file.trim().length > 0 &&
+    typeof c.locator === "string" && c.locator.trim().length > 0;
+}
+
 function applySurvivalVote(concerns, refutationMap) {
-  const SECTION_REF = /(spec|acceptance)\.md\s*§|line\s+\d+/i;
   const MIN_REFUTATION_CHARS = 40;
   return concerns.map((c) => {
     const refs = (refutationMap[c.id] || []).filter(
@@ -266,11 +321,11 @@ function applySurvivalVote(concerns, refutationMap) {
         r.role !== c.raised_by &&
         typeof r.reason === "string" &&
         r.reason.length >= MIN_REFUTATION_CHARS &&
-        SECTION_REF.test(r.reason)
+        validCitation(r.citation)
     );
     if (refs.length === 0) return c;
     const r = refs[0];
-    return { ...c, refuted: true, refuted_by: r.role, refutation_reason: r.reason };
+    return { ...c, refuted: true, refuted_by: r.role, refutation_reason: r.reason, refutation_citation: r.citation };
   });
 }
 
@@ -281,7 +336,10 @@ function buildEnvelope({ feature, cycle, now, reviews, surviving, verdict }) {
     for (const c of own) {
       lines.push(`- [${c.severity}] ${c.text}`);
       if (c.refuted) {
-        lines.push(`  refuted-by: ${c.refuted_by} — reason: ${c.refutation_reason}`);
+        const cite = c.refutation_citation
+          ? ` (cites ${c.refutation_citation.file} ${c.refutation_citation.locator})`
+          : "";
+        lines.push(`  refuted-by: ${c.refuted_by} — reason: ${c.refutation_reason}${cite}`);
       }
     }
     lines.push(`status: ${r.payload.status || "concerns-raised"}`);
@@ -303,6 +361,7 @@ function buildEnvelope({ feature, cycle, now, reviews, surviving, verdict }) {
   return {
     build_fleet_version: "0.2",
     feature,
+    run_id: runId,
     phase: "REVIEW",
     cycle,
     verdict,
@@ -323,31 +382,72 @@ function buildEnvelope({ feature, cycle, now, reviews, surviving, verdict }) {
   };
 }
 
-function haltEnvelope(feature, cycle, now, payload) {
+// Minimal envelope for the incomplete/invalid-args paths (pattern ported from
+// plan-review.js): removes the workflow marker (ownership-checked against
+// run_id) and refreshes UPDATED only. state_delta deliberately OMITS PHASE and
+// CYCLE so the scribe leaves them at their pre-run values; nothing is appended
+// to REVIEW.md and no ESCALATION.md is written — ESCALATED is reserved for
+// genuine cycle exhaustion.
+function cleanupEnvelope(feature, now, runId) {
   return {
     build_fleet_version: "0.2",
     feature,
+    run_id: runId,
     phase: "REVIEW",
-    cycle,
-    verdict: "escalate",
+    cycle: 0,
+    verdict: "incomplete",
     surviving_concerns: [],
     review_entries: [],
-    state_delta: { PHASE: "ESCALATED", CYCLE: cycle, UPDATED: now },
-    next_legal_commands: [],
-    escalation_payload: { ...payload, emitted_at: now },
+    state_delta: now ? { UPDATED: now } : {},
+    next_legal_commands: ["/build-fleet:review"],
+    escalation_payload: null,
   };
 }
 
+// ---------- verified scribe application ----------
+
+const SCRIBE_RESULT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ok", "error"],
+  properties: {
+    ok: { type: "boolean" },
+    error: { type: ["string", "null"] },
+  },
+};
+
+// The scribe returns a structured {ok, error} aligned with its
+// SCRIBE_OK:/SCRIBE_ERROR: contract (agents/scribe.md). One retry on failure;
+// if still failing, the caller must surface scribe_apply: "failed" — state did
+// NOT land and the dispatching command must refuse/report, never claim success.
 async function applyScribe(envelope) {
-  return await agent(
-    `Apply this build-fleet workflow envelope to .sdd/${envelope.feature}/ exactly per your instructions in agents/scribe.md.
+  let lastError = "scribe returned no usable result";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let res = null;
+    try {
+      res = await agent(
+        `Apply this build-fleet workflow envelope to .sdd/${envelope.feature}/ exactly per your instructions in agents/scribe.md.
+
+Marker ownership: delete .sdd/${envelope.feature}/.workflow-in-flight ONLY if its content matches the envelope's run_id${envelope.run_id ? ` ("${envelope.run_id}")` : " (null — legacy envelope: remove unconditionally, best-effort)"}. If the content differs, leave the marker — it belongs to another run.
+
+Return the structured object {ok, error}: ok=true when the WHOLE envelope landed (your SCRIBE_OK condition), with error=null. ok=false with error="<one-line reason>" otherwise (your SCRIBE_ERROR reason).
 
 ENVELOPE:
 ${JSON.stringify(envelope, null, 2)}`,
-    {
-      label: "scribe",
-      phase: "Apply",
-      agentType: "build-fleet:scribe",
+        {
+          label: attempt === 1 ? "scribe" : "scribe-retry",
+          phase: "Apply",
+          agentType: "build-fleet:scribe",
+          schema: SCRIBE_RESULT_SCHEMA,
+        }
+      );
+    } catch (e) {
+      res = null;
+      lastError = "scribe agent error: " + (e && e.message ? e.message : String(e));
     }
-  );
+    if (res && res.ok === true) return { ok: true, error: null };
+    if (res && typeof res.error === "string" && res.error) lastError = res.error;
+    log(`Scribe apply attempt ${attempt}/2 failed: ${lastError}`);
+  }
+  return { ok: false, error: lastError };
 }

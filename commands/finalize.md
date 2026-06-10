@@ -168,34 +168,57 @@ refuse with an actionable diff.
            BUILD_FLEET_BUILD_ROUTE: {"feature":"<slug>","build_mode":"deep-build"}
            ```
 
-      iii. **Drop the workflow-in-flight marker.** Write `.sdd/<slug>/.workflow-in-flight`
-           containing the current iso8601. Hooks `check-review-written` and
-           `restrict-reviewer-writes` skip while the marker is present; scribe deletes
-           it as the workflow's final phase. **Cleanup obligation:** if the Workflow
-           tool subsequently returns an `error` (step v) or fails to launch, delete
-           the marker before reporting the failure.
+      iii. **Resolve the BUILD cycle.** Read `BUILD_CYCLE:` from PROGRESS.md; if the
+           field is absent, add `BUILD_CYCLE: 0` first (the scribe replaces fields in
+           place, so it must exist before dispatch). If `BUILD_CYCLE >= 3`, refuse —
+           mirror `/build-fleet:deep-build`'s budget refusal (the budget is 3 build
+           cycles; the workflow escalates on the exhausting cycle). New cycle =
+           `BUILD_CYCLE + 1`.
 
-      iv.  **Emit cost preview** (headless contract parity with /build-fleet:deep-build).
-           Parse `estimatedCost` from the top of `${CLAUDE_PLUGIN_ROOT}/workflows/deep-build.js`:
+      iv.  **Compose the run id and drop the workflow-in-flight marker.** Compose a
+           run id `deep-build-<slug>-c<new_cycle>-<iso8601 now>` (the same `now` you
+           pass in step vi) and write `.sdd/<slug>/.workflow-in-flight` containing
+           exactly that run id as its single line. Hooks `check-review-written` and
+           `restrict-reviewer-writes` skip while the marker is present; the scribe
+           deletes it as the workflow's final phase — only if its content still
+           matches the envelope's `run_id`. **Cleanup obligation:** if the Workflow
+           tool subsequently returns an `error` (step vi) or fails to launch — or a
+           post-launch poll shows the run died before any scribe ran — delete the
+           marker (after verifying its content still matches your run id) before
+           reporting the failure.
+
+      v.   **Emit cost preview** (headless contract parity with /build-fleet:deep-build).
+           Parse the `@cost-ceiling` header comment at the top of
+           `${CLAUDE_PLUGIN_ROOT}/workflows/deep-build.js`:
            ```
-           BUILD_FLEET_COST_PREVIEW: {"workflow":"deep-build","feature":"<slug>","input_ceiling":<N>,"output_ceiling":<N>}
+           BUILD_FLEET_COST_PREVIEW: {"workflow":"deep-build","feature":"<slug>","cycle":<N>,"input_ceiling":<N>,"output_ceiling":<N>}
            ```
 
-      v.   **Invoke the `Workflow` tool** with:
+      vi.  **Invoke the `Workflow` tool** with:
            - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/deep-build.js`
-           - `args`: `{ "feature": "<slug>" }`
+           - `args`: `{ "feature": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step iv>" }`
 
-      vi.  **Emit the launch line:**
+           Supply `now` yourself (the script cannot call `Date`); the workflow
+           refuses to run without `feature`, `cycle`, or `now`.
+
+      vii. **Emit the launch line:**
            ```
-           BUILD_FLEET_WORKFLOW_LAUNCHED: {"runId":"<id>","transcriptDir":"<path>","status":"async_launched","feature":"<slug>","workflow":"deep-build"}
+           BUILD_FLEET_WORKFLOW_LAUNCHED: {"runId":"<id>","transcriptDir":"<path>","status":"async_launched","feature":"<slug>","cycle":<N>,"workflow":"deep-build"}
            ```
 
-      vii. Tell the user the deep-build workflow is running in the background;
+      viii. Tell the user the deep-build workflow is running in the background;
            `/workflows` shows progress; next command after completion is
            `/build-fleet:handoff` (for verdict=clean) or `/build-fleet:deep-build` to
-           iterate (for verdict=needs-iteration). **Exit step 6 here** — the workflow's
-           scribe handles state writes; the BUILD-complete signal will come from the
-           workflow's envelope, not from this command. Skip step 6e.
+           iterate (for verdict=needs-iteration — the envelope carries
+           `cycles_remaining` against the 3-cycle BUILD_CYCLE budget). A verdict of
+           `incomplete`/`invalid-args` means PHASE/BUILD_CYCLE are unchanged — re-run
+           after reading the result's `note` (partial worktree writes are possible if
+           coders had fanned out). **Scribe-apply failure is a hard failure:** a
+           return object carrying `scribe_apply: "failed"` means IMPL_NOTES.md/
+           PROGRESS.md did NOT land — report the run as failed with its
+           `scribe_error`; never treat the verdict as applied. **Exit step 6 here** —
+           the workflow's scribe handles state writes; the BUILD-complete signal will
+           come from the workflow's envelope, not from this command. Skip step 6e.
 
       Otherwise (BUILD_MODE absent or `standard`) — continue with single-coder
       dispatch:
