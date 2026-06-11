@@ -93,6 +93,7 @@ abandoned — bias small.
      `Append-only ADR log. Product-wide decisions, inherited read-only by every feature.`
    - `PROGRESS.md` — product-tier state:
      ```
+     SDD_SCHEMA: 1
      PRODUCT: <slug>
      SIZE: <small | standard | large>
      PHASE: PLAN
@@ -110,6 +111,17 @@ abandoned — bias small.
    - `.sdd/PRODUCT` — a one-line marker file containing the product slug, written
      at the `.sdd/` root (mirrors `.sdd/ACTIVE` for features). `resolve_product()`
      reads it; its presence flags the product tier as engaged.
+   - `.sdd/.gitignore` — **only if absent**, with exactly these entries (the
+     per-working-tree coordination files are never committed; the per-feature
+     artifacts, `_product/`, and the `PRODUCT` marker are — see the
+     `sdd-protocol` skill, ".sdd/ in version control"):
+     ```
+     ACTIVE
+     ACTIVE.lock
+     .workflow-in-flight
+     .stop-test-retries
+     .skip-stop-tests
+     ```
 
 2. **Delegate vision + backlog to product-owner.** Spawn `build-fleet:product-owner`
    via the Task tool. Tell it: it owns `.sdd/_product/vision.md` and

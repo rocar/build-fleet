@@ -20,7 +20,9 @@ new_proj() {
   local p="$work/$1"
   mkdir -p "$p/.sdd/feat" "$p/src"
   printf 'feat\n' > "$p/.sdd/ACTIVE"
-  printf 'PHASE: %s\nCYCLE: 1\n' "$2" > "$p/.sdd/feat/PROGRESS.md"
+  # SDD_SCHEMA stamp included: _lib.sh's field readers grep named fields and
+  # must ignore it (every case below doubles as the graceful-ignore check).
+  printf 'SDD_SCHEMA: 1\nPHASE: %s\nCYCLE: 1\n' "$2" > "$p/.sdd/feat/PROGRESS.md"
   printf '%s' "$p"
 }
 check() {

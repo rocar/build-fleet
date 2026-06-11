@@ -132,12 +132,16 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
     refusal/failure (step 9 branch) both STOP earlier and never reach here, so an
     unshipped feature is never advanced.
 
-    a. **Clear `.sdd/ACTIVE`.** The shipped feature is no longer in flight — **empty
-       the file** (write zero bytes / a single empty line; do not delete it). This is
-       **always** done on a successful ship, whether or not a product tier exists: it is
-       the fix that lets the loop continue (`/build-fleet:new-feature` refuses while
-       `.sdd/ACTIVE` is non-empty, and nothing else clears it; leaving it set would
-       deadlock the next feature). *(Safe: with no active feature,
+    a. **Release the in-flight lock.** The shipped feature is no longer in flight —
+       release via the shared script (it verifies the slug, removes `.sdd/ACTIVE.lock`,
+       and empties `.sdd/ACTIVE` without deleting it; never hand-empty the file):
+       ```bash
+       bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh" release "<slug>"
+       ```
+       This is **always** done on a successful ship, whether or not a product tier
+       exists: it is the fix that lets the loop continue (`/build-fleet:new-feature`
+       refuses while the lock is held, and nothing else releases it; leaving it held
+       would deadlock the next feature). *(Safe: with no active feature,
        `block-source-before-finalized` and the per-reviewer hooks are simply inactive —
        correct between features.)*
 

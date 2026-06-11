@@ -1,7 +1,7 @@
 ---
 description: Park the active item and free the in-flight lock
 argument-hint: "<reason>"
-allowed-tools: Read, Write, Edit
+allowed-tools: Read, Write, Edit, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*)
 disable-model-invocation: true
 ---
 
@@ -43,18 +43,23 @@ refuse: a park with no recorded reason is an audit hole.
      (Recording the pre-park phase is what makes an informed resume possible.)
    - Refresh `UPDATED:`.
 
-3. **Release the lock.** Empty `.sdd/ACTIVE` — write zero bytes / a single empty
-   line. Do **not** delete the file, and do **not** delete `.sdd/<slug>/`.
+3. **Release the lock via the shared script** (it verifies the slug, removes
+   `.sdd/ACTIVE.lock`, and empties `.sdd/ACTIVE` without deleting it — never
+   hand-empty the file). Do **not** delete `.sdd/<slug>/`:
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh" release "<slug>"
+   ```
 
 4. **Emit the signal, then report.**
    ```
    BUILD_FLEET_PARKED: {"feature":"<slug>","reason":"<reason>","was_phase":"<previous phase>"}
    ```
-   Tell the user: the item is parked with its workspace intact; `.sdd/ACTIVE` is
-   free, so `/build-fleet:triage` / `/build-fleet:new-feature` can start the next
-   item. To resume the parked item later: re-write its slug into `.sdd/ACTIVE`
-   and restore the recorded pre-park `PHASE` in its PROGRESS.md (a deliberate,
-   human, two-line edit — there is no auto-resume).
+   Tell the user: the item is parked with its workspace intact; the in-flight
+   lock is free, so `/build-fleet:triage` / `/build-fleet:new-feature` can start
+   the next item. To resume the parked item later: re-acquire the lock —
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh" acquire "<slug>" --owner "human:resume" --now "<iso8601>"`
+   — and restore the recorded pre-park `PHASE` in its PROGRESS.md (a deliberate,
+   human act — there is no auto-resume).
 
 ## Hard rules
 

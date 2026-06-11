@@ -76,9 +76,11 @@ eq "prod-row1-handoff"  "$(q "$o" '.product.backlog.features[1].handoff')" "null
 eq "prod-active-null"   "$(q "$o" '.active')"                            "null"
 
 # ---- 3. active feature, no product tier ------------------------------------
+# (PROGRESS carries the SDD_SCHEMA stamp — readers grep named fields and must
+# ignore it; every assertion below doubles as the graceful-ignore check.)
 p="$work/feat"; mkdir -p "$p/.sdd/auth"
 printf 'auth\n'                                                  > "$p/.sdd/ACTIVE"
-printf 'PHASE: BUILD\nCYCLE: 1\nCHANGE_CYCLE: 0\nUPDATED: x\n'   > "$p/.sdd/auth/PROGRESS.md"
+printf 'SDD_SCHEMA: 1\nPHASE: BUILD\nCYCLE: 1\nCHANGE_CYCLE: 0\nUPDATED: x\n' > "$p/.sdd/auth/PROGRESS.md"
 printf 'STATUS: FINALIZED\n# Spec\n'                             > "$p/.sdd/auth/spec.md"
 o="$(cd "$p" && bash "$SNAP")"
 valid_json "feat-json" "$o"
@@ -100,7 +102,7 @@ eq "esc-escalated"      "$(q "$o" '.active.escalated')"   "true"
 # ---- 5. bug lane -----------------------------------------------------------
 p="$work/bug"; mkdir -p "$p/.sdd/login-500"
 printf 'login-500\n'                                                   > "$p/.sdd/ACTIVE"
-printf 'PHASE: DIAGNOSE\nLANE: bug\nSEV: sev1\nCYCLE: 2\nFIX_CYCLE: 0\n' > "$p/.sdd/login-500/PROGRESS.md"
+printf 'SDD_SCHEMA: 1\nPHASE: DIAGNOSE\nLANE: bug\nSEV: sev1\nCYCLE: 2\nFIX_CYCLE: 0\n' > "$p/.sdd/login-500/PROGRESS.md"
 printf 'STATUS: CONFIRMED\n# Diagnosis\n'                              > "$p/.sdd/login-500/diagnosis.md"
 o="$(cd "$p" && bash "$SNAP")"
 valid_json "bug-json" "$o"

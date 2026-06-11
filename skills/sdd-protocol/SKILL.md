@@ -39,12 +39,19 @@ Two deeper references live alongside this file:
 - **The orchestrator routes, it does not build.** The main session assigns work,
   runs gates, and synthesizes. It never writes production source itself.
 - **One item in flight.** `.sdd/ACTIVE` names the single active feature or bug.
+  Acquisition and release go through `scripts/acquire-active.sh` (atomic noclobber
+  lock on `.sdd/ACTIVE.lock` with owner metadata) — never check-then-write the
+  file by hand. The lock serializes within one working tree; build-fleet assumes
+  **one orchestrator session per worktree** (two clones of the same repo are not
+  serialized against each other — see ".sdd/ in version control").
 
 ## Workspace layout and ownership
 
 ```
 .sdd/
   ACTIVE                 # one line: the active feature/bug slug. Empty = nothing active.
+  ACTIVE.lock            # owner/slug/held-since metadata while ACTIVE is held (acquire-active.sh).
+  .gitignore             # scaffolded: keeps the per-worktree coordination files out of git.
   PRODUCT                # one line: the product slug, if a product tier exists.
   _product/              # the product tier (see references/product-tier.md).
   <feature>/
@@ -70,15 +77,51 @@ canonical writer of workflow-driven state mutations.
 
 `.sdd/ACTIVE` empty (or absent) means nothing is active; all write-gating hooks then
 allow operations through. Every hook resolves the active item by reading this file —
-never an environment variable.
+never an environment variable. Commands acquire and release it via
+`scripts/acquire-active.sh` (atomic create of `.sdd/ACTIVE.lock`, then the slug into
+`ACTIVE`; release verifies the slug, removes the lock, and empties `ACTIVE`). The
+script never reads a clock — callers pass `--now`; stale-lock judgment is the
+human/orchestrator's, informed by the `status` mode's held-since.
+
+## .sdd/ in version control
+
+`.sdd/` is the audit trail — **commit it**. Specifically: commit every
+per-feature/per-bug workspace (`.sdd/<slug>/` — spec, acceptance, ADRs, reviews,
+notes, PROGRESS), the product tier (`.sdd/_product/`), and the `.sdd/PRODUCT`
+marker. **Ignore the per-working-tree coordination files** — they are live locks
+and transient sentinels, meaningful only to the worktree that wrote them and
+merge-conflict magnets if committed:
+
+```
+ACTIVE
+ACTIVE.lock
+.workflow-in-flight
+.stop-test-retries
+.skip-stop-tests
+```
+
+`/build-fleet:new-product`, `/build-fleet:new-feature`, and `/build-fleet:triage`
+scaffold `.sdd/.gitignore` with exactly those entries when it is absent.
+
+**Single driver per worktree.** The `ACTIVE` lock serializes acquisition *within*
+one working tree only. build-fleet assumes one orchestrator session per worktree;
+two clones (or git worktrees) of the same repo each hold their own ignored
+`ACTIVE`/`ACTIVE.lock` and are not serialized against each other — reconciling
+parallel clones is human merge discipline, not the lock's job.
 
 ## PROGRESS.md schema
 
-Exact field names; hooks and commands parse these lines.
+Exact field names; hooks and commands parse these lines. Scaffolded PROGRESS
+files are stamped `SDD_SCHEMA: 1` — readers parse named fields and ignore
+unknown lines, so the stamp is inert at runtime; it exists so a future schema
+change is detectable on disk and can be CHANGELOG'd with a migration note (see
+the Compatibility convention in `CHANGELOG.md`; finish or park in-flight items
+before a major upgrade).
 
 Forward feature:
 
 ```
+SDD_SCHEMA: 1
 FEATURE: <slug>
 PHASE: SPEC | REVIEW | FINALIZE | BUILD | CHANGE_REVIEW | HANDOFF | ESCALATED | PARKED
 CYCLE: <int>          # spec-review cycles consumed (one increment per /build-fleet:review run)
@@ -92,7 +135,8 @@ UPDATED: <iso8601>
 A bug's PROGRESS.md instead carries `LANE: bug` (absence of `LANE` reads as a
 forward feature), `PHASE: REPORT | REPRODUCE | DIAGNOSE | FIX | VERIFY | HANDOFF |
 ESCALATED | PARKED`, `SEV: sev0|sev1|sev2`, `CYCLE` (diagnose-confirmation cycles),
-and `FIX_CYCLE` (verify→fix bounces).
+and `FIX_CYCLE` (verify→fix bounces) — plus the same `SDD_SCHEMA: 1` stamp. The
+product tier's `_product/PROGRESS.md` is stamped too.
 
 `/build-fleet:park` sets `PHASE: PARKED` on either lane and appends a
 `PARKED: <iso8601> — was PHASE <prev> — <reason>` line; resuming is a deliberate
@@ -248,8 +292,9 @@ bounded by the 3-cycle `CHANGE_CYCLE` budget, then ESCALATE.
 **HANDOFF.** devops takes the finalized, reviewed change → CI/CD, IaC, release
 notes. It advances only on an explicit `BUILD_FLEET_DEVOPS_OK` signal (a silent or
 refused return leaves the feature unshipped). On a full completion, handoff flips
-the product backlog row (if any), clears `.sdd/ACTIVE`, and surfaces the next
-unblocked feature — see `references/product-tier.md` § DEVELOPING loop.
+the product backlog row (if any), releases the in-flight lock
+(`acquire-active.sh release`), and surfaces the next unblocked feature — see
+`references/product-tier.md` § DEVELOPING loop.
 
 ## Hard gates (enforced by hooks)
 
@@ -314,8 +359,9 @@ Two human-driven commands operate on stuck state:
   counter, restores the pre-escalation phase, and records the human decision. The
   sanctioned unblock path.
 - **`/build-fleet:park <reason>`** — records the parked state in PROGRESS.md and
-  empties `.sdd/ACTIVE`, freeing the in-flight lock (e.g. so a sev0 bug can be
-  triaged mid-feature). Nothing is deleted; resuming is a deliberate human edit.
+  releases the in-flight lock via `acquire-active.sh release` (e.g. so a sev0 bug
+  can be triaged mid-feature). Nothing is deleted; resuming is a deliberate human
+  act (re-acquire the lock, restore the pre-park PHASE).
 
 Parking is a human act (the command is not model-invocable); the orchestrator's job
 when blocked is to surface the conflict and stop.

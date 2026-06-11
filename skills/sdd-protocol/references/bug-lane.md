@@ -52,15 +52,17 @@ simplest correct rule; there is no second `ACTIVE_BUG` lane, so a sev0 cannot pr
 a mid-flight feature — the human parks the feature first with `/build-fleet:park`).
 On a clean lock it:
 
-1. derives a kebab-case `bug-<…>` slug and scaffolds `.sdd/<slug>/` with
-   **`diagnosis.md`** (`STATUS: REPORTED`, the symptom verbatim under `## Symptom +
-   reproduction steps`) and a bug-lane `PROGRESS.md` (`LANE: bug`, `PHASE: REPORT`,
-   `SEV: pending`, `CYCLE: 0`, `FIX_CYCLE: 0`) — and **no** `spec.md`/`acceptance.md`;
-2. writes the slug to `.sdd/ACTIVE`;
+1. derives a kebab-case `bug-<…>` slug and acquires the in-flight lock
+   (`scripts/acquire-active.sh acquire` — atomic; writes the slug to `.sdd/ACTIVE`);
+2. scaffolds `.sdd/<slug>/` with **`diagnosis.md`** (`STATUS: REPORTED`, the symptom
+   verbatim under `## Symptom + reproduction steps`) and a bug-lane `PROGRESS.md`
+   (`SDD_SCHEMA: 1`, `LANE: bug`, `PHASE: REPORT`, `SEV: pending`, `CYCLE: 0`,
+   `FIX_CYCLE: 0`) — and **no** `spec.md`/`acceptance.md`;
 3. runs the **triage classifier** — the `classifier` agent in **bug mode** (see
    `agents/classifier.md` § Bug-mode) — for `{severity, cause_known}`;
 4. **routes on `cause_known`:** `true` → the cause is obvious from the report; emit
-   `BUILD_FLEET_TRIAGE_KNOWN_CAUSE`, **delete the scaffold, clear `.sdd/ACTIVE`**,
+   `BUILD_FLEET_TRIAGE_KNOWN_CAUSE`, **delete the scaffold, release the lock**
+   (`acquire-active.sh release`),
    and send the user to the forward `/build-fleet:new-feature` trivial path (the
    sharp boundary). `false` → stay in the lane: write `SEV`, keep `PHASE: REPORT`,
    emit `BUILD_FLEET_TRIAGE`. Next command: `/build-fleet:reproduce`.
@@ -174,8 +176,9 @@ Three gate commands carry a confirmed bug to a shipped fix, completing the lane:
   `FIX_CYCLE++` (bounded at 3, then ESCALATE). Emits `BUILD_FLEET_VERIFY`.
 
 - **`/build-fleet:ship-fix` (HANDOFF).** devops ships the verified fix (sev0 = hotfix
-  urgency); on `BUILD_FLEET_DEVOPS_OK` it emits `BUILD_FLEET_SHIP_FIX` and **clears
-  `.sdd/ACTIVE`** (the lock-clear that unblocks the next item) — **no**
+  urgency); on `BUILD_FLEET_DEVOPS_OK` it emits `BUILD_FLEET_SHIP_FIX` and **releases the
+  in-flight lock** (`acquire-active.sh release` — the lock-clear that unblocks the
+  next item) — **no**
   product-backlog flip or DEVELOPING-loop advance (a bug is not a backlog feature).
   A missing/`_REFUSED` devops signal leaves the lock set and the fix unshipped (the
   safe default).

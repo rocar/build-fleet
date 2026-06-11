@@ -1,6 +1,6 @@
 ---
 description: Ship the verified bug fix via devops
-allowed-tools: Read, Write, Edit, Task, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
+allowed-tools: Read, Write, Edit, Task, Bash(npm test:*), Bash(pytest:*), Bash(make test:*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*)
 ---
 
 <!-- Deliberately model-invocable (audit §3.22 evaluated): ship-fix is the
@@ -44,8 +44,12 @@ Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`); `agents/devops.md
      ```
      BUILD_FLEET_SHIP_FIX: {"slug":"<slug>","severity":"<sev0|sev1|sev2>"}
      ```
-     Then **clear `.sdd/ACTIVE`** — empty the file (zero bytes / a single empty line; do not
-     delete it) so the next `/build-fleet:triage` or `/build-fleet:new-feature` is unblocked.
+     Then **release the in-flight lock via the shared script** (it verifies the slug, removes
+     `.sdd/ACTIVE.lock`, and empties `.sdd/ACTIVE` without deleting it; never hand-empty):
+     ```bash
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh" release "<slug>"
+     ```
+     so the next `/build-fleet:triage` or `/build-fleet:new-feature` is unblocked.
      **No backlog flip / next-feature resolve** — a bug has no backlog row (if the slug happens
      to match one, skip it; bugs are not backlog features). Report: fix shipped, lock cleared;
      for a `sev0` whose adversarial confirmation was skipped, remind that the post-hoc

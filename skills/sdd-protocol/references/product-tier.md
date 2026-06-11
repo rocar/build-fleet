@@ -236,8 +236,9 @@ On a **full** `/build-fleet:handoff` completion (devops succeeded + the backlog 
 ran — *not* a CHANGE_REVIEW bounce-back to BUILD), when a product tier exists,
 handoff:
 
-1. **Clears `.sdd/ACTIVE`** (empties the file — the shipped feature is no longer in
-   flight). This is what unblocks the next `/build-fleet:new-feature`. Safe: with no
+1. **Releases the in-flight lock** (`scripts/acquire-active.sh release <slug>` —
+   removes `.sdd/ACTIVE.lock` and empties `.sdd/ACTIVE`; the shipped feature is no
+   longer in flight). This is what unblocks the next `/build-fleet:new-feature`. Safe: with no
    active feature, `block-source-before-finalized` and the per-reviewer hooks are
    simply inactive — correct between features.
 2. **Re-resolves the next unblocked feature from the LIVE backlog** — *first

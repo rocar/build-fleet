@@ -160,9 +160,9 @@ either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field).
 `plan-review.js` (product PLAN_REVIEW), `deep-build.js` (fan-out BUILD), and
 `diagnose.js` (bug-lane root-cause confirmation — the survival vote, inverted).
 Plus deterministic shared scripts under `scripts/` (the backlog resolver, the
-intent-block extractor, the product-memory splice, the status snapshot — each
-with its own test harness), seven craft skills, ten gate-enforcing hooks, and
-the shared memory layer under `.sdd/`.
+intent-block extractor, the product-memory splice, the status snapshot, the
+atomic ACTIVE-lock acquirer — each with its own test harness), seven craft
+skills, ten gate-enforcing hooks, and the shared memory layer under `.sdd/`.
 
 ---
 
@@ -506,6 +506,50 @@ without an explicit `ratify` token.
 
 ---
 
+## Orchestrator integration / polling
+
+An external orchestrator (cron, Hermes adapter, CI job) should **poll** project
+state with `scripts/status-snapshot.sh` — deterministic, LLM-free, read-only, no
+token cost. Run it from the **target project's repo root**; it emits exactly one
+JSON object on stdout with schema `build-fleet/status-snapshot@1`:
+`{schema, generated_at, has_product, product:{phase, vision, stack, backlog
+{done,total,phases,features[]}, next} | null, active:{slug, lane, phase, status,
+cycle/change_cycle or sev/fix_cycle, escalated} | null}` — the script's header
+comment is the authoritative field-by-field contract. `/build-fleet:status` is
+the human-readable view of the same state.
+
+**Invoking it from outside Claude Code.** `${CLAUDE_PLUGIN_ROOT}` is a Claude
+Code-only variable — it is **not resolvable by an external poller**. Either call
+the script via a checkout path (a clone of this repo, or the plugin marketplace
+cache), or vendor it — and if you copy rather than clone, preserve the relative
+layout: `status-snapshot.sh` sources `hooks/scripts/_lib.sh` and invokes its
+sibling `scripts/next-feature.sh`, so all three must travel together:
+
+```bash
+cd /path/to/target-project && bash /path/to/build-fleet/scripts/status-snapshot.sh
+```
+
+Requires `jq` (the snapshot is JSON). The orchestrator-side adapter pattern: poll
+on a schedule, diff against the previous snapshot, publish deltas wherever your
+fleet keeps project state.
+
+**Signal stability policy.** The machine surface is versioned: the snapshot
+schema carries its version inline (`build-fleet/status-snapshot@1`) and the
+`BUILD_FLEET_*` signal-line grammar (`BUILD_FLEET_<NAME>: {json}` on stdout,
+before any prose) is at version 1. **Additive** changes — new signal names, new
+optional JSON fields — keep the version; **breaking** changes — renamed/removed
+fields or signals, changed semantics — bump it and get a Compatibility line in
+`CHANGELOG.md`. Orchestrators should pin on the `@N` they understand: assert
+`.schema == "build-fleet/status-snapshot@1"` and treat an unknown version as
+"update the adapter," not as parseable data.
+
+One more operational assumption worth restating here: **one orchestrator session
+per working tree.** The `.sdd/ACTIVE` lock (`scripts/acquire-active.sh`) makes
+acquisition atomic *within* a worktree; pointing two drivers at the same checkout
+is unsupported, and parallel clones are independent.
+
+---
+
 ## State lives in the target project
 
 Everything the fleet produces lives in `.sdd/` in the **target project's** working
@@ -513,7 +557,9 @@ directory — never inside the plugin:
 
 ```
 .sdd/
-  ACTIVE                 # the one feature in flight (emptied on ship)
+  ACTIVE                 # the one item in flight (released — emptied — on ship)
+  ACTIVE.lock            # owner/slug/held-since while ACTIVE is held (atomic acquire)
+  .gitignore             # scaffolded — keeps the coordination files out of git
   PRODUCT                # product slug marker (if a product tier exists)
   _product/              # the product tier (optional, v0.4)
     vision.md            # PO — Overview / Goals (+ OUTCOME for standard/large)
@@ -564,6 +610,18 @@ UPDATED: <iso8601>
 
 The plugin tree itself is read-only and re-installable; wiping and reinstalling the
 plugin never touches your `.sdd/` state.
+
+**Version-control policy for `.sdd/`** (the full statement lives in the
+`sdd-protocol` skill): **commit** the audit trail — every `.sdd/<slug>/`
+workspace, `_product/`, and the `PRODUCT` marker; **ignore** the per-working-tree
+coordination files — `ACTIVE`, `ACTIVE.lock`, `.workflow-in-flight`,
+`.stop-test-retries`, `.skip-stop-tests` (live locks and transient sentinels;
+committing them makes merge conflicts out of state only one worktree owns).
+`/build-fleet:new-product`, `/build-fleet:new-feature`, and `/build-fleet:triage`
+scaffold `.sdd/.gitignore` with exactly those entries. Acquisition of `ACTIVE` is
+atomic (`scripts/acquire-active.sh`, a noclobber lock with owner metadata) and
+serializes **within one worktree only** — build-fleet assumes one orchestrator
+session per working tree; parallel clones are not serialized against each other.
 
 ---
 

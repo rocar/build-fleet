@@ -2,6 +2,18 @@
 
 All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https://keepachangelog.com/) conventions; semver bumps track the plugin's `version` in `.claude-plugin/plugin.json`.
 
+## Compatibility
+
+build-fleet's machine surface is versioned: scaffolded `.sdd/` state files carry an
+`SDD_SCHEMA: 1` stamp, the status snapshot declares `build-fleet/status-snapshot@1`, and the
+`BUILD_FLEET_*` signal-line grammar is at version 1. Any release that changes the `.sdd/` schema
+or the signal grammar adds a **Compatibility** line to its entry below, describing the change and
+any migration; additive changes keep the version, breaking changes bump it. **Finish or park
+(`/build-fleet:park`) in-flight items before a major upgrade** — mid-flight `.sdd/` state is not
+migrated automatically. build-fleet assumes a single driver per working tree: one orchestrator
+session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
+only (never across clones).
+
 ## [0.5.1] — 2026-06-10
 
 ### Added

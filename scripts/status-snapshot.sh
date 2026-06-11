@@ -11,6 +11,13 @@
 # Run from the target project's repo root — like the hooks, all .sdd/ paths are
 # resolved relative to cwd (see hooks/scripts/_lib.sh).
 #
+# External pollers: ${CLAUDE_PLUGIN_ROOT} resolves only inside Claude Code —
+# call this script via a checkout/clone path instead, or vendor it PRESERVING
+# the relative layout (it sources ../hooks/scripts/_lib.sh and invokes its
+# sibling next-feature.sh). Stability: additive schema changes keep @1;
+# breaking changes bump the @N and get a CHANGELOG Compatibility line — pin on
+# the schema value you understand (README "Orchestrator integration / polling").
+#
 # Single source of truth: backlog RESOLUTION + counts come from next-feature.sh
 # (the v0.4 resolver, with its own 18-case harness). This script only ADDS the
 # per-feature row listing (backlog.features[]) for display + delta-detection,

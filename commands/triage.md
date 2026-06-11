@@ -1,7 +1,7 @@
 ---
 description: File a bug into the troubleshoot-fix lane
 argument-hint: "<symptom>"
-allowed-tools: Read, Write, Edit, Task, Bash(rm -rf .sdd/:*)
+allowed-tools: Read, Write, Edit, Task, Bash(rm -rf .sdd/:*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*)
 ---
 
 # /build-fleet:triage
@@ -21,20 +21,27 @@ empty, refuse — you cannot triage without a symptom. Emit `BUILD_FLEET_REFUSE`
 
 ## What you do
 
-1. **Refuse if an item is already active.** Read `.sdd/ACTIVE`. If it exists and is non-empty,
-   refuse: build-fleet allows exactly one item in flight, and **a bug and a forward feature
-   share the `.sdd/ACTIVE` lock**. Name the active slug and how to inspect it
-   (`/build-fleet:status`). Emit:
-   ```
-   BUILD_FLEET_REFUSE: {"command":"triage","reason":"item-in-flight","active":"<slug>"}
-   ```
-   Stop. (A sev0 cannot preempt a mid-flight feature here; the human parks the feature
-   first with `/build-fleet:park <reason>` — the sanctioned preemption path — then re-runs
-   the triage.)
-
-2. **Derive a bug slug.** kebab-case, prefixed `bug-`, a ≤6-word summary of the symptom
+1. **Derive a bug slug.** kebab-case, prefixed `bug-`, a ≤6-word summary of the symptom
    (e.g. `bug-login-500-on-empty-email`). If `.sdd/<bug-slug>/` already exists, append a short
    disambiguator.
+
+2. **Acquire the in-flight lock (atomic).** Run the shared acquirer — never check-then-write
+   `.sdd/ACTIVE` by hand. Use the same iso8601 `now` you will stamp into `UPDATED:` in step 3:
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh" acquire "<bug-slug>" --owner "build-fleet:triage" --now "<iso8601 now>"
+   ```
+   - **Exit 0** → the lock is held and the script has already written the bug slug into
+     `.sdd/ACTIVE` (do not write it again later). Continue.
+   - **Exit 1** → another item holds the lock (the script names the holder on its
+     `BUILD_FLEET_ACTIVE_CONFLICT` line): build-fleet allows exactly one item in flight, and
+     **a bug and a forward feature share the `.sdd/ACTIVE` lock**. Refuse — name the active
+     slug and how to inspect it (`/build-fleet:status`). Emit:
+     ```
+     BUILD_FLEET_REFUSE: {"command":"triage","reason":"item-in-flight","active":"<slug>"}
+     ```
+     Stop. (A sev0 cannot preempt a mid-flight feature here; the human parks the feature
+     first with `/build-fleet:park <reason>` — the sanctioned preemption path — then re-runs
+     the triage.)
 
 3. **Scaffold `.sdd/<bug-slug>/`** — exactly two files (the bug lane has **no** `spec.md`,
    `acceptance.md`, REVIEW.md, or TEST_PLAN.md at entry):
@@ -64,6 +71,7 @@ empty, refuse — you cannot triage without a symptom. Emit `BUILD_FLEET_REFUSE`
      ```
    - `PROGRESS.md`:
      ```
+     SDD_SCHEMA: 1
      FEATURE: <bug-slug>
      PHASE: REPORT
      LANE: bug
@@ -75,7 +83,18 @@ empty, refuse — you cannot triage without a symptom. Emit `BUILD_FLEET_REFUSE`
      A bug PROGRESS carries **no** `TIER`/`BUILD_MODE` (forward-machine fields); the bug-lane
      hooks never read them.
 
-4. **Write `.sdd/ACTIVE`** with the bug slug as its single line.
+4. **Scaffold `.sdd/.gitignore`, if absent** (a bug-first repo creates `.sdd/` fresh here).
+   If `.sdd/.gitignore` does not exist, write it with exactly these entries (the
+   per-working-tree coordination files are never committed — see the `sdd-protocol` skill,
+   ".sdd/ in version control"):
+   ```
+   ACTIVE
+   ACTIVE.lock
+   .workflow-in-flight
+   .stop-test-retries
+   .skip-stop-tests
+   ```
+   (`.sdd/ACTIVE` itself was already written by step 2's acquire.)
 
 5. **Run the triage classifier.** Use the Task tool to spawn `build-fleet:classifier` in
    **bug mode** (see `agents/classifier.md` § Bug-mode):
@@ -106,7 +125,11 @@ empty, refuse — you cannot triage without a symptom. Emit `BUILD_FLEET_REFUSE`
      BUILD_FLEET_TRIAGE_KNOWN_CAUSE: {"symptom":"<text>","recommended":"/build-fleet:new-feature","reason":"cause is known — use the forward path"}
      ```
      Then **undo the scaffold** so the known-cause bug does not occupy the lock: `rm -rf` the
-     `.sdd/<bug-slug>/` directory (Bash) and **empty `.sdd/ACTIVE`** (write an empty file).
+     `.sdd/<bug-slug>/` directory (Bash) and **release the lock via the script** (it verifies
+     the slug, removes `.sdd/ACTIVE.lock`, and empties `.sdd/ACTIVE`):
+     ```bash
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh" release "<bug-slug>"
+     ```
      Tell the user to run `/build-fleet:new-feature <slug>` instead. Stop. (This is the sharp
      boundary with the trivial fast-path.)
 
@@ -138,5 +161,6 @@ BUILD_FLEET_REFUSE:             {"command":"triage","reason":"<item-in-flight|em
 
 ## Refusal cases
 
-- `.sdd/ACTIVE` exists and is non-empty → refuse (one item in flight).
+- `acquire-active.sh acquire` exits 1 — another item holds the lock → refuse (one item in
+  flight).
 - `$ARGUMENTS` is empty → refuse (no symptom to triage).

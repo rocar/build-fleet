@@ -1,7 +1,7 @@
 ---
 description: Scaffold a feature workspace and draft its spec
 argument-hint: "<feature-slug>"
-allowed-tools: Read, Write, Edit, Task, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*)
+allowed-tools: Read, Write, Edit, Task, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*)
 ---
 
 # /build-fleet:new-feature
@@ -20,10 +20,23 @@ and surface that the user must supply a slug.
 
 ## What you do
 
-1. **Refuse if a feature is already active.** Read `.sdd/ACTIVE`. If it exists
-   and is non-empty, refuse: the build-fleet protocol allows exactly one
-   feature in flight. Tell the user the active slug and how to inspect it
-   (`/build-fleet:status`). Stop.
+1. **Acquire the in-flight lock (atomic).** Run the shared acquirer — never
+   check-then-write `.sdd/ACTIVE` by hand (the read-modify-write race is what
+   the script exists to close). Use the same iso8601 `now` you will stamp into
+   `UPDATED:` in step 3:
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh" acquire "<slug>" --owner "build-fleet:new-feature" --now "<iso8601 now>"
+   ```
+   - **Exit 0** → the lock is held and the script has already written the slug
+     into `.sdd/ACTIVE` (do not write it again later). Continue.
+   - **Exit 1** → another item holds the lock (the script names the holder on
+     its `BUILD_FLEET_ACTIVE_CONFLICT` line): build-fleet allows exactly one
+     feature in flight. Refuse:
+     ```
+     BUILD_FLEET_REFUSE: {"command":"new-feature","code":2,"reason":"active-feature-conflict","active":"<held slug>"}
+     ```
+     Tell the user the active slug, how to inspect it (`/build-fleet:status`),
+     and that `/build-fleet:park` is the sanctioned preemption path. Stop.
 
 2. **Scaffold `.sdd/<slug>/`** with the empty files the protocol expects:
    - `spec.md` — start with the STATUS line `STATUS: DRAFT` and the required
@@ -39,6 +52,7 @@ and surface that the user must supply a slug.
 3. **Initialize `PROGRESS.md`** with the schema from `sdd-protocol` (the classifier fills TIER + BUILD_MODE in step 7):
 
    ```
+   SDD_SCHEMA: 1
    FEATURE: <slug>
    PHASE: SPEC
    CYCLE: 0
@@ -49,7 +63,18 @@ and surface that the user must supply a slug.
    UPDATED: <iso8601>
    ```
 
-4. **Write `.sdd/ACTIVE`** with the slug as its single line.
+4. **Scaffold `.sdd/.gitignore`, if absent.** (`.sdd/ACTIVE` was already
+   written by step 1's acquire — do not write it again.) If `.sdd/.gitignore`
+   does not exist, write it with exactly these entries (the per-working-tree
+   coordination files are never committed; the per-feature artifacts and
+   `_product/` are — see the `sdd-protocol` skill, ".sdd/ in version control"):
+   ```
+   ACTIVE
+   ACTIVE.lock
+   .workflow-in-flight
+   .stop-test-retries
+   .skip-stop-tests
+   ```
 
 5. **Establish the feature description.** Before classifying or drafting,
    determine *what the feature actually is* — the slug alone is not a spec.
@@ -240,7 +265,10 @@ and surface that the user must supply a slug.
 
 ## Refusal cases
 
-- `.sdd/ACTIVE` exists and is non-empty → refuse.
+- `acquire-active.sh acquire` exits 1 (another item holds the lock) → refuse
+  with `{"code":2,"reason":"active-feature-conflict"}`.
 - `$ARGUMENTS` is empty → refuse.
 - `.sdd/<slug>/` already exists → refuse; ask the user whether to resume or
-  pick a new slug.
+  pick a new slug. (Release the lock you just acquired —
+  `bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh" release "<slug>"` —
+  so the refusal does not leave the slug locked.)
