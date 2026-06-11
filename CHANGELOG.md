@@ -14,6 +14,17 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.6.2] — 2026-06-11
+
+### Fixed
+
+- **README accuracy pass.** Version banner 0.5 → 0.6; intro rewritten in present tense (was
+  framed as v0.4 release notes); the last surviving exit-code claim replaced with the
+  `{"code","reason"}` refusal contract; hooks table now lists all ten gates (guard-bash-writes
+  was missing) with the fail-closed and bounded-stop-tests semantics; PROGRESS schema gains
+  `BUILD_CYCLE`, `PARKED`, and `SDD_SCHEMA`; release-channel CI description matches the
+  tag-push design; headless signal list gains PARKED/RESOLVED/ACTIVE_CONFLICT. Docs only.
+
 ## [0.6.1] — 2026-06-11
 
 ### Fixed
