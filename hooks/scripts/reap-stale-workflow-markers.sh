@@ -45,8 +45,13 @@ while IFS= read -r marker; do
     rm -f "$marker"
     continue
   fi
-  # Portable mtime: macOS uses `stat -f %m`, Linux uses `stat -c %Y`.
-  mtime=$(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker" 2>/dev/null || echo "$now")
+  # Portable mtime: Linux (GNU) uses `stat -c %Y`, macOS (BSD) uses
+  # `stat -f %m`. GNU must be probed FIRST: on GNU, `stat -f %m <file>`
+  # does not fail — it's filesystem mode and prints the MOUNT POINT,
+  # which would poison the arithmetic below (caught by CI on ubuntu).
+  mtime=$(stat -c %Y "$marker" 2>/dev/null || stat -f %m "$marker" 2>/dev/null || echo "$now")
+  # Belt-and-suspenders: any non-numeric mtime means "treat as fresh".
+  case "$mtime" in *[!0-9]*|"") mtime=$now ;; esac
   age=$((now - mtime))
   if [ "$age" -gt "$STALE_AFTER_SECONDS" ]; then
     feature=$(dirname "$marker" | sed 's|^\.sdd/||')

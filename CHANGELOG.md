@@ -14,6 +14,19 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.6.1] — 2026-06-11
+
+### Fixed
+
+- **Marker reaper broken on Linux.** GNU `stat -f %m <file>` does not fail — it runs in
+  filesystem mode and prints the mount point, so the BSD-first probe order poisoned the age
+  arithmetic and `reap-stale-workflow-markers.sh` died (exit 1) on every Linux session stop,
+  leaving stale `.workflow-in-flight` markers unreaped. Probe order is now GNU-first with a
+  numeric guard. Caught by the 0.6.0 CI matrix on its first run.
+- **release-channel CI race.** The version≡tag check ran on main pushes and failed spuriously
+  when the merge landed before the tag was pushed. It now runs on `v*` tag pushes and pins the
+  tag to plugin.json's version — race-free.
+
 ## [0.6.0] — 2026-06-11
 
 The professional-standard release: ships the pollable status snapshot (ROADMAP **v0.3a**)

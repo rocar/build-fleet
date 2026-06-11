@@ -51,8 +51,9 @@ bash scripts/run-tests.sh        # every hook + script suite, then the smoke tes
   isolated JS runtime — no `Date`, no filesystem; timestamps come from
   `args.now`, all state writes go through the scribe).
 - CI (`.github/workflows/ci.yml`) runs the suite on macOS (bash 3.2) and Linux,
-  and checks that main's plugin.json version equals the latest tag. Keep every
-  hook script bash-3.2 compatible.
+  and pins every pushed `v*` tag to plugin.json's version. Keep every hook
+  script bash-3.2 compatible AND GNU-coreutils compatible (probe GNU flags
+  first: e.g. GNU `stat -f` succeeds with the wrong meaning, it doesn't fail).
 - TDD for gates: any hook behavior change gets a failing test case first, in the
   existing harness style.
 
@@ -63,7 +64,8 @@ bash scripts/run-tests.sh        # every hook + script suite, then the smoke tes
   README component counts, and the agent `description:` frontmatter for any agent
   whose body changed. The plugin cache is version-keyed — a content change
   without a version bump never reaches installed users. Main always equals the
-  latest tag (CI enforces it).
+  latest tag (release discipline; CI pins each pushed tag to its manifest
+  version).
 - **A lane that touches an agent's body must touch its description.** The
   description is the delegation surface; a stale one misroutes work.
 - **Severity rubric is triple-maintained on purpose.** The blocker/major/minor

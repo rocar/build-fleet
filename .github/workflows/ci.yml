@@ -25,19 +25,20 @@ jobs:
       - name: Run test suites + smoke
         run: bash scripts/run-tests.sh
 
+  # Runs on v* tag pushes (race-free: checking "latest tag" on a main push
+  # fails spuriously when the merge lands before the tag is pushed).
+  # The main≡latest-tag discipline itself lives in the release checklist;
+  # this job mechanically pins every published tag to its manifest version.
   release-channel:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Assert plugin.json version matches the latest v* tag
+      - name: Assert the tag matches plugin.json's version
         run: |
           version=$(jq -r .version .claude-plugin/plugin.json)
-          tag=$(git describe --tags --abbrev=0 --match 'v*')
-          echo "plugin.json version: $version / latest tag: $tag"
-          if [ "v$version" != "$tag" ]; then
-            echo "release-channel drift: plugin.json says $version but the latest tag is $tag" >&2
+          echo "plugin.json version: $version / pushed tag: $GITHUB_REF_NAME"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "release-channel drift: tag $GITHUB_REF_NAME but plugin.json says $version" >&2
             exit 1
           fi
