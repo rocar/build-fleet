@@ -49,6 +49,22 @@ const cycle = typeof A.cycle === "string" ? parseInt(A.cycle, 10) : A.cycle;
 const now = A.now;
 const runId = A.run_id || null;
 
+// Scribe result schema — declared HERE, above the first applyScribe() call site
+// (the invalid-args guard just below, and the survival-vote apply later). The
+// applyScribe function declaration is hoisted, but SCRIBE_RESULT_SCHEMA is a
+// const: if any call site runs before this line, reading the schema throws
+// "Cannot access 'SCRIBE_RESULT_SCHEMA' before initialization" (temporal dead
+// zone). Keep this declaration above line ~60.
+const SCRIBE_RESULT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ok", "error"],
+  properties: {
+    ok: { type: "boolean" },
+    error: { type: ["string", "null"] },
+  },
+};
+
 // Validation failures are NEVER a bare throw: a throw would strand the
 // .workflow-in-flight marker the command dropped (this script has no filesystem
 // access — only the scribe can release it). Dispatch a minimal scribe cleanup
@@ -405,16 +421,8 @@ function cleanupEnvelope(feature, now, runId) {
 }
 
 // ---------- verified scribe application ----------
-
-const SCRIBE_RESULT_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["ok", "error"],
-  properties: {
-    ok: { type: "boolean" },
-    error: { type: ["string", "null"] },
-  },
-};
+// (SCRIBE_RESULT_SCHEMA is declared near the top of this file, above the first
+// applyScribe() call site, to avoid a temporal-dead-zone error.)
 
 // The scribe returns a structured {ok, error} aligned with its
 // SCRIBE_OK:/SCRIBE_ERROR: contract (agents/scribe.md). One retry on failure;
