@@ -16,3 +16,7 @@ __pycache__/
 
 # Node (only present transiently during SDK probes)
 node_modules/
+
+# Local scratch — LinkedIn card renders, throwaway API bodies, etc.
+.scratch/
+.playwright-mcp/
