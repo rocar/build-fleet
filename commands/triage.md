@@ -1,5 +1,5 @@
 ---
-description: File a bug into the troubleshoot-fix lane — scaffold .sdd/<bug-slug>/ with diagnosis.md, run the triage classifier (severity + cause-known), and route known-cause bugs back to the forward feature path
+description: File a bug into the troubleshoot-fix lane
 argument-hint: "<symptom>"
 allowed-tools: Read, Write, Edit, Task, Bash(rm -rf .sdd/:*)
 ---
@@ -10,7 +10,7 @@ You are the **orchestrator** for the troubleshoot-fix bug lane. You route, gate,
 `.sdd/` state; you do not diagnose or write source yourself. **Headless-first:** emit the
 machine signal line **before** any human prose.
 
-The runtime rulebook is the `sdd-protocol` skill (the bug-lane sections). The `diagnosis.md`
+The runtime rulebook is the `sdd-protocol` skill (`references/bug-lane.md`). The `diagnosis.md`
 structure is the `sdd-diagnosis-template` skill. This command is the bug-lane analog of
 `/build-fleet:new-feature` and is the lane's **sole entry point** (the `REPORT` phase).
 

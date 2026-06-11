@@ -423,15 +423,17 @@ Four phases run as Claude Code **dynamic workflows** (JS scripts under
   FIX; a **sev0** bug short-circuits the workflow entirely (post-hoc obligation).
 
 Because a workflow can't write files, it emits a structured envelope that the
-**scribe** applies. While a workflow runs, a `.workflow-in-flight` marker tells the
-per-reviewer hooks to stand down (the workflow's post-conditions replace them); the
-scribe deletes it on completion, and a Stop hook reaps orphaned markers older than
-an hour.
+**scribe** applies. While a workflow runs, a `.workflow-in-flight` marker (carrying
+the run's id) tells the per-reviewer hooks to stand down (the workflow's
+post-conditions replace them); the scribe releases it on completion by emptying it
+(an empty marker counts as absent), and a Stop hook reaps released and orphaned
+markers.
 
 > CYCLE counts **workflow runs**, not command invocations — cross-examination
 > rounds inside a single run do not bump it. Feature review cycles are bounded
-> (default 3); the 4th unresolved cycle writes `ESCALATION.md` and halts for a
-> human. PLAN_REVIEW does not auto-escalate — only a human halts a plan.
+> (default 3); the run that exhausts the budget — cycle 3 with blockers still
+> surviving — writes `ESCALATION.md` and halts for a human. PLAN_REVIEW does not
+> auto-escalate — only a human halts a plan.
 
 ---
 
@@ -577,7 +579,7 @@ plugin never touches your `.sdd/` state.
 | `require-reproducing-test` | *(v0.5)* Blocks a bug's fix source until `diagnosis.md` is CONFIRMED **and** a reproducing test exists under `tests/` — holds even for sev0. |
 | `check-review-written` | Rejects a reviewer that stops without logging to `REVIEW.md`. |
 | `stop-tests` | During BUILD / CHANGE_REVIEW / HANDOFF, blocks stop on a failing suite (tolerates "no tests collected" pre-suite). |
-| `reap-stale-workflow-markers` | Removes orphaned `.workflow-in-flight` markers older than an hour. |
+| `reap-stale-workflow-markers` | Removes released (empty) `.workflow-in-flight` markers immediately and orphaned ones past the staleness threshold. |
 
 Hooks block with exit code 2 and return actionable feedback. They are the
 deterministic backbone — agents can't talk their way past a gate. (Product-tier

@@ -1,5 +1,5 @@
 ---
-description: Park the active item — record why in PROGRESS.md, set PHASE PARKED, and free .sdd/ACTIVE so something else (e.g. a sev0 bug) can start
+description: Park the active item and free the in-flight lock
 argument-hint: "<reason>"
 allowed-tools: Read, Write, Edit
 disable-model-invocation: true

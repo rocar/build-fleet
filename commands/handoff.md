@@ -1,5 +1,5 @@
 ---
-description: Run CHANGE_REVIEW on the active feature (architect + PO + qa review the diff); on approval delegate to devops
+description: Run CHANGE_REVIEW on the diff, then hand off to devops
 allowed-tools: Read, Write, Edit, Bash, Task
 ---
 
@@ -35,10 +35,11 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
      catching it here gives a clearer error.
 
 5. **Check the change-cycle budget.** Read `CHANGE_CYCLE:` from PROGRESS.md.
-   If `CHANGE_CYCLE >= 3` AND the most recent CHANGE_REVIEW cycle in
-   REVIEW.md still has open `[blocker]` items, this cycle would be the
-   4th unresolved → write `ESCALATION.md` with the change-cycle context
-   and unresolved blockers, set `PHASE: ESCALATED`, stop.
+   The budget is 3 change-review cycles. If `CHANGE_CYCLE >= 3` AND the most
+   recent CHANGE_REVIEW cycle in REVIEW.md still has open `[blocker]` items,
+   the budget is exhausted with blockers surviving → write `ESCALATION.md`
+   with the change-cycle context and unresolved blockers, set
+   `PHASE: ESCALATED`, stop.
 
 6. **Bump the change-cycle.** Increment `CHANGE_CYCLE` in PROGRESS.md. Set
    `PHASE: CHANGE_REVIEW`. Refresh `UPDATED:`.
@@ -101,7 +102,7 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
     Tell the user the feature is shipped (or in the project's equivalent
     of shipped — opened PR, queued release, etc.).
 
-11. **Flip the product backlog, if a product tier exists (v0.4 M2).** After a
+11. **Flip the product backlog, if a product tier exists.** After a
     successful devops completion (step 10), if `.sdd/_product/backlog.md` exists,
     mark this feature done in it:
     - Find the row for the active slug — `- [ ] <slug> …`. If **no row matches**
@@ -123,9 +124,9 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
     hooks permit at HANDOFF (`block-source-before-finalized` allows anything under
     `.sdd/`; `restrict-reviewer-writes` only acts during REVIEW/CHANGE_REVIEW, and
     we are past that). It deliberately does **not** go through the scribe: the
-    scribe is append-only and product-scope writes are M3's concern.
+    scribe is append-only and only workflows write through it.
 
-12. **Advance the DEVELOPING loop (v0.4 M3.2).** This step runs **only** on the
+12. **Advance the DEVELOPING loop.** This step runs **only** on the
     full-completion path — you reached it after devops **succeeded** (step 10) and the
     backlog flip (step 11). A CHANGE_REVIEW bounce-back to BUILD (step 8) and a devops
     refusal/failure (step 9 branch) both STOP earlier and never reach here, so an
@@ -152,7 +153,7 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 
     c. **Surface, do not auto-start.** Report based on `status`:
        - `next` → name the next slug + its phase, and tell the user to start it with
-         `/build-fleet:new-feature <slug>` (M3.2 surfaces; it does not auto-advance —
+         `/build-fleet:new-feature <slug>` (the loop surfaces; it does not auto-advance —
          starting the next feature stays an explicit act).
        - `complete` → the product backlog is fully shipped (`done/total`). Congratulate;
          note that appending features/phases to `backlog.md` re-opens the loop. ("Complete"

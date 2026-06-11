@@ -1,5 +1,5 @@
 ---
-description: FIX gate of the bug lane — confirm the diagnosis (flip diagnosis.md→CONFIRMED), then delegate to coder to make the reproducing test pass; supports the sev0 hotfix fast-path
+description: Confirm the diagnosis, then implement the recorded fix
 allowed-tools: Read, Write, Edit, Task, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
 ---
 
@@ -13,7 +13,7 @@ review), which unlocks source writes (`block-source-before-finalized`'s second u
 `require-reproducing-test`: CONFIRMED **and** the reproducing test from REPRODUCE both hold),
 then drives the coder to turn the reproducing test GREEN.
 
-Rulebook: the `sdd-protocol` skill (bug-lane sections).
+Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`).
 
 ## What you do
 
@@ -28,7 +28,7 @@ Rulebook: the `sdd-protocol` skill (bug-lane sections).
 
    - **Confirmed (normal).** `PHASE == FIX` → the `diagnose.js` workflow CONFIRMED the
      hypothesis. Proceed.
-   - **sev0 hotfix fast-path (AC-22).** `PHASE == DIAGNOSE` **and** `SEV == sev0` **and**
+   - **sev0 hotfix fast-path.** `PHASE == DIAGNOSE` **and** `SEV == sev0` **and**
      `diagnosis.md` STATUS == `DIAGNOSED` → sev0 may skip the adversarial confirmation
      workflow. Proceed via the fast-path (step 4b records the post-hoc obligation). This
      **never** skips the reproducing-test gate.

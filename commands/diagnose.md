@@ -1,5 +1,5 @@
 ---
-description: DIAGNOSE phase of the bug lane — gate the recorded root-cause hypothesis, then dispatch the diagnose.js confirmation workflow (inverted survival vote; architect + coder try to refute the hypothesis citing the reproduction)
+description: Adversarially confirm the bug's root-cause hypothesis
 allowed-tools: Read, Write, Edit, Workflow
 ---
 
@@ -12,7 +12,7 @@ different-role, reproduction-citing refutation survives. This command validates 
 records the DIAGNOSED transition, and dispatches the workflow. The workflow does the fan-out,
 cross-examination, vote, and state-mutation-via-scribe.
 
-Rulebook: the `sdd-protocol` skill (bug-lane sections); `sdd-diagnosis-template` for the
+Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`); `sdd-diagnosis-template` for the
 artifact.
 
 ## Workflow runtime requirement
@@ -38,7 +38,7 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
    and either resolve it with `/build-fleet:resolve-escalation <decision>` (revising the
    hypothesis) or abandon the bug with `/build-fleet:park <reason>`.
 
-5. **Gate on a recorded hypothesis (AC-8).** Read `.sdd/<slug>/diagnosis.md`. The
+5. **Gate on a recorded hypothesis.** Read `.sdd/<slug>/diagnosis.md`. The
    `## Root-cause hypothesis`, `## Blast radius`, and `## Fix strategy` sections must each be
    **non-empty** — i.e. real content, not the `_(empty until DIAGNOSE)_` placeholder. If the
    **hypothesis** section is still empty/placeholder, refuse with a one-line reason naming the
@@ -50,7 +50,7 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
    (keep all four `##` sections). Edit `.sdd/<slug>/PROGRESS.md` `PHASE: → DIAGNOSE`, refresh
    `UPDATED`. (Both are `.sdd/` writes — always gate-permitted.)
 
-6b. **sev0 hotfix fast-path (B11 / AC-22) — skip the confirmation workflow.** Read `SEV` from
+6b. **sev0 hotfix fast-path — skip the confirmation workflow.** Read `SEV` from
    PROGRESS.md. If `SEV == sev0`, the hotfix path **may skip** the adversarial confirmation. After
    the DIAGNOSED advance (step 6), do **not** drop the marker or dispatch `diagnose.js`. Emit:
    ```
@@ -73,10 +73,11 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
 9. **Compose the run id and drop the workflow-in-flight marker.** Compose a run id:
    `diagnose-<slug>-c<new_cycle>-<iso8601 now>` (the same `now` you pass in step 11). Write
    `.sdd/<slug>/.workflow-in-flight` containing exactly that run id as its single line. The
-   marker is **owned by this run**: the scribe deletes it in the workflow's final phase only if
-   its content still matches the envelope's `run_id`. **Cleanup obligation:** if you create the
-   marker and the `Workflow` tool then fails to launch, delete the marker (after verifying its
-   content still matches your run id) before exiting.
+   marker is **owned by this run**: the scribe releases it (empties it) in the workflow's final
+   phase only if its content still matches the envelope's `run_id`. **Cleanup obligation:** if
+   you create the marker and the `Workflow` tool then fails to launch, release the marker —
+   verify its content still matches your run id, then overwrite it with empty content (an empty
+   marker counts as released; the reaper deletes it) — before exiting.
 
 10. **Emit the cost preview** (parse the `@cost-ceiling` header comment of
     `${CLAUDE_PLUGIN_ROOT}/workflows/diagnose.js`):
@@ -95,9 +96,10 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
 
 13. **Verify the run is alive (marker ownership).** Poll the launched run once (`TaskGet` on
     the returned task). If the run has already died (errored/cancelled) before any scribe ran,
-    delete `.sdd/<slug>/.workflow-in-flight` yourself — **only if its content still matches
-    your run id** — then report the failure. Orchestrators polling later must apply the same
-    rule: dead run + marker content matching this run id → delete the marker.
+    release `.sdd/<slug>/.workflow-in-flight` yourself — **only if its content still matches
+    your run id**, by overwriting it with empty content — then report the failure. Orchestrators
+    polling later must apply the same rule: dead run + marker content matching this run id →
+    release the marker.
 
 14. **Report and exit.** The workflow runs in the background (`/workflows` shows progress;
     `/build-fleet:status` shows the verdict on completion). Next legal command by verdict:
@@ -111,7 +113,7 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
 
     **Scribe-apply failure is a hard failure.** If the completed run's return object carries
     `scribe_apply: "failed"`, the scribe could not write state even after a retry: REVIEW.md/
-    PROGRESS.md did **not** land and the marker may remain (delete it if its content matches
+    PROGRESS.md did **not** land and the marker may remain (release it if its content matches
     your run id). Whoever reads that result must report the run as failed with its
     `scribe_error` — never treat the verdict as applied or advance to `/build-fleet:fix`.
 
@@ -128,7 +130,7 @@ synchronous gate command rather than inside the fire-and-forget workflow.
 
 - Does not flip `diagnosis.md` to `CONFIRMED` — that is `/build-fleet:fix`'s gate (above).
 - Does not append to `REVIEW.md` or write `ESCALATION.md` — the workflow's scribe does, via the envelope.
-- Does not delete `.workflow-in-flight` on success — the scribe does, as the final phase.
+- Does not release `.workflow-in-flight` on success — the scribe does, as the final phase.
 
 ## Refusal contract (machine-readable)
 

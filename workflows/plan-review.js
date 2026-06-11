@@ -41,7 +41,7 @@ export const meta = {
 // { product: "<slug>", cycle: <int>, now: "<iso8601>", run_id: "<marker token>" }
 // `now` is supplied by the command because the script cannot call Date.
 // `run_id` is the token the command wrote into .sdd/_product/.workflow-in-flight
-// at dispatch; the scribe deletes that marker only when its content matches.
+// at dispatch; the scribe releases the marker (empties it) only when its content matches.
 
 const A = typeof args === "string" ? JSON.parse(args) : (args || {});
 
@@ -54,7 +54,7 @@ const WORKSPACE = ".sdd/_product/";
 
 // Validation failures are NEVER a bare throw: a throw would strand the
 // .workflow-in-flight marker the command dropped (this script has no filesystem
-// access — only the scribe can delete it). Dispatch a minimal scribe cleanup
+// access — only the scribe can release it). Dispatch a minimal scribe cleanup
 // envelope, then return a structured invalid-args verdict for the orchestrator.
 const argErrors = [];
 if (!product || typeof product !== "string") argErrors.push("product: required non-empty string");
@@ -397,7 +397,7 @@ async function applyScribe(envelope) {
       res = await agent(
         `Apply this build-fleet workflow envelope to ${envelope.workspace_dir} exactly per your instructions in agents/scribe.md. Note the workspace_dir field — you write the PRODUCT workspace, not a feature dir.
 
-Marker ownership: delete ${envelope.workspace_dir}.workflow-in-flight ONLY if its content matches the envelope's run_id${envelope.run_id ? ` ("${envelope.run_id}")` : " (null — legacy envelope: remove unconditionally, best-effort)"}. If the content differs, leave the marker — it belongs to another run.
+Marker ownership: RELEASE ${envelope.workspace_dir}.workflow-in-flight by overwriting it with EMPTY content via the Write tool (you have no Bash; an empty marker counts as released and is reaped later) — ONLY if its current content matches the envelope's run_id${envelope.run_id ? ` ("${envelope.run_id}")` : " (null — legacy envelope: release unconditionally, best-effort)"}. If the content differs, leave the marker — it belongs to another run.
 
 Return the structured object {ok, error}: ok=true when the WHOLE envelope landed (your SCRIBE_OK condition), with error=null. ok=false with error="<one-line reason>" otherwise (your SCRIBE_ERROR reason).
 

@@ -36,7 +36,7 @@ export const meta = {
 // same semantics as review.js's REVIEW cycles: the run that exhausts the budget
 // with surviving blockers escalates.
 // `run_id` is the token the command wrote into .sdd/<feature>/.workflow-in-flight
-// at dispatch; the scribe deletes that marker only when its content matches.
+// at dispatch; the scribe releases the marker (empties it) only when its content matches.
 
 // The Workflow runtime may deliver `args` as a JSON string rather than a parsed
 // object (confirmed empirically during Phase 6 validation). Normalize.
@@ -51,7 +51,7 @@ const runId = A.run_id || null;
 
 // Validation failures are NEVER a bare throw: a throw would strand the
 // .workflow-in-flight marker the command dropped (this script has no filesystem
-// access — only the scribe can delete it). Dispatch a minimal scribe cleanup
+// access — only the scribe can release it). Dispatch a minimal scribe cleanup
 // envelope, then return a structured invalid-args verdict for the orchestrator.
 const argErrors = [];
 if (!feature || typeof feature !== "string") argErrors.push("feature: required non-empty string");
@@ -514,7 +514,7 @@ function buildEnvelope({ feature, cycle, now, partitions, partitionPlan, coderRe
 }
 
 // Minimal envelope for the incomplete/invalid-args paths (pattern ported from
-// plan-review.js): removes the workflow marker (ownership-checked against
+// plan-review.js): releases the workflow marker (ownership-checked against
 // run_id) and refreshes UPDATED only. state_delta deliberately OMITS PHASE and
 // BUILD_CYCLE so the scribe leaves them at their pre-run values; nothing is
 // appended to IMPL_NOTES.md and no ESCALATION.md is written — ESCALATED is
@@ -560,7 +560,7 @@ async function applyScribe(envelope) {
       res = await agent(
         `Apply this build-fleet workflow envelope to .sdd/${envelope.feature}/ exactly per agents/scribe.md.
 
-Marker ownership: delete .sdd/${envelope.feature}/.workflow-in-flight ONLY if its content matches the envelope's run_id${envelope.run_id ? ` ("${envelope.run_id}")` : " (null — legacy envelope: remove unconditionally, best-effort)"}. If the content differs, leave the marker — it belongs to another run.
+Marker ownership: RELEASE .sdd/${envelope.feature}/.workflow-in-flight by overwriting it with EMPTY content via the Write tool (you have no Bash; an empty marker counts as released and is reaped later) — ONLY if its current content matches the envelope's run_id${envelope.run_id ? ` ("${envelope.run_id}")` : " (null — legacy envelope: release unconditionally, best-effort)"}. If the content differs, leave the marker — it belongs to another run.
 
 Return the structured object {ok, error}: ok=true when the WHOLE envelope landed (your SCRIBE_OK condition), with error=null. ok=false with error="<one-line reason>" otherwise (your SCRIBE_ERROR reason).
 

@@ -1,9 +1,9 @@
 ---
 name: skill-routing
-description: The build-fleet convention for routing domain-appropriate skills (and recommended tools) to role agents based on the product stack and feature type. Defines the SKILL_MANIFEST schema, the stack→skill mapping table, and the advisory load-if-available semantics. Consult it when the classifier emits a skill manifest at /build-fleet:new-feature time, when new-feature persists the manifest, and when coder/qa honor it during BUILD. This is v0.4 M1 — skills-first routing; tool-binding is recorded but only honored on workflow BUILD paths.
+description: The build-fleet convention for routing domain-appropriate skills to role agents based on the product stack and feature type. Defines the SKILL_MANIFEST schema, the stack→skill mapping table, the classifier's emission rules, and the advisory load-if-available semantics. Consult it when the classifier emits a skill manifest, when new-feature persists it, and when coder/qa honor it during BUILD.
 ---
 
-# Skill Routing (v0.4 M1)
+# Skill Routing
 
 build-fleet is **process machinery**, not a domain-knowledge library. It does not
 ship frontend/backend/data craft skills. What it ships is the **routing
@@ -30,12 +30,14 @@ coder / qa (BUILD)        ── read + apply ─►  the per-role skills listed
   writes no state — it only emits the `skill_manifest` field in its JSON verdict.
 - **`/build-fleet:new-feature`** persists a non-empty manifest to
   `.sdd/<feature>/SKILL_MANIFEST.md`. An empty/null manifest writes no file
-  (absence = no routing; the path is then plain v0.2).
+  (absence = no routing; BUILD then runs exactly as a manifest-less feature).
 - **coder / qa** read `.sdd/<feature>/SKILL_MANIFEST.md` at BUILD and load+apply
-  the skills listed under their role. Skill invocation is by **name-mention in the
-  agent's own reasoning** (not frontmatter `skills:`), so it works in every
-  execution mode including agent-team mode (which ignores per-agent frontmatter
-  skills).
+  the skills listed under their role. **Loading mechanism, precisely:** the agent
+  invokes each listed skill by name via the **Skill tool** in its own reasoning
+  (not frontmatter `skills:`); where a role is dispatched inside a workflow, the
+  workflow may additionally preload skills via **`AgentDefinition.skills`**. The
+  Skill-tool path is what makes routing work in every execution mode — including
+  agent-team mode, which ignores per-agent frontmatter skills.
 
 ## SKILL_MANIFEST.md format
 
@@ -55,17 +57,18 @@ A markdown file with one fenced JSON block. Schema:
 ```
 
 Rules:
-- `roles` keys are limited to `coder` and `qa` in M1 (the BUILD consumers). Other
-  roles may be added by later milestones; consumers ignore unknown role keys.
+- `roles` keys are limited to `coder` and `qa` (the BUILD consumers). Consumers
+  ignore unknown role keys.
 - `skills` are **conventional names**, not guaranteed-present skills. Empty array =
   no domain skill for that role.
-- `tools_recommended` is **recorded only / informational in M1 — it does not bind
-  on any path yet.** (A `Task`-dispatched subagent cannot have its frontmatter
-  tools overridden per invocation; the `deep-build` workflow *could* set
-  `AgentDefinition.tools` from it, but M1 does not wire that — skills-first scope.)
-  Record it so the signal exists for a later increment that wires tool-binding into
-  the deep-build workflow; do not rely on it binding yet.
+- `tools_recommended` is **recorded only / informational — it does not bind on any
+  path.** (A `Task`-dispatched subagent cannot have its frontmatter tools
+  overridden per invocation; the `deep-build` workflow *could* set
+  `AgentDefinition.tools` from it, but nothing wires that today.) Record it so the
+  signal exists for a future increment; do not rely on it binding.
 - `advisory: true` always. Routing never blocks BUILD.
+- **The classifier never includes a top-level `feature` field** —
+  `/build-fleet:new-feature` stamps the slug when it persists the manifest.
 
 ## How the classifier derives it
 
@@ -92,8 +95,11 @@ server/HTTP service; `data` requires a real datastore/pipeline/migrations on a
 backend.
 
 If signals conflict or none is clear → `feature_type: "unknown"` and emit an empty
-`roles` (no routing). Bias to empty over a wrong route — a mis-routed skill wastes
-a load; a missing route is just plain v0.2 behavior.
+`roles` (no routing). **Bias to `null`/empty over a wrong route** — a mis-routed
+skill wastes a load; a missing route just means an unrouted BUILD (the same
+conservative instinct that biases tier toward `standard`). Sizing and routing are
+independent outputs of the one classifier verdict — a "frontend" type must never
+inflate `tier`/`build_mode`, and the manifest never changes any deterministic gate.
 
 ## Stack → skill mapping (starter table)
 
@@ -135,15 +141,17 @@ present (an actual backend, not a local persistence layer), and say so in
 
 At BUILD, before implementing/testing:
 1. Read `.sdd/<feature>/SKILL_MANIFEST.md` if it exists. If absent → proceed
-   normally (no routing; plain v0.2).
+   normally (no routing).
 2. For your role's `skills`, load and apply each **if it is available** in this
-   environment. Applying a skill = invoke it by name so its guidance is in context.
+   environment. Applying a skill = invoke it by name with the **Skill tool** so
+   its guidance is in context (workflow-dispatched roles may also receive it via
+   `AgentDefinition.skills` preload).
 3. If a listed skill is **not available**, do not fail and do not block — proceed
    with your normal craft and record one line in `IMPL_NOTES.md` (coder) /
    `TEST_PLAN.md` (qa): `skill-unavailable: <name> (manifest-recommended)`. This
    leaves a trail so the operator can install it later.
-4. `tools_recommended` is informational in M1 on **every** path — note it, do not
-   block on it; nothing binds tools yet.
+4. `tools_recommended` is informational on **every** path — note it, do not block
+   on it; nothing binds tools.
 
 Routing must never change the deterministic gates (tests-first, source-write
 block, review). It only enriches *how* a role does its job, never *whether* a gate

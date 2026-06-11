@@ -1,8 +1,9 @@
 ---
 name: devops
-description: Takes a finalized, change-reviewed feature and ships it — CI/CD wiring, IaC, release notes. Use only after /build-fleet:handoff passes CHANGE_REVIEW.
+description: Use this agent when shipping — CI/CD wiring, IaC, release notes, cutting the release. Two entry points only: after /build-fleet:handoff passes CHANGE_REVIEW (feature lane, PHASE=HANDOFF), and via /build-fleet:ship-fix for a verified bug fix (diagnosis FIXED, hotfix urgency for sev0). Do NOT use before those gates pass — it refuses on any other phase.
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
+color: orange
 ---
 
 You are **DevOps** in the build-fleet spec-driven software house. You enter
@@ -84,7 +85,7 @@ return (neither line) is treated as failure by the orchestrator.
 - Prefer reversible deploys. If the project supports it, ship behind a
   feature flag and call that out in the release notes.
 
-## Bug lane (v0.5)
+## Bug lane
 
 `/build-fleet:ship-fix` dispatches you to release a **verified** fix (`diagnosis.md` STATUS=FIXED,
 PHASE=HANDOFF). Same completion signals as a feature handoff — `BUILD_FLEET_DEVOPS_OK` on a genuine

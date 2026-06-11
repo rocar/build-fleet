@@ -1,26 +1,28 @@
 ---
-description: Resolve the next unblocked backlog feature and gate it for start — the deterministic next (first PENDING in the lowest phase whose depends-on are all DONE), pre-checked for readiness, emitted as a dispatch signal. A convenience over reading /status then typing the slug; adds NO prioritization policy. (v0.4 M4, optional)
+description: Resolve and gate the next unblocked backlog feature
 allowed-tools: Read, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/next-feature.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*)
 ---
 
 # /build-fleet:next-feature
 
 You are the **orchestrator**. The runtime rulebook is the `sdd-protocol` skill
-(**DEVELOPING loop**). This is the v0.4 **M4 advancement convenience**: it resolves the
+(`references/product-tier.md` — the DEVELOPING loop). This is the **advancement
+convenience**: it resolves the
 next unblocked backlog feature, confirms it is ready to start, and emits a dispatch
 signal — collapsing the manual "read `/build-fleet:status` → type
 `/build-fleet:new-feature <slug>`" into one focused, gated step.
 
-**It is convenience, not policy.** M4 uses **only** the deterministic resolver
+**It is convenience, not policy.** It uses **only** the deterministic resolver
 (`scripts/next-feature.sh` — first PENDING in the lowest phase whose `depends-on` are all
 DONE). It never reorders, skips, or judges importance. Any real prioritization is yours:
-reorder `backlog.md`, or run `/build-fleet:new-feature <slug>` directly. M4 is the
+reorder `backlog.md`, or run `/build-fleet:new-feature <slug>` directly. This is the
 no-policy fast path.
 
-**It does NOT run `/build-fleet:new-feature` itself.** M4 resolves + gates + signals; the
+**It does NOT run `/build-fleet:new-feature` itself.** This command resolves + gates +
+signals; the
 **dispatcher** starts the feature — the upstream caller in headless mode, you in
 interactive mode. This keeps dispatch (and any caller-side policy/description) with the
-orchestrator, and means M4 never duplicates new-feature's scaffolding/classifier/inheritance
+orchestrator, and means it never duplicates new-feature's scaffolding/classifier/inheritance
 logic (new-feature owns that, and self-seeds its description from the backlog intent via its
 step 5).
 
@@ -62,7 +64,7 @@ step 5).
    final `INTENT_VERDICT: usable|too-thin` line. The quality floor it encodes: an intent is
    *usable* only with at least 2 of its 3 components (what / scope boundary / non-goals); a
    missing intent or a thin slug-restatement is `too-thin`. (The canonical prose definition
-   of the floor lives in the `sdd-protocol` skill.)
+   of the floor lives in the `sdd-protocol` skill's `references/product-tier.md`.)
 
    If the verdict is `too-thin` (or the script errors), **do NOT advance** —
    `/build-fleet:new-feature` would STOP-and-ask for a description, which deadlocks an
@@ -90,9 +92,9 @@ step 5).
 ## Hard rules
 
 - **No prioritization policy.** Resolver only; never reorder/skip/judge importance.
-- **Never duplicate new-feature.** M4 resolves + gates + signals; new-feature starts.
+- **Never duplicate new-feature.** This command resolves + gates + signals; new-feature starts.
 - **Never run `/build-fleet:new-feature` inline** — the dispatcher does that (preserves
-  caller-side control; keeps M4 mode-agnostic without needing to detect headless vs interactive).
+  caller-side control; keeps the command mode-agnostic without needing to detect headless vs interactive).
 - **Never advance past a thin intent** (would force new-feature to STOP-and-ask).
 - **Headless contract.** Every branch emits exactly one `BUILD_FLEET_NEXT_FEATURE*:` line
   before any prose.

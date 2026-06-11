@@ -1,12 +1,12 @@
 ---
-description: Classify a feature request as trivial / standard / large; returns the M4 routing verdict without modifying any state. Inspectable lane preview before committing to /build-fleet:new-feature.
+description: Preview a feature's tier classification; writes no state
 argument-hint: "<feature description>"
 allowed-tools: Read, Task
 ---
 
 # /build-fleet:dispatch
 
-You are the **orchestrator**. The runtime rulebook is the `sdd-protocol` skill. This command is the v0.2 M4 query interface to the `classifier` subagent: given a feature description, it returns the routing verdict (`trivial` / `standard` / `large`) without touching `.sdd/` state. Use it to preview the lane before invoking `/build-fleet:new-feature`, or to sanity-check a classification mid-flight.
+You are the **orchestrator**. The runtime rulebook is the `sdd-protocol` skill. This command is the read-only query interface to the `classifier` subagent: given a feature description, it returns the routing verdict (`trivial` / `standard` / `large`) without touching `.sdd/` state. Use it to preview the lane before invoking `/build-fleet:new-feature`, or to sanity-check a classification mid-flight.
 
 ## What this is NOT
 
@@ -38,7 +38,7 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
    >
    > Project context: read whatever files in the current directory help you size the work. Do not exhaustively read source.
 
-3. **Parse the verdict.** The classifier emits a single JSON block of the shape documented in agents/classifier.md (`tier`, `rationale`, `skip_review`, `build_mode`, `skeleton_spec_hint`, `confidence`, `skill_manifest`). Extract it. `skill_manifest` (v0.4 M1) may be `null`.
+3. **Parse the verdict.** The classifier emits a single JSON block of the shape documented in agents/classifier.md (`tier`, `rationale`, `skip_review`, `build_mode`, `skeleton_spec_hint`, `confidence`, `skill_manifest`). Extract it. `skill_manifest` may be `null`.
 
 4. **Emit the classification signal.** Before any human-readable output, write exactly one line:
 
@@ -60,12 +60,12 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
      - `standard`: `/build-fleet:new-feature <slug>` will scaffold and PO will draft the full spec; user runs `/build-fleet:review`, `/build-fleet:finalize`, then `/build-fleet:build`.
      - `large`: same as standard PLUS PROGRESS.md gets `BUILD_MODE=deep-build` so `/build-fleet:build` routes the implementation phase to `workflows/deep-build.js`.
    - If `confidence=low`: surface the rationale and recommend the user either provide a more detailed description or override the tier manually by editing PROGRESS.md after scaffolding.
-   - **Skill routing preview (v0.4 M1).** If `skill_manifest` is non-null, show
+   - **Skill routing preview.** If `skill_manifest` is non-null, show
      `feature_type` and the per-role skill names (coder / qa) it would write to
      `.sdd/<slug>/SKILL_MANIFEST.md` at `/build-fleet:new-feature` time. Note these
      are **generic, advisory** names per the `skill-routing` skill — a name only
      takes effect at BUILD if a skill of that name is available, else it's a no-op.
-     If `skill_manifest` is `null`, state that no domain routing applies (plain v0.2).
+     If `skill_manifest` is `null`, state that no domain routing applies.
 
 6. **Cleanup.** No state to clean — this command never wrote any.
 

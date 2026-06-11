@@ -23,23 +23,31 @@ make_stale() { touch -t 202601010000 "$1"; }
 # run_hook <proj>: invoke from the fixture, like a real Stop hook firing there
 run_hook() { ( cd "$1" && printf '{}' | bash "$HOOK" >/dev/null 2>&1 ); }
 
-# --- fresh marker is kept ---
-p=$(new_proj fresh); mkdir -p "$p/.sdd/feat"; touch "$p/.sdd/feat/.workflow-in-flight"
+# --- fresh LIVE marker (non-empty: carries the run id) is kept ---
+p=$(new_proj fresh); mkdir -p "$p/.sdd/feat"; printf 'review-feat-c1' > "$p/.sdd/feat/.workflow-in-flight"
 run_hook "$p"; rc=$?
 if [ "$rc" -eq 0 ] && [ -f "$p/.sdd/feat/.workflow-in-flight" ]; then ok "fresh-marker-kept" "rc=$rc"
 else bad "fresh-marker-kept" "rc=$rc marker_exists=$([ -f "$p/.sdd/feat/.workflow-in-flight" ] && echo y || echo n)"; fi
 
-# --- stale marker (past the 900s threshold) is reaped, with a stderr notice ---
-p=$(new_proj stale); mkdir -p "$p/.sdd/feat"; touch "$p/.sdd/feat/.workflow-in-flight"
+# --- stale LIVE marker (past the 900s threshold) is reaped, with a stderr notice ---
+p=$(new_proj stale); mkdir -p "$p/.sdd/feat"; printf 'review-feat-c1' > "$p/.sdd/feat/.workflow-in-flight"
 make_stale "$p/.sdd/feat/.workflow-in-flight"
 err=$( cd "$p" && printf '{}' | bash "$HOOK" 2>&1 >/dev/null ); rc=$?
 if [ "$rc" -eq 0 ] && [ ! -f "$p/.sdd/feat/.workflow-in-flight" ] && printf '%s' "$err" | grep -q "reaping stale workflow marker.*'feat'"; then
   ok "stale-marker-reaped" "rc=$rc"
 else bad "stale-marker-reaped" "rc=$rc err=$err"; fi
 
-# --- mixed: only the stale one of two markers is removed ---
+# --- RELEASED marker (empty — the scribe emptied it at envelope-apply time) is
+#     reaped immediately, fresh or not, with the released notice ---
+p=$(new_proj released); mkdir -p "$p/.sdd/feat"; : > "$p/.sdd/feat/.workflow-in-flight"
+err=$( cd "$p" && printf '{}' | bash "$HOOK" 2>&1 >/dev/null ); rc=$?
+if [ "$rc" -eq 0 ] && [ ! -f "$p/.sdd/feat/.workflow-in-flight" ] && printf '%s' "$err" | grep -q "released (empty) workflow marker.*'feat'"; then
+  ok "released-empty-marker-reaped-immediately" "rc=$rc"
+else bad "released-empty-marker-reaped-immediately" "rc=$rc err=$err"; fi
+
+# --- mixed: only the stale one of two live markers is removed ---
 p=$(new_proj mixed); mkdir -p "$p/.sdd/old" "$p/.sdd/new"
-touch "$p/.sdd/old/.workflow-in-flight" "$p/.sdd/new/.workflow-in-flight"
+printf 'old-run' > "$p/.sdd/old/.workflow-in-flight"; printf 'new-run' > "$p/.sdd/new/.workflow-in-flight"
 make_stale "$p/.sdd/old/.workflow-in-flight"
 run_hook "$p"; rc=$?
 if [ "$rc" -eq 0 ] && [ ! -f "$p/.sdd/old/.workflow-in-flight" ] && [ -f "$p/.sdd/new/.workflow-in-flight" ]; then
@@ -58,7 +66,7 @@ if [ "$rc" -eq 0 ]; then ok "no-sdd-dir-noop" "rc=$rc"; else bad "no-sdd-dir-noo
 
 # --- depth scoping: markers outside the .sdd/<slug>/ layer are never touched ---
 p=$(new_proj depth); mkdir -p "$p/.sdd/feat/nested"
-touch "$p/.sdd/.workflow-in-flight" "$p/.sdd/feat/nested/.workflow-in-flight"
+printf 'x' > "$p/.sdd/.workflow-in-flight"; printf 'x' > "$p/.sdd/feat/nested/.workflow-in-flight"
 make_stale "$p/.sdd/.workflow-in-flight"; make_stale "$p/.sdd/feat/nested/.workflow-in-flight"
 run_hook "$p"; rc=$?
 if [ "$rc" -eq 0 ] && [ -f "$p/.sdd/.workflow-in-flight" ] && [ -f "$p/.sdd/feat/nested/.workflow-in-flight" ]; then
@@ -74,7 +82,7 @@ if [ "$rc" -eq 0 ] && [ -d "$p/.sdd/feat/.workflow-in-flight" ]; then
 else bad "directory-marker-not-reaped" "rc=$rc"; fi
 
 # --- slug with a space: the while-read loop still reaps it ---
-p=$(new_proj space); mkdir -p "$p/.sdd/my feat"; touch "$p/.sdd/my feat/.workflow-in-flight"
+p=$(new_proj space); mkdir -p "$p/.sdd/my feat"; printf 'x' > "$p/.sdd/my feat/.workflow-in-flight"
 make_stale "$p/.sdd/my feat/.workflow-in-flight"
 run_hook "$p"; rc=$?
 if [ "$rc" -eq 0 ] && [ ! -f "$p/.sdd/my feat/.workflow-in-flight" ]; then

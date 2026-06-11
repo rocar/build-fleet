@@ -12,20 +12,21 @@ section headings; a write that omits any of them is rejected.
 The product-owner is the sole author. Reviewers reference this skill to
 flag missing structure as a `[blocker]`.
 
-## STATUS line (line 1)
+## STATUS line
 
-The very first non-blank line of `spec.md` MUST be:
+`spec.md` MUST contain a line that **starts** with `STATUS:` **within the
+first 30 lines** of the file — exactly the window the `validate-spec-status`
+hook scans:
 
 ```
 STATUS: DRAFT
 ```
 
-…and the value MUST be one of: `DRAFT`, `IN_REVIEW`, `FINALIZED`, `BLOCKED`.
-No other tokens. No prefix. No trailing comment.
-
-A `## Self-review notes` block from product-owner may precede the STATUS
-line — the validator scans for STATUS in the first ~30 lines, not strictly
-line 1.
+The value MUST be one of: `DRAFT`, `IN_REVIEW`, `FINALIZED`, `BLOCKED`.
+No other tokens. No prefix before `STATUS:` on that line. No trailing
+comment. Put it first when you can; a short `## Self-review notes` block
+from product-owner may precede it, as long as the STATUS line stays inside
+the first 30 lines and starts its line.
 
 ## Required sections (in this order)
 

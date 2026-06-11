@@ -18,11 +18,14 @@ input=$(cat)
 slug=$(resolve_active)
 [ -n "$slug" ] || exit 0
 
-# v0.2: workflow reviewer subagents declare tools=[Read,Grep,Glob] (no Write/Edit)
+# Workflow reviewer subagents declare tools=[Read,Grep,Glob] (no Write/Edit)
 # at AgentDefinition level, so writes are physically impossible. While the
-# workflow-in-flight marker is present, this hook skips to avoid duplicate
-# enforcement against the scribe (which DOES need Write/Edit inside .sdd/).
-if [ -f ".sdd/${slug}/.workflow-in-flight" ]; then
+# workflow-in-flight marker is LIVE (present AND non-empty — it carries the
+# dispatching run's id), this hook skips to avoid duplicate enforcement against
+# the scribe (which DOES need Write/Edit inside .sdd/). The scribe releases the
+# marker by emptying it (it has no Bash to rm), so an empty marker means
+# "released" and the hook re-engages; the Stop-hook reaper deletes it.
+if [ -s ".sdd/${slug}/.workflow-in-flight" ]; then
   exit 0
 fi
 

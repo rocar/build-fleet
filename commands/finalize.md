@@ -1,5 +1,5 @@
 ---
-description: Run the finalize gate on the active feature — check blockers, flip the spec to FINALIZED, unlock source writes
+description: Gate: flip the spec to FINALIZED and unlock source
 allowed-tools: Read, Edit
 ---
 

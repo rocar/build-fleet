@@ -1,5 +1,5 @@
 ---
-description: HANDOFF of the bug lane — devops ships the verified fix (hotfix urgency for sev0); on a successful ship, clears .sdd/ACTIVE so the next item can start
+description: Ship the verified bug fix via devops
 allowed-tools: Read, Write, Edit, Task, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
 ---
 
@@ -14,7 +14,7 @@ You are the **orchestrator**. The bug-lane HANDOFF — devops takes the verified
 Mirrors `/build-fleet:handoff`'s devops leg and its lock-clear, **without** the product-backlog
 flip or DEVELOPING-loop advance (a bug is not a backlog feature).
 
-Rulebook: the `sdd-protocol` skill (bug-lane sections); `agents/devops.md` for the completion signal.
+Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`); `agents/devops.md` for the completion signal.
 
 ## What you do
 

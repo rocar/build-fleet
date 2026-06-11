@@ -1,5 +1,5 @@
 ---
-description: REPRODUCE phase of the bug lane — qa authors a failing reproduction test under tests/ that fails because of the bug, then advances diagnosis.md REPORTED→REPRODUCING
+description: Author a failing reproduction test for the active bug
 allowed-tools: Read, Write, Edit, Task
 ---
 
@@ -8,7 +8,7 @@ allowed-tools: Read, Write, Edit, Task
 You are the **orchestrator** for the bug lane's REPRODUCE phase. You route and gate; you do
 not write the test or source yourself. **Headless-first:** emit the machine signal before prose.
 
-Rulebook: the `sdd-protocol` skill (bug-lane sections). The `diagnosis.md` contract is the
+Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`). The `diagnosis.md` contract is the
 `sdd-diagnosis-template` skill. This is the bug-lane analog of qa's tests-first BUILD work.
 
 ## Preconditions (refuse with a `BUILD_FLEET_REFUSE: {"command":"reproduce","code":2,"reason":"<kebab-slug>"}` line — the stdout signal is the sole machine contract; a slash command cannot set a process exit code)

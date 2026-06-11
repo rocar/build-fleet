@@ -80,9 +80,12 @@ check "spec-phase-allows" "$p" '{"agent_type":"architect"}' 0
 p="$work/noactive"; mkdir -p "$p/.sdd"; : > "$p/.sdd/ACTIVE"
 check "no-active-feature-allows" "$p" '{"agent_type":"architect"}' 0
 
-# --- the .workflow-in-flight marker-skip path ---
-p=$(new_proj w1 REVIEW 1); touch "$p/.sdd/feat/.workflow-in-flight"
+# --- the .workflow-in-flight marker-skip path (a LIVE marker is non-empty) ---
+p=$(new_proj w1 REVIEW 1); printf 'review-feat-c1-2026' > "$p/.sdd/feat/.workflow-in-flight"
 check "marker-skips-enforcement" "$p" '{"agent_type":"architect"}' 0
+# a RELEASED marker (emptied by the scribe) does NOT skip enforcement
+p=$(new_proj w2 REVIEW 1); : > "$p/.sdd/feat/.workflow-in-flight"
+check "released-empty-marker-does-not-skip" "$p" '{"agent_type":"architect"}' 2
 
 # --- non-integer cycle counter: warn + allow (never wedge the subagent) ---
 p=$(new_proj g1 REVIEW "two")

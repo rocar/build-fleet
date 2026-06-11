@@ -1,5 +1,5 @@
 ---
-description: Initialize the product tier — scaffold .sdd/_product/ (vision, backlog, STACK, product DECISIONS) and delegate product-owner to draft vision + phased backlog and architect to ratify the stack-of-record. Inherited read-only by every feature. No gate, no workflow (v0.4 M0).
+description: Scaffold the product tier: vision, backlog, stack
 argument-hint: "<product-slug>"
 allowed-tools: Read, Write, Edit, Task
 ---
@@ -9,11 +9,11 @@ allowed-tools: Read, Write, Edit, Task
 You are the **orchestrator**. You scaffold `.sdd/` state and route work; you do
 not author the vision, choose the stack, or write source yourself.
 
-The runtime rulebook is the `sdd-protocol` skill. Consult its **Product tier
-(v0.4 M0)** section for the `.sdd/_product/` layout, file ownership, and the
-inheritance contract. This command introduces the product tier as **inherited
-context only** — there is no outer state machine, no review gate, and no scribe
-in M0. Those arrive in later v0.4 milestones.
+The runtime rulebook is the `sdd-protocol` skill — its `references/product-tier.md`
+covers the `.sdd/_product/` layout, file ownership, and the inheritance contract.
+This command only scaffolds and drafts: the plan it produces is interrogated by
+`/build-fleet:plan-review` and ratified by `/build-fleet:plan-finalize`; no gate
+runs here.
 
 ## Arguments
 
@@ -71,9 +71,9 @@ abandoned — bias small.
    - `vision.md` — first line `STATUS: DRAFT`, then the section headings the
      chosen size requires (Overview, Goals; plus Non-goals, FAQ, and an
      `OUTCOME:` line for standard/large). Leave bodies empty — PO fills them.
-     *(No hook validates `vision.md`'s STATUS in M0 — `validate-spec-status`
-     fires only on files named `spec.md`. The STATUS line is forward-compat for
-     the M3 product-FINALIZE gate.)*
+     *(No hook validates `vision.md`'s STATUS — `validate-spec-status` fires
+     only on files named `spec.md`. The `/build-fleet:plan-finalize` gate flips
+     this STATUS line at ratification.)*
    - `backlog.md` — header:
      ```
      PRODUCT: <slug>
@@ -85,7 +85,7 @@ abandoned — bias small.
            explicit non-goals / deferrals to sibling features>
      ```
      Leave the feature rows as a single placeholder — PO fills the real phases,
-     each row followed by its indented 1-3 line intent (v0.4 M3.3).
+     each row followed by its indented 1-3 line intent.
    - `STACK.md` — first line `STATUS: DRAFT`, then headings: `## Languages & runtimes`,
      `## Frameworks & libraries`, `## Data & storage`, `## Infrastructure & deploy`,
      `## Conventions`. Empty bodies — architect fills them.
@@ -99,7 +99,7 @@ abandoned — bias small.
      CYCLE: 0
      UPDATED: <iso8601>
      ```
-     `PHASE` seeds the outer PLAN state machine (v0.4 M3.1):
+     `PHASE` seeds the outer PLAN state machine:
      `PLAN | PLAN_REVIEW | DEVELOPING | ESCALATED` (the `PLAN_FINALIZE` ratification
      gate is synchronous — it writes `PLAN_REVIEW → DEVELOPING` directly and is never
      a resting phase). A freshly scaffolded product starts at `PLAN` — vision/backlog/stack
@@ -109,20 +109,20 @@ abandoned — bias small.
      must be present so the product-scope scribe can replace them in place.
    - `.sdd/PRODUCT` — a one-line marker file containing the product slug, written
      at the `.sdd/` root (mirrors `.sdd/ACTIVE` for features). `resolve_product()`
-     reads it; its presence flags the product tier as engaged for v0.4 M3+.
-     Behavior-preserving in M3.0 — no gate keys off it yet.
+     reads it; its presence flags the product tier as engaged.
 
 2. **Delegate vision + backlog to product-owner.** Spawn `build-fleet:product-owner`
    via the Task tool. Tell it: it owns `.sdd/_product/vision.md` and
    `.sdd/_product/backlog.md`; draft the vision from the description (size-gated
    sections per above) and a **phased** feature backlog. Each backlog feature row
    is `- [ ] <slug>   PENDING   depends-on: <none | other-slug>`, **followed by an
-   indented 1-3 line intent** (v0.4 M3.3) — what the feature is, its scope boundary,
+   indented 1-3 line intent** — what the feature is, its scope boundary,
    and explicit non-goals/deferrals to sibling features; a sketch the feature's spec
    later elaborates, **not** acceptance criteria/interfaces/behavior. This intent is
    inherited by `/build-fleet:new-feature` (so the spec realizes the plan's intent
    rather than re-guessing) and is interrogated at PLAN_REVIEW. It must NOT set
-   any STATUS beyond `DRAFT` (there is no product review gate in M0). Pass the
+   any STATUS beyond `DRAFT` (only the `/build-fleet:plan-finalize` ratification
+   gate flips a product STATUS). Pass the
    product description verbatim. **Brownfield note:** the backlog is
    *forward-looking* — features that already exist in the codebase are not backlog
    rows; only planned/next work goes in `backlog.md`.
@@ -150,13 +150,13 @@ abandoned — bias small.
      rewrite the baseline.
 
      A **forward / migration direction is allowed** when the product vision calls
-     for evolution — but it is *strategy*, and **M0 has no product review gate**,
-     so it must not land as binding. Record it in a separate
+     for evolution — but it is *unratified strategy*, so it must not land as
+     binding. Record it in a separate
      `## Forward direction (PROVISIONAL — unreviewed)` section plus product ADRs
      tagged `STATUS: PROVISIONAL`. **Provisional forward entries do NOT bind
      features** — features inherit the binding *baseline* until the migration is
-     ratified (M3 plan-review, or an explicit human edit promoting a PROVISIONAL
-     ADR). Frame forward changes as incremental (migrate/wrap, not rewrite); a
+     ratified (plan-review/plan-finalize, or an explicit human edit promoting a
+     PROVISIONAL ADR). Frame forward changes as incremental (migrate/wrap, not rewrite); a
      concern about the existing stack is a finding to the user, not a unilateral
      rewrite of reality.
 
@@ -170,8 +170,9 @@ abandoned — bias small.
    and the chosen stack. Tell the user the product tier is now **inherited
    context**: subsequent `/build-fleet:new-feature` runs will read `_product/STACK.md`
    and `_product/DECISIONS.md` and hold features to the product stack. Note that
-   editing `_product/` files is done directly (no gate in M0); the product
-   review/finalize gates and the phased build loop arrive in later v0.4 milestones.
+   editing `_product/` files is done directly; when the plan is ready, run
+   `/build-fleet:plan-review` to interrogate it and `/build-fleet:plan-finalize`
+   to ratify it (which also seeds the root CLAUDE.md product-memory block).
 
 ## Gates to honor
 
@@ -179,11 +180,13 @@ abandoned — bias small.
   permits them (it allows any path under `.sdd/`, and exits early when there is no
   active feature). The only blocker is the mid-review refusal in case 2 above —
   honor it rather than fighting the hook.
-- M0 ships **no** new hook and **no** product gate. If you find yourself wanting
-  to enforce a product STATUS transition, that's M3 — stop and surface it.
+- This command enforces **no** product gate. If you find yourself wanting to
+  enforce a product STATUS transition, that is `/build-fleet:plan-finalize`'s
+  job — stop and surface it.
 
 ## Hard "no"s
 
-- Do not run any workflow or invoke the scribe — M0 is plain file scaffolding.
+- Do not run any workflow or invoke the scribe — this command is plain file
+  scaffolding; the workflow runs at `/build-fleet:plan-review`.
 - Do not touch `.sdd/ACTIVE` or any `.sdd/<feature>/` directory.
 - Do not author the vision or choose the stack yourself — delegate.

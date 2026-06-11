@@ -55,12 +55,17 @@ p="$work/noactive"; mkdir -p "$p/.sdd"; : > "$p/.sdd/ACTIVE"
 check "no-active-feature-allows" "$p" "src/app.py" 0
 
 # --- the .workflow-in-flight marker-skip path: hook stands down entirely ---
-p=$(new_proj w1 REVIEW); touch "$p/.sdd/feat/.workflow-in-flight"
+# A LIVE marker carries the dispatching run's id (non-empty).
+p=$(new_proj w1 REVIEW); printf 'review-feat-c1-2026' > "$p/.sdd/feat/.workflow-in-flight"
 check "marker-skips-source-write" "$p" "src/app.py" 0
 check "marker-skips-sdd-write" "$p" ".sdd/feat/REVIEW.md" 0
 # marker on a DIFFERENT feature does not skip the active one's gate
-p=$(new_proj w2 REVIEW); mkdir -p "$p/.sdd/other"; touch "$p/.sdd/other/.workflow-in-flight"
+p=$(new_proj w2 REVIEW); mkdir -p "$p/.sdd/other"; printf 'run-id' > "$p/.sdd/other/.workflow-in-flight"
 check "other-features-marker-does-not-skip" "$p" "src/app.py" 2
+# a RELEASED marker (empty — the scribe emptied it, having no Bash to rm) does
+# NOT skip: the gate re-engages the moment the scribe releases it
+p=$(new_proj w3 REVIEW); : > "$p/.sdd/feat/.workflow-in-flight"
+check "released-empty-marker-does-not-skip" "$p" "src/app.py" 2
 
 # --- T3 hardening: traversal must not satisfy the .sdd/<slug>/ prefix ---
 p=$(new_proj t1 REVIEW)

@@ -1,6 +1,6 @@
 ---
 name: review-rubric
-description: The shared severity vocabulary every reviewer uses in .sdd/<feature>/REVIEW.md — blocker, major, minor — with exact definitions and gate effects. Consult during /build-fleet:review and /build-fleet:handoff. In v0.2 the orchestrator preloads this skill into workflow reviewer subagents via AgentDefinition.skills; reviewer agent bodies duplicate the vocabulary as belt-and-suspenders for non-workflow paths.
+description: The shared severity vocabulary every reviewer uses in .sdd/<feature>/REVIEW.md — blocker, major, minor — with exact definitions and gate effects. Consult during /build-fleet:review and /build-fleet:handoff, and whenever assigning a severity to a finding.
 ---
 
 # Review Rubric
@@ -10,12 +10,15 @@ coder in `.sdd/<feature>/REVIEW.md`. The `/build-fleet:finalize` and
 `/build-fleet:handoff` gates parse the severity tags to decide whether a
 phase may advance.
 
-The same table appears verbatim in `architect.md` and `qa.md` prompt bodies.
-In v0.2 workflow REVIEW the workflow preloads this skill into reviewer subagents
-via `AgentDefinition.skills: ["review-rubric"]`, so this skill is the load-bearing
-source; the in-body copies are belt-and-suspenders. In non-workflow paths
-(CHANGE_REVIEW until M3, and any direct invocation of the role agents outside a
-workflow) the in-body copies are the load-bearing ones.
+The same table appears verbatim in `architect.md` and `qa.md` prompt bodies —
+a deliberate duplication. In workflow REVIEW the workflow preloads this skill
+into reviewer subagents via `AgentDefinition.skills: ["review-rubric"]`, so this
+skill is the load-bearing source and the in-body copies are belt-and-suspenders.
+On non-workflow paths (CHANGE_REVIEW, direct invocation of a role agent, and
+agent-team mode — where per-agent frontmatter `skills` are ignored) the in-body
+copies are the load-bearing ones. **Precedence:** if the copies ever disagree,
+this skill's table is canonical; `scripts/rubric-drift.test.sh` fails the suite
+on any drift.
 
 ## The vocabulary
 
@@ -39,12 +42,12 @@ literal substring search.
 status: concerns-raised | approved
 ```
 
-The `status:` line is mandatory. In v0.2 workflow REVIEW: the workflow's reviewer
-subagents return structured concerns payloads which the workflow merges into the
-canonical block shape above; the scribe appends them. In non-workflow paths
-(CHANGE_REVIEW until M3): the `check-review-written` SubagentStop hook rejects a
-reviewer that stops without writing a block of this shape attributed to its own
-role for the current cycle.
+The `status:` line is mandatory. In workflow REVIEW the reviewer subagents
+return structured concerns payloads which the workflow merges into the
+canonical block shape above; the scribe appends them. On non-workflow paths
+(CHANGE_REVIEW, direct invocation) the `check-review-written` SubagentStop hook
+rejects a reviewer that stops without writing a block of this shape attributed
+to its own role for the current cycle.
 
 ## How to choose a severity
 

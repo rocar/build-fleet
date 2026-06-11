@@ -1,5 +1,5 @@
 ---
-description: Resolve an escalation with an explicit human decision — archive ESCALATION.md into REVIEW.md, reset the exhausted cycle counter, and restore the pre-escalation phase
+description: Resolve an escalation with an explicit human decision
 argument-hint: "[<slug>] <decision>"
 allowed-tools: Read, Write, Edit, Bash(rm:*)
 disable-model-invocation: true

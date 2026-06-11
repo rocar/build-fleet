@@ -1,5 +1,5 @@
 ---
-description: Ratify the product plan. Bare call is a dry-run (prints the interrogation report + open blockers, then halts). `ratify` flips vision/backlog to FINALIZED and PHASE to DEVELOPING; `ratify force` overrides open blocker-severity findings. Never auto-passes.
+description: Ratify the product plan (bare call is a dry-run)
 argument-hint: "[ratify [force]]"
 allowed-tools: Read, Write, Edit, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/product-memory-splice.sh":*)
 disable-model-invocation: true
@@ -13,7 +13,7 @@ disable-model-invocation: true
 # /build-fleet:plan-finalize
 
 You are the **orchestrator**. The runtime rulebook is the `sdd-protocol` skill
-(**Product tier → PLAN state machine**). This is the **ratification gate** — the
+(`references/product-tier.md` — the PLAN state machine). This is the **ratification gate** — the
 one place a human (or the calling orchestrator) chooses to commit to the product
 plan.
 
@@ -24,11 +24,11 @@ halts; flipping state requires the explicit `ratify` token. In headless mode thi
 the whole safety story — `claude -p '/build-fleet:plan-finalize'` emits the report
 and stops; it cannot ratify on its own.
 
-This gate is **advisory by design (v0.4 M3.1 decision)**: ratifying does NOT gate
+This gate is **advisory by design**: ratifying does NOT gate
 `/build-fleet:new-feature` (features build against the binding stack regardless).
 What it does is (a) record the ratification, (b) flip vision/backlog `STATUS` to
-`FINALIZED`, and (c) set `PHASE: DEVELOPING` — the entry condition the M3.2
-DEVELOPING loop reads. The "teeth" land in M3.2's loop, not as a feature block.
+`FINALIZED`, and (c) set `PHASE: DEVELOPING` — the state the DEVELOPING loop
+reports against. The "teeth" live in that loop, not in a feature-creation block.
 
 ## Arguments
 
@@ -68,10 +68,11 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
      before proceeding.
    - **Already ratified.** If `PHASE=DEVELOPING`, refuse:
      > `BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"product":"<slug>","code":2,"reason":"already-ratified","phase":"DEVELOPING"}`.
-     Tell the user the plan is already ratified; re-planning after DEVELOPING is M3.2.
+     Tell the user the plan is already ratified; revise the `_product/` files directly
+     and re-run plan-review/plan-finalize if strategy changes.
    - Any other phase (e.g. `PLAN` for a non-small product) → refuse with
      `{"code":2,"reason":"no-interrogation-cycle","detail":"run /build-fleet:plan-review first"}`.
-   - *(Legacy tier, no `PHASE` field — scaffolded before M3.1.)* The read returns empty,
+   - *(Legacy tier, no `PHASE` field.)* The read returns empty,
      which falls into the `no-interrogation-cycle` refusal above — correct, since
      `/build-fleet:plan-review` is also what normalizes a legacy PROGRESS (seeds
      `PHASE`/`CYCLE`). Unlike `/build-fleet:plan-review`, this gate does **not** normalize;
@@ -141,7 +142,7 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
    (`stack_finalized` is `true` when STACK.md was flipped to `FINALIZED`, `false` when it
    was left as-is because provisional/forward content is present.)
 
-7b. **Generate product memory (best-effort, v0.4 M3.1.1).** Seed the repo-root
+7b. **Generate product memory (best-effort).** Seed the repo-root
    `./CLAUDE.md` with the ratified product per the `sdd-protocol` skill's **Product
    memory** generation algorithm (the `<!-- BEGIN/END build-fleet:product -->` block;
    non-clobbering + idempotent; binding stack only — never PROVISIONAL).
@@ -183,8 +184,8 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
    - If `ratify force` accepted open blockers, name them so the acceptance is explicit
      and on the record.
    - Features continue to build against the binding stack via `/build-fleet:new-feature`
-     (M3.1 ratification is advisory — it does not gate feature creation).
-   - The M3.2 DEVELOPING loop arms the next backlog feature off the **presence of
+     (ratification is advisory — it does not gate feature creation).
+   - The DEVELOPING loop arms the next backlog feature off the **presence of
      `.sdd/_product/backlog.md`** (re-resolved live on each `/build-fleet:handoff`);
      `PHASE=DEVELOPING` is advisory context, not a hard gate.
 

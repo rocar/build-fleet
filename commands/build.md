@@ -1,5 +1,5 @@
 ---
-description: Drive the BUILD phase of the active feature — qa drafts the failing suite first, then coder implements to green; routes to the deep-build workflow when BUILD_MODE=deep-build
+description: Drive BUILD: qa writes the failing suite, then coder implements
 allowed-tools: Read, Write, Edit, Task, Workflow, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
 ---
 
@@ -117,13 +117,13 @@ c. **Route on BUILD_MODE.** Read `BUILD_MODE:` from PROGRESS.md.
         run id `deep-build-<slug>-c<new_cycle>-<iso8601 now>` (the same `now` you
         pass in step vi) and write `.sdd/<slug>/.workflow-in-flight` containing
         exactly that run id as its single line. Hooks `check-review-written` and
-        `restrict-reviewer-writes` skip while the marker is present; the scribe
-        deletes it as the workflow's final phase — only if its content still
-        matches the envelope's `run_id`. **Cleanup obligation:** if the Workflow
-        tool subsequently returns an `error` (step vi) or fails to launch — or a
-        post-launch poll shows the run died before any scribe ran — delete the
-        marker (after verifying its content still matches your run id) before
-        reporting the failure.
+        `restrict-reviewer-writes` skip while the marker is live; the scribe
+        releases it (empties it) as the workflow's final phase — only if its
+        content still matches the envelope's `run_id`. **Cleanup obligation:** if
+        the Workflow tool subsequently returns an `error` (step vi) or fails to
+        launch — or a post-launch poll shows the run died before any scribe ran —
+        release the marker yourself (verify its content still matches your run
+        id, then overwrite it with empty content) before reporting the failure.
 
    v.   **Emit cost preview** (headless contract parity with /build-fleet:deep-build).
         Parse the `@cost-ceiling` header comment at the top of

@@ -1,5 +1,5 @@
 ---
-description: VERIFY gate of the bug lane — run the counterfactual (each reproducing test must FAIL if the fix is reverted) + architect blast-radius review; on a clean pass flip diagnosis.md→FIXED
+description: Verify the bug fix via the counterfactual gate
 allowed-tools: Read, Write, Edit, Task, Bash(git status:*), Bash(git diff:*), Bash(git stash:*), Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
 ---
 
@@ -10,7 +10,7 @@ counterfactual gate verbatim**: a reproducing test that passes *regardless* of t
 decorative, not a regression guard. The fix is verified only when each reproducing test would
 **fail if the coder's change were reverted**.
 
-Rulebook: the `sdd-protocol` skill (bug-lane sections; the CHANGE_REVIEW counterfactual).
+Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`; the CHANGE_REVIEW counterfactual).
 
 ## What you do
 

@@ -1,5 +1,5 @@
 ---
-description: Print the current state of the active build-fleet feature — phase, cycles, open concerns, escalation
+description: Report the active item's phase, cycles, and concerns
 model: haiku
 allowed-tools: Read, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/status-snapshot.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/next-feature.sh":*)
 ---
@@ -30,7 +30,7 @@ Snapshot (`build-fleet/status-snapshot@1`):
    - Otherwise report "no active feature" and stop. Suggest
      `/build-fleet:new-feature <slug>`.
 
-1b. **Bug lane (v0.5 M4).** Read `.sdd/<active>/PROGRESS.md`. If it carries `LANE: bug`, the
+1b. **Bug lane.** Read `.sdd/<active>/PROGRESS.md`. If it carries `LANE: bug`, the
    active item is a troubleshoot-fix **bug**, not a forward feature — report the **bug view** and
    **skip steps 2–4** (a bug has no `spec.md` or spec-review cycle):
    - Bug slug; `PHASE` (`REPORT|REPRODUCE|DIAGNOSE|FIX|VERIFY|HANDOFF|ESCALATED`); `SEV`.
@@ -75,7 +75,7 @@ Snapshot (`build-fleet/status-snapshot@1`):
    counter, restores the phase), or **`/build-fleet:park <reason>`** to shelve
    the item entirely.
 
-5b. **Product backlog (v0.4 M2), if a product tier exists.** If
+5b. **Product backlog, if a product tier exists.** If
    `.sdd/_product/backlog.md` exists, summarize it:
    - For each `## Phase N: <name> — STATUS:` line, print the phase name + its STATUS.
    - Under each phase, print every feature row with its state: `PENDING`, or `DONE`
@@ -83,7 +83,7 @@ Snapshot (`build-fleet/status-snapshot@1`):
      it `← active (in flight, PHASE=<phase>)`. Active is **derived from `.sdd/ACTIVE`**,
      not a backlog marker.
    - A roll-up line: `<done>/<total> features done across <N> phases`.
-   - **If no feature is active, resolve what's next via the shared resolver** (v0.4 M3.2)
+   - **If no feature is active, resolve what's next via the shared resolver**
      — the same read-only helper `/build-fleet:handoff` uses, so status and the loop never
      disagree:
      ```bash

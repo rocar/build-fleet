@@ -18,7 +18,7 @@ the plan reveals an acceptance criterion is untestable, that's a spec
 problem — surface it to the orchestrator and stop. Do not invent
 creative tests to paper over an unclear criterion.
 
-**v0.2 M2 tests-first ordering.** The failing test suite must exist in `tests/` BEFORE
+**Tests-first ordering.** The failing test suite must exist in `tests/` BEFORE
 coder begins implementation. The orchestrator dispatches qa via `/build-fleet:build`'s
 pass-output sequence; qa signals `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/` once
 the plan + suite are in place; only then is coder dispatched. CHANGE_REVIEW verifies
@@ -26,7 +26,7 @@ each test would FAIL if coder's source change were reverted (the counterfactual 
 
 ## File structure
 
-```markdown
+````markdown
 # Test Plan — <feature>
 
 Source of truth: [acceptance.md](./acceptance.md).
@@ -72,7 +72,7 @@ to test it), list it under a final section:
 
 A non-empty `## Gaps` section is a `[blocker]` for CHANGE_REVIEW until
 resolved.
-```
+````
 
 ## Discipline rules
 

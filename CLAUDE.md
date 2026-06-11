@@ -1,210 +1,98 @@
-> STATUS: This file is the design spec. We are now packaging this system as the
-> "build-fleet" Claude Code PLUGIN. Where this file conflicts with the approved
-> build plan or the build prompt, those resolved decisions win. Runtime workflow
-> rules (§0 principles, §3 state machine, §8 conventions) are migrating into the
-> sdd-protocol skill — do not treat a project CLAUDE.md as their home.
+# CLAUDE.md — contributing to build-fleet
 
+This repo is the **build-fleet Claude Code plugin**: a spec-driven multi-agent
+software house. Claude Code is both the *runtime* (it executes the workflow in a
+target repo) and the *builder* (it authors and edits the agents, skills, hooks,
+commands, and workflows here). Treat everything in this repo as production source:
+review it, version it, test it.
 
-# CLAUDE.md — Spec-Driven Agent Software House
+The runtime workflow rules (state machine, gates, escalation) live in the
+**`sdd-protocol` skill** — `skills/sdd-protocol/SKILL.md` plus its
+`references/{product-tier,bug-lane}.md`. That skill is the authority on how the
+fleet runs; this file only covers how to work on the plugin itself.
 
-This repo **is** the agent fleet. Claude Code is both the *runtime* (it executes the
-workflow) and the *builder* (it authors and edits the agents, skills, hooks, and
-commands under `.claude/`). Treat `.claude/**` as production source code: review it,
-version it, test it.
-
----
-
-## 0. Operating principles
-
-- **Native first.** Use Claude Code primitives (subagents, agent teams, hooks, skills,
-  slash commands, CLAUDE.md memory) before reaching for external infra.
-- **Spec is the contract.** No implementation begins until a spec is `FINALIZED`.
-- **Gates are deterministic.** Phase transitions are enforced by hooks (exit code 2 =
-  block + feedback), not by an agent "deciding" it's done.
-- **Escalate, don't loop forever.** Review cycles are bounded (default **3**). On the
-  4th unresolved cycle, STOP and write `escalation` to `.sdd/<feature>/ESCALATION.md`,
-  then surface it to the human.
-- **Filesystem is shared memory.** Subagent `memory` dirs are siloed and do not sync.
-  Anything that must cross roles lives as a file in `.sdd/<feature>/`.
-
----
-
-## 1. Roles (subagent definitions in `.claude/agents/`)
-
-Each role is a reusable subagent. The **main session is the orchestrator** and writes
-no production code itself — it routes work, enforces phase order, and synthesizes.
-
-| Role | File | Writes | Reads | Model (suggested) |
-|---|---|---|---|---|
-| Product Owner | `product-owner.md` | `spec.md`, `acceptance.md` | requirements, prior specs | Opus |
-| Architect | `architect.md` | `DECISIONS.md` (ADRs), review notes | spec, code | Opus |
-| Coder | `coder.md` | source, `IMPL_NOTES.md` | spec, tests, ADRs | Sonnet |
-| QA | `qa.md` | `tests/`, `TEST_PLAN.md` | spec, acceptance | Sonnet |
-| DevOps | `devops.md` | CI/CD, IaC, release notes | finalized spec, code | Sonnet |
-
-**Frontmatter pattern** (scope tools tightly per role):
-
-```yaml
----
-name: architect
-description: Reviews specs and code for design soundness, scalability, and risk. Authors ADRs.
-tools: Read, Grep, Glob, Edit   # no Bash for reviewers unless they run analysis
-model: opus
----
-You are the Architect in a spec-driven software house...
-- Review against: scalability, failure modes, data integrity, security, blast radius.
-- Output concerns as a checklist with severity (blocker | major | minor).
-- Record every accepted design decision as an ADR in .sdd/<feature>/DECISIONS.md.
-- Never approve a spec with open blocker-level concerns.
-```
-
-> Reviewers (`architect`, `qa`) should generally **not** have write access to source.
-> Restrict `tools` so a review agent can't silently "fix" what it should flag.
-
----
-
-## 2. Shared memory layer
+## Layout (what actually ships)
 
 ```
-.sdd/<feature>/
-  spec.md          # PO-owned. Single source of truth. Has a STATUS line.
-  acceptance.md    # PO-owned. Testable acceptance criteria.
-  DECISIONS.md     # Architect-owned. Append-only ADR log.
-  TEST_PLAN.md     # QA-owned.
-  IMPL_NOTES.md    # Coder-owned.
-  REVIEW.md        # Append-only review log: who, cycle #, concerns, status.
-  PROGRESS.md      # Orchestrator-owned. Current phase + handoff state.
-  ESCALATION.md    # Only exists if cycles exhausted. Triggers human gate.
+.claude-plugin/plugin.json    # manifest (+ marketplace.json)
+agents/                       # 7 role subagents: product-owner, architect, coder,
+                              #   qa, devops, classifier, scribe
+commands/                     # 21 slash commands (/build-fleet:*)
+skills/                       # 7 skills: sdd-protocol (+references/), adr,
+                              #   review-rubric, sdd-spec-template,
+                              #   sdd-diagnosis-template, test-plan, skill-routing
+hooks/hooks.json              # hook registration (the ONLY registration point)
+hooks/scripts/                # 10 gate scripts + their *.test.sh harnesses
+workflows/                    # 4 dynamic workflows: review.js, deep-build.js,
+                              #   diagnose.js, plan-review.js
+scripts/                      # deterministic helpers (next-feature, intent-block,
+                              #   product-memory-splice, status-snapshot, run-tests)
+                              #   + their *.test.sh
+docs/                         # contracts, smoke fixtures, history
+.github/workflows/ci.yml      # CI: test matrix + release-channel check
 ```
 
-- `spec.md` MUST start with: `STATUS: DRAFT | IN_REVIEW | FINALIZED | BLOCKED`
-- `REVIEW.md` is **append-only** — it's the audit trail of every cycle.
-- Layered memory: `CLAUDE.md` (this file, global rules) → per-role `memory:` dirs
-  (role craft/lessons) → `.sdd/` files (the actual cross-role state).
-- *Optional* semantic layer: expose MemPalace (ChromaDB+SQLite) as an MCP server if you
-  want fuzzy recall across past features. Keep `.sdd/` as the source of truth regardless.
+The orchestrator is the main session; agents are dispatched via Task/workflows.
+State lives in the target repo's `.sdd/` — see the `sdd-protocol` skill for the
+`.sdd/` layout, ownership, and policy.
 
----
-
-## 3. The workflow (state machine)
-
-```
-[SPEC]        PO drafts spec.md + acceptance.md            STATUS=DRAFT
-   │
-   ▼
-[REVIEW]      architect + coder + qa review in parallel    STATUS=IN_REVIEW
-   │          → concerns appended to REVIEW.md
-   │          → PO revises. Repeat ≤ 3 cycles.
-   │          → all concerns resolved? ── no & cycles>3 ──► [ESCALATE → human]
-   │                                   └─ yes ─┐
-   ▼                                           ▼
-[FINALIZE]    PO sets STATUS=FINALIZED (gate: zero open blockers)
-   │
-   ▼
-[BUILD]       parallel: qa writes tests  ‖  coder implements to spec
-   │
-   ▼
-[CHANGE-REVIEW]  architect + PO review the diff
-   │          → architect: design adherence + ADR compliance
-   │          → PO: meets acceptance.md?
-   │          → fail ──► back to [BUILD] (bounded, ≤3) or [ESCALATE]
-   │          → pass ─┐
-   ▼                  ▼
-[HANDOFF→DEVOPS]  devops takes finalized + reviewed change → CI/CD, release
-```
-
-**Hard gates (enforced by hooks, §4):**
-1. No `[BUILD]` until `spec.md` is `FINALIZED`.
-2. No `[FINALIZE]` while `REVIEW.md` has an unresolved `blocker`.
-3. No `[HANDOFF→DEVOPS]` until tests exist, pass, and change-review is `approved`.
-4. Any cycle counter > 3 → write `ESCALATION.md` and halt that phase.
-
----
-
-## 4. Hooks (`.claude/hooks/`) — the gate enforcers
-
-Register in `.claude/settings.json`. Use exit code **2** to block and return feedback.
-
-| Hook | Purpose |
-|---|---|
-| `PreToolUse` (Edit/Write on `src/**`) | Block writes to source while `spec.md` STATUS ≠ FINALIZED. |
-| `PostToolUse` (Edit on `spec.md`) | Validate the STATUS line + required sections exist. |
-| `SubagentStop` | On a reviewer finishing, verify it wrote to `REVIEW.md`; reject empty reviews. |
-| `Stop` | Run lint + the test suite; block stop on failure. |
-| `TaskCompleted` *(agent teams)* | Refuse completion of a review task if open blockers remain. |
-| `TeammateIdle` *(agent teams)* | Keep a reviewer working if its assigned concerns are unaddressed. |
-
-Sketch — block-source-before-finalized (`PreToolUse`):
+## Running the tests
 
 ```bash
-#!/usr/bin/env bash
-# stdin = JSON tool call; check the active feature's spec status
-status=$(grep -m1 '^STATUS:' .sdd/"$FEATURE"/spec.md | awk '{print $2}')
-if [ "$status" != "FINALIZED" ]; then
-  echo "Blocked: spec is $status. No source edits until FINALIZED." >&2
-  exit 2
-fi
+bash scripts/run-tests.sh        # every hook + script suite, then the smoke test
 ```
 
----
+- Individual suites run directly: `bash hooks/scripts/<name>.test.sh`,
+  `bash scripts/<name>.test.sh`. Each is a hermetic mktemp harness that feeds the
+  real hook stdin contract and asserts exit codes + stderr.
+- The smoke test (`docs/v0.5/smoke/smoke.sh`) walks a planted bug through the
+  whole deterministic backbone.
+- Workflows: `node --check workflows/*.js` after any edit (they run in an
+  isolated JS runtime — no `Date`, no filesystem; timestamps come from
+  `args.now`, all state writes go through the scribe).
+- CI (`.github/workflows/ci.yml`) runs the suite on macOS (bash 3.2) and Linux,
+  and checks that main's plugin.json version equals the latest tag. Keep every
+  hook script bash-3.2 compatible.
+- TDD for gates: any hook behavior change gets a failing test case first, in the
+  existing harness style.
 
-## 5. Subagents vs. Agent Teams — when to use which
+## Hard rules
 
-- **Linear pipeline (default):** orchestrator delegates to role subagents via the Task
-  tool, one phase at a time. Cheaper, deterministic, easy to audit. Use for SPEC,
-  FINALIZE, BUILD, HANDOFF.
-- **Parallel review rounds:** the REVIEW and CHANGE-REVIEW phases benefit from reviewers
-  **talking to each other** (architect challenges QA's coverage, etc.). Promote to an
-  **agent team** so teammates share the task list + mailbox and debate. Spawn them from
-  the same role definitions (a subagent type can run as a teammate).
-- Agent teams are experimental: one team per session, no nesting, set
-  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. Always clean up the team via the lead.
-- Reminder: when a role runs *as a teammate*, its `skills`/`mcpServers` frontmatter is
-  ignored (loaded from project/user settings instead) — put review rules in the prompt
-  body, not in a skill, if you rely on team mode.
+- **The release checklist is atomic.** A release moves these together or not at
+  all: the git tag, `plugin.json` version, `marketplace.json`, a CHANGELOG entry,
+  README component counts, and the agent `description:` frontmatter for any agent
+  whose body changed. The plugin cache is version-keyed — a content change
+  without a version bump never reaches installed users. Main always equals the
+  latest tag (CI enforces it).
+- **A lane that touches an agent's body must touch its description.** The
+  description is the delegation surface; a stale one misroutes work.
+- **Severity rubric is triple-maintained on purpose.** The blocker/major/minor
+  table lives canonically in `skills/review-rubric/SKILL.md` and is mirrored
+  verbatim in `agents/architect.md` and `agents/qa.md`. The mirrors are
+  load-bearing: when a role runs as an agent-team teammate, its frontmatter
+  `skills:` are **ignored** (loaded from project/user settings instead), so
+  review rules that must survive team mode live in the prompt body, not only in
+  a skill. Never "deduplicate" the copies; `scripts/rubric-drift.test.sh` fails
+  the suite if they drift. Run it after any `agents/` edit.
+- **Hooks fail closed.** Gate scripts anchor at `CLAUDE_PROJECT_DIR`, reject
+  `..` traversal, require jq while an item is active, and trap unexpected errors
+  to exit 2. Deliberate allows are explicit `exit 0`. Keep it that way.
+- **Signal lines are the machine contract.** Commands cannot set process exit
+  codes; orchestrators dispatch on the `BUILD_FLEET_*:` stdout lines (refusals
+  carry `{"code":<int>,"reason":"<slug>"}`). Never document an exit-code table.
+- **No milestone jargon in the user-facing surface.** Command descriptions stay
+  short and imperative; command bodies and agent prompts name behaviors, not the
+  internal milestone that shipped them. History belongs in CHANGELOG/ROADMAP/docs.
+- **The scribe has no Bash.** It releases the `.workflow-in-flight` marker by
+  overwriting it with empty content; the gate hooks treat an empty marker as
+  absent and the Stop-hook reaper deletes it. Keep agent tool allowlists tight.
 
----
+## Where things are decided
 
-## 6. Skills (`.claude/skills/`) & Commands (`.claude/commands/`)
-
-Skills = reusable craft the roles invoke. Commands = workflow entry points you type.
-
-Skills to build:
-- `sdd-spec-template` — the canonical spec.md structure + STATUS contract.
-- `adr` — ADR format for `DECISIONS.md`.
-- `review-rubric` — severity definitions (blocker/major/minor) shared by all reviewers.
-- `test-plan` — QA's test-design checklist mapped to acceptance criteria.
-
-Commands to build:
-- `/new-feature <name>` — scaffold `.sdd/<name>/`, set PO to draft.
-- `/review` — kick the parallel review phase for the active feature.
-- `/finalize` — run the finalize gate (fails if open blockers).
-- `/handoff` — run change-review then hand to devops.
-- `/status` — print PROGRESS.md + open concerns + cycle counts.
-
----
-
-## 7. Bootstrap plan (build the fleet *with* Claude Code)
-
-Run these in order; each is a normal Claude Code prompt against this repo:
-
-1. **Scaffold** — "Create `.claude/agents/`, `.claude/hooks/`, `.claude/skills/`,
-   `.claude/commands/`, and `.sdd/`. Add `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` to
-   `.claude/settings.json`."
-2. **Roles** — "Author the 5 role subagents per §1, with tight `tools` allowlists."
-3. **Skills** — "Author the 4 skills in §6."
-4. **Hooks** — "Author the hooks in §4 and register them in settings.json."
-5. **Commands** — "Author the slash commands in §6."
-6. **Dry run** — `/new-feature smoke-test` → walk one full cycle on a trivial feature;
-   confirm every gate fires and escalation triggers when forced.
-7. **Harden** — add a `Stop` hook running the real test/lint stack for your target repo.
-
----
-
-## 8. Conventions
-
-- One feature in flight per `.sdd/<feature>/` dir; the active one is named in `PROGRESS.md`.
-- Reviewers append, never overwrite, `REVIEW.md`.
-- Every design choice that survives review becomes an ADR — no silent decisions.
-- The orchestrator never writes source; it only routes, gates, and synthesizes.
-- Human escalation is a first-class outcome, not a failure.
+- Workflow/gate semantics → `skills/sdd-protocol/SKILL.md` (+ references/).
+- Envelope schema + headless contract → `docs/v0.2/CONTRACT.md`.
+- Severity vocabulary → `skills/review-rubric/SKILL.md`.
+- Spec/diagnosis artifact structure → `skills/sdd-spec-template`,
+  `skills/sdd-diagnosis-template`.
+- Design lineage (the original v0.1 design spec, prior plans, audits) →
+  `docs/history/` (start with `DESIGN-SPEC-v0.1.md`).

@@ -1,5 +1,5 @@
 ---
-description: Scaffold a new SDD feature workspace; run the M4 classifier to pick a routing tier (trivial / standard / large); delegate to product-owner to draft the spec (skeleton for trivial, full for standard/large)
+description: Scaffold a feature workspace and draft its spec
 argument-hint: "<feature-slug>"
 allowed-tools: Read, Write, Edit, Task, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*)
 ---
@@ -36,13 +36,14 @@ and surface that the user must supply a slug.
    - `IMPL_NOTES.md` — empty, header `# Implementation Notes — <slug>`.
    - `REVIEW.md` — empty, header `# Review Log — <slug>\n\nAppend-only.`
 
-3. **Initialize `PROGRESS.md`** with the schema from `sdd-protocol` (v0.2 M4 fields included; classifier fills TIER + BUILD_MODE in step 7):
+3. **Initialize `PROGRESS.md`** with the schema from `sdd-protocol` (the classifier fills TIER + BUILD_MODE in step 7):
 
    ```
    FEATURE: <slug>
    PHASE: SPEC
    CYCLE: 0
    CHANGE_CYCLE: 0
+   BUILD_CYCLE: 0
    TIER: pending
    BUILD_MODE: pending
    UPDATED: <iso8601>
@@ -55,7 +56,7 @@ and surface that the user must supply a slug.
 
    - Look back through the conversation for a description the user already gave
      (e.g. "build a celsius→fahrenheit converter that handles negatives").
-   - **Check the product backlog for an inherited intent (v0.4 M3.3).** If
+   - **Check the product backlog for an inherited intent.** If
      `.sdd/_product/backlog.md` exists, run the shared intent-block extractor — the
      SAME script `/build-fleet:next-feature` uses, so the two always reach the same
      verdict (one grammar, one quality floor, one implementation):
@@ -74,7 +75,7 @@ and surface that the user must supply a slug.
      a bare slug-restatement ("the API client") is `too-thin`. On `too-thin`, treat
      the intent as absent and fall through to the STOP-and-ask below — the mere
      presence of a line does not excuse the gate. (The canonical prose definition of
-     the floor lives in the `sdd-protocol` skill.)
+     the floor lives in the `sdd-protocol` skill's `references/product-tier.md`.)
    - **If no usable description exists in context *and* no usable backlog intent, STOP and ask the user.**
      Do not infer requirements from the slug — a slug like `celsius-converter`
      names the feature but says nothing about behavior, inputs/outputs, edge
@@ -86,7 +87,7 @@ and surface that the user must supply a slug.
    - Carry the description (from context or from the user) verbatim into the
      classifier prompt below and into the product-owner delegation in step 8.
 
-5b. **Inherit the product stack, if a product tier exists (v0.4 M0).** Check for
+5b. **Inherit the product stack, if a product tier exists.** Check for
    `.sdd/_product/STACK.md`. If it exists:
    - Read `.sdd/_product/STACK.md` and `.sdd/_product/DECISIONS.md`.
    - Pass both verbatim into the classifier prompt (step 6) and the product-owner
@@ -107,7 +108,7 @@ and surface that the user must supply a slug.
    repo (no product tier) — proceed exactly as before. The product tier is
    additive; its absence changes nothing.
 
-6. **Run the M4 classifier.** Use the Task tool to spawn `build-fleet:classifier`
+6. **Run the classifier.** Use the Task tool to spawn `build-fleet:classifier`
    with this prompt:
 
    > Classify this feature per `agents/classifier.md`. Emit a single JSON verdict
@@ -129,7 +130,7 @@ and surface that the user must supply a slug.
    > size the work. Do not exhaustively read source.
 
    Parse the classifier's JSON verdict. Extract `tier`, `build_mode`, `skip_review`,
-   `skeleton_spec_hint`, `confidence`, `skill_manifest` (v0.4 M1 — may be `null`).
+   `skeleton_spec_hint`, `confidence`, `skill_manifest` (may be `null`).
 
    **Parse-failure fallback.** If the classifier returns malformed JSON or omits
    any of the required fields above, do NOT write `undefined` to PROGRESS.md.
@@ -160,7 +161,7 @@ and surface that the user must supply a slug.
    - `BUILD_MODE:` ← classifier's `build_mode` (`standard` for trivial/standard, `deep-build` for large)
    - `UPDATED:` ← current iso8601
 
-7b. **Persist the skill manifest, if any (v0.4 M1).** The `skill-routing` skill is
+7b. **Persist the skill manifest, if any.** The `skill-routing` skill is
    the convention. If the classifier's `skill_manifest` is **non-null and has at
    least one non-empty `roles` entry**, write it to `.sdd/<slug>/SKILL_MANIFEST.md`:
    a one-line header `# Skill Manifest — <slug>` followed by a fenced ```json block
@@ -173,7 +174,7 @@ and surface that the user must supply a slug.
    ```
 
    If `skill_manifest` is `null` or has only empty `roles`, **write no file** — its
-   absence means "no routing," and BUILD proceeds as plain v0.2. Do not scaffold an
+   absence means "no routing," and BUILD proceeds unrouted. Do not scaffold an
    empty manifest. (Manifest routing is advisory and never gates anything.)
 
 8. **Delegate to product-owner.** Use the Task tool to spawn the
@@ -186,8 +187,7 @@ and surface that the user must supply a slug.
      Acceptance Criteria) but each section is 1-3 sentences. PO does not need
      to run the full self-review — the trivial fast-path skips REVIEW.
 
-   - **For `tier=standard` or `tier=large`:** the v0.1/v0.2-baseline prompt —
-     ask for a complete first-pass `spec.md` (STATUS=DRAFT) and `acceptance.md`
+   - **For `tier=standard` or `tier=large`:** ask for a complete first-pass `spec.md` (STATUS=DRAFT) and `acceptance.md`
      following the `sdd-spec-template` skill, with PO's self-review checklist.
 
    **Inherited product stack (both tiers — from step 5b).** If
@@ -205,7 +205,7 @@ and surface that the user must supply a slug.
    surface that as a product-tier revision signal (architect edits STACK.md +
    appends a product ADR), **not** a feature-local override.
 
-   **Inherited feature intent (v0.4 M3.3).** If step 5 found a usable backlog
+   **Inherited feature intent.** If step 5 found a usable backlog
    **intent (1–3 lines)** for this slug, pass it to the PO labeled "inherited intent
    (the plan author's intended scope — a sketch, not the contract)". Instruct PO to **realize
    and elaborate** that intent into the full spec (Behavior / Interfaces / Acceptance

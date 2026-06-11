@@ -16,11 +16,13 @@ input=$(cat)
 slug=$(resolve_active)
 [ -n "$slug" ] || exit 0
 
-# v0.2: workflows handle reviewer accounting via their own envelope post-condition.
-# The /build-fleet:review command creates this marker before invoking the Workflow
-# tool; scribe removes it on workflow completion. While present, this hook skips —
+# Workflows handle reviewer accounting via their own envelope post-condition.
+# The dispatching command writes its run id into this marker before invoking the
+# Workflow tool; the scribe releases it on completion by emptying it (it has no
+# Bash to rm). While the marker is LIVE (present AND non-empty) this hook skips —
 # workflow reviewer subagents do not write REVIEW.md (the scribe does, after).
-if [ -f ".sdd/${slug}/.workflow-in-flight" ]; then
+# An empty marker means "released": the hook re-engages and the reaper deletes it.
+if [ -s ".sdd/${slug}/.workflow-in-flight" ]; then
   exit 0
 fi
 

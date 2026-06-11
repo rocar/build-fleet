@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Stop: reap orphaned .workflow-in-flight markers.
 #
-# v0.2 M5 hardening. The marker file at .sdd/<slug>/.workflow-in-flight is
-# created by /build-fleet:review and /build-fleet:deep-build (and finalize's
-# deep-build branch) before the Workflow tool is invoked. The marker makes
-# check-review-written and restrict-reviewer-writes skip their gates while
-# present; the scribe deletes it as the workflow's final phase.
+# The marker file at .sdd/<slug>/.workflow-in-flight is created by the
+# workflow-dispatching commands (review, deep-build, build's deep-build route,
+# diagnose, plan-review) before the Workflow tool is invoked, containing the
+# run's id. The marker makes check-review-written and restrict-reviewer-writes
+# skip their gates while LIVE (non-empty); the scribe RELEASES it as the
+# workflow's final phase by emptying it (the scribe holds no Bash to rm).
 #
-# If a workflow fails to launch (or crashes), the marker is left behind. This
-# orphan silently weakens the per-reviewer hooks for the affected feature on
-# subsequent non-workflow operations. This reaper runs on session stop and
-# removes any marker older than the staleness threshold.
+# This reaper runs on session stop and (a) deletes released (empty) markers as
+# housekeeping, and (b) removes any live marker older than the staleness
+# threshold — a workflow that failed to launch (or crashed) leaves an orphan
+# that would silently weaken the per-reviewer hooks for the affected feature.
 #
 # Threshold: 15 minutes (lowered from 1 hour in the 2026-06 audit remediation,
 # §3.14 — markers now carry the dispatching run's id, the scribe deletes only
@@ -35,6 +36,15 @@ now=$(date +%s)
 # Iterate (handle paths with spaces via while-read)
 while IFS= read -r marker; do
   [ -z "$marker" ] && continue
+  # A RELEASED marker (zero bytes — the scribe empties it at envelope-apply
+  # time; it holds no Bash to rm) is reaped immediately regardless of age:
+  # the gate hooks already treat it as absent, this is just housekeeping.
+  if [ ! -s "$marker" ]; then
+    feature=$(dirname "$marker" | sed 's|^\.sdd/||')
+    echo "build-fleet: reaping released (empty) workflow marker for feature '${feature}'" >&2
+    rm -f "$marker"
+    continue
+  fi
   # Portable mtime: macOS uses `stat -f %m`, Linux uses `stat -c %Y`.
   mtime=$(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker" 2>/dev/null || echo "$now")
   age=$((now - mtime))
