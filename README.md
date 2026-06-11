@@ -1,7 +1,7 @@
 # build-fleet
 
 A spec-driven multi-agent software house, packaged as a Claude Code plugin.
-**v0.5**
+**v0.6**
 
 build-fleet turns Claude Code into a disciplined software house. A fleet of role
 subagents drives every change through a deterministic state machine —
@@ -9,14 +9,14 @@ subagents drives every change through a deterministic state machine —
 enforced by hooks, not vibes. No source is written until the spec is FINALIZED;
 no handoff until tests pass and the change is reviewed.
 
-**v0.4 adds a product tier *above* the per-feature loop.** A product is planned
+**A product tier sits *above* the per-feature loop.** A product is planned
 once — vision, a phased backlog, and a single binding **stack-of-record** — then
 **ratified by a human**, and every feature thereafter *inherits* that stack and
 its own one-line intent. The result is two nested cycles: a **PLAN** machine for
 the product, and the **per-feature** machine for each unit of work, joined by a
 **DEVELOPING loop** that advances the backlog one ratified feature at a time.
 
-What's new in v0.4:
+The pillars:
 
 - **Product tier** — `/build-fleet:new-product` scaffolds `.sdd/_product/`
   (vision, backlog, stack, ADRs). Greenfield **ratifies** a fresh stack;
@@ -31,9 +31,12 @@ What's new in v0.4:
 - **Product memory** — ratification writes a build-fleet block into the repo-root
   `CLAUDE.md`, non-clobbering and idempotent, so any Claude session inherits the
   product context.
+- **A parallel bug lane** — unknown-cause bugs run a second state machine whose
+  contract is a `diagnosis.md` and whose keystone is an inviolable reproducing
+  test (below).
 
-Carried from v0.2: dynamic-workflow adversarial **REVIEW**, three-tier routing,
-tests-first BUILD, and headless-first machine signals.
+Plus dynamic-workflow adversarial **REVIEW**, three-tier routing, tests-first
+BUILD, and headless-first machine signals.
 
 ---
 
@@ -64,7 +67,7 @@ flowchart TB
 > a prompt. That's the engine. (🙋 = a human gate.)
 
 The product tier is **optional and additive** — a repo with no `.sdd/_product/`
-is a plain feature-first project and behaves exactly as v0.2 did.
+is a plain feature-first project; the feature loop runs identically either way.
 
 ---
 
@@ -173,7 +176,9 @@ skills, ten gate-enforcing hooks, and the shared memory layer under `.sdd/`.
   Max / Team / Enterprise). build-fleet has a **hard** dependency on the
   `Workflow` tool — REVIEW, PLAN_REVIEW, and deep-build run as dynamic workflows,
   with no command-pipeline fallback. If the runtime is missing, the affected
-  command refuses with `BUILD_FLEET_REFUSE: workflow runtime unavailable` (exit 3).
+  command refuses with a `BUILD_FLEET_REFUSE:` line carrying
+  `{"code": 3, "reason": "workflow-runtime-unavailable"}` (the signal lines are
+  the machine contract — commands cannot set process exit codes).
 - For **headless** callers, `Workflow` must be in the session's allowed tools,
   e.g. `claude -p --allowedTools "Workflow,Read,Edit,Write,Bash,Agent,Task" …`.
 - **`jq`** — required by every gate hook and by `scripts/status-snapshot.sh`
@@ -234,7 +239,7 @@ take effect on an installed instance.
 
 ## Quickstart
 
-### Product-first (the v0.4 flow)
+### Product-first
 
 ```
 # 1. plan the product → scaffold vision + phased backlog + stack
@@ -271,7 +276,7 @@ never treated as a spec. The exact path depends on the routing tier (below).
 
 ---
 
-## The product tier (v0.4)
+## The product tier
 
 A product lives in a reserved `.sdd/_product/` namespace, inherited read-only by
 every feature.
@@ -319,9 +324,9 @@ replaces the block in place). Your own notes live outside the markers and surviv
 
 ---
 
-## The troubleshoot & bug-fix lane (v0.5)
+## The troubleshoot & bug-fix lane
 
-Everything above is *forward engineering* — the spec is the contract. **v0.5 adds a second,
+Everything above is *forward engineering* — the spec is the contract. **The bug lane is a second,
 parallel state machine for the inverse: a bug whose cause is unknown.** It is purely additive — a
 repo that never files a bug behaves exactly as before.
 
@@ -439,7 +444,7 @@ markers.
 
 ## Command reference
 
-**Product tier (v0.4):**
+**Product tier:**
 
 | Command | Phase | What it does |
 |---|---|---|
@@ -464,7 +469,7 @@ markers.
 | `/build-fleet:park <reason>` | any → PARKED | **Human-only** (not model-invocable). Records the parked state in PROGRESS.md and frees `.sdd/ACTIVE` — the sanctioned sev0-preemption path. Workspace stays intact. |
 | `/build-fleet:resolve-escalation [<slug>] <decision>` | ESCALATED → pre-escalation phase | **Human-only** (not model-invocable). Archives ESCALATION.md into REVIEW.md (append-only), resets the exhausted cycle counter, restores the phase. |
 
-**Bug lane (v0.5):**
+**Bug lane:**
 
 | Command | Phase | What it does |
 |---|---|---|
@@ -498,7 +503,9 @@ Representative signals: `BUILD_FLEET_CLASSIFICATION`, `BUILD_FLEET_WORKFLOW_LAUN
 `BUILD_FLEET_PLAN_FINALIZE_DRYRUN` / `_PASS` / `_REFUSE`,
 `BUILD_FLEET_BACKLOG_FLIP`, `BUILD_FLEET_LOOP_ADVANCE`, `BUILD_FLEET_NEXT_FEATURE`
 (+ `_REFUSE` / `_NEEDS_DESC`), `BUILD_FLEET_DEVOPS_OK` / `_REFUSED`,
-`BUILD_FLEET_REFUSE`.
+`BUILD_FLEET_PARKED`, `BUILD_FLEET_RESOLVED`, `BUILD_FLEET_ACTIVE_CONFLICT`,
+`BUILD_FLEET_REFUSE` (whose JSON carries `{"code": <int>, "reason": "<slug>"}`
+— refusal dispatch keys on the reason, never on a process exit code).
 
 `plan-finalize` is the headless safety stop: a bare call emits the report and halts
 — it can never ratify itself, so a `claude -p` run cannot commit a product plan
@@ -561,7 +568,7 @@ directory — never inside the plugin:
   ACTIVE.lock            # owner/slug/held-since while ACTIVE is held (atomic acquire)
   .gitignore             # scaffolded — keeps the coordination files out of git
   PRODUCT                # product slug marker (if a product tier exists)
-  _product/              # the product tier (optional, v0.4)
+  _product/              # the product tier (optional)
     vision.md            # PO — Overview / Goals (+ OUTCOME for standard/large)
     backlog.md           # PO — phased feature rows + per-feature intent lines
     STACK.md             # architect — the binding stack-of-record (inherited)
@@ -579,7 +586,7 @@ directory — never inside the plugin:
     PROGRESS.md          # orchestrator — phase, TIER, BUILD_MODE, handoff state
     ESCALATION.md        # only if review cycles exhausted
     .workflow-in-flight  # transient marker while a workflow runs
-  <bug-slug>/            # bug lane (v0.5) — a /triage'd bug, same dir shape
+  <bug-slug>/            # bug lane — a /triage'd bug, same dir shape
     diagnosis.md         # the contract — STATUS: REPORTED|REPRODUCING|DIAGNOSED|CONFIRMED|FIXED
     PROGRESS.md          # LANE: bug · SEV · PHASE: REPORT…HANDOFF · CYCLE/FIX_CYCLE
     REVIEW.md            # append-only diagnose-workflow log
@@ -589,14 +596,19 @@ directory — never inside the plugin:
 `<feature>/PROGRESS.md` carries the routing fields:
 
 ```
+SDD_SCHEMA: 1
 FEATURE: <slug>
-PHASE:   SPEC | REVIEW | FINALIZE | BUILD | CHANGE_REVIEW | HANDOFF | ESCALATED
+PHASE:   SPEC | REVIEW | FINALIZE | BUILD | CHANGE_REVIEW | HANDOFF | ESCALATED | PARKED
 CYCLE:   <review-workflow runs>
+BUILD_CYCLE: <deep-build workflow runs>
 CHANGE_CYCLE: <change-review rounds>
 TIER:    trivial | standard | large | pending
 BUILD_MODE: standard | deep-build | pending
 UPDATED: <iso8601>
 ```
+
+(`SDD_SCHEMA` is stamped by every scaffold — feature, bug, and product —
+so future schema changes can be detected; readers tolerate its absence.)
 
 `_product/PROGRESS.md` carries the PLAN-machine fields:
 
@@ -629,18 +641,21 @@ session per working tree; parallel clones are not serialized against each other.
 
 | Hook | Effect |
 |---|---|
-| `block-source-before-finalized` | Blocks writes outside `.sdd/` until `spec.md` is FINALIZED. |
+| `block-source-before-finalized` | Blocks all non-`.sdd/` writes until `spec.md` is FINALIZED (bug lane: non-`.sdd/`, non-`tests/` writes until the diagnosis is CONFIRMED). |
+| `guard-bash-writes` | Blocks shell-level source writes (`>`/`>>`, `tee`, `sed -i`, `patch`, `cp`/`mv` destinations) during the same locked phases — Bash is not an escape hatch around the write gates. NotebookEdit is covered by the file gates. |
 | `restrict-reviewer-writes` | Confines writes to `.sdd/<active>/` during REVIEW / CHANGE_REVIEW. |
 | `validate-spec-status` | Rejects a `spec.md` missing its STATUS line or required sections. |
 | `validate-backlog-status` | Rejects a `_product/backlog.md` missing its `PRODUCT:` header, STATUS line, or phase headings. |
-| `validate-diagnosis-status` | *(v0.5)* Rejects a `diagnosis.md` missing its STATUS line or required sections (the bug lane's `validate-spec-status`). |
-| `require-reproducing-test` | *(v0.5)* Blocks a bug's fix source until `diagnosis.md` is CONFIRMED **and** a reproducing test exists under `tests/` — holds even for sev0. |
+| `validate-diagnosis-status` | Rejects a `diagnosis.md` missing its STATUS line or required sections (the bug lane's `validate-spec-status`). |
+| `require-reproducing-test` | Blocks a bug's fix source until `diagnosis.md` is CONFIRMED **and** a reproducing test exists under `tests/` — holds even for sev0. |
 | `check-review-written` | Rejects a reviewer that stops without logging to `REVIEW.md`. |
-| `stop-tests` | During BUILD / CHANGE_REVIEW / HANDOFF, blocks stop on a failing suite (tolerates "no tests collected" pre-suite). |
-| `reap-stale-workflow-markers` | Removes released (empty) `.workflow-in-flight` markers immediately and orphaned ones past the staleness threshold. |
+| `stop-tests` | During BUILD / CHANGE_REVIEW / HANDOFF, blocks stop on a failing suite (tolerates "no tests collected" pre-suite). Bounded: after 3 consecutive red blocks it writes `ESCALATION.md` and lets the stop through instead of wedging the session; `.sdd/<slug>/.skip-stop-tests` is the operator override. |
+| `reap-stale-workflow-markers` | Removes released (empty) `.workflow-in-flight` markers immediately and orphaned ones past the staleness threshold (15 min). |
 
 Hooks block with exit code 2 and return actionable feedback. They are the
-deterministic backbone — agents can't talk their way past a gate. (Product-tier
+deterministic backbone — agents can't talk their way past a gate, and the gates
+**fail closed**: path traversal is rejected, missing `jq` blocks while an item
+is active, and an unexpected script error blocks rather than allows. (Product-tier
 operations refuse cleanly while a feature is mid-review rather than fighting the
 reviewer-write confinement.)
 
@@ -684,9 +699,10 @@ bash scripts/run-tests.sh
 
 It prints a per-suite breakdown, ends with a `suites: N, failed: M` summary
 line, and exits non-zero if any suite failed. CI (`.github/workflows/ci.yml`)
-runs the same entrypoint on ubuntu (bash 5) and macOS (bash 3.2) for every
-push and PR; a `release-channel` job on `main` additionally asserts that
-`.claude-plugin/plugin.json`'s version matches the latest `v*` tag.
+runs the same entrypoint on ubuntu (bash 5, GNU coreutils) and macOS (bash 3.2,
+BSD coreutils) for every push and PR; a `release-channel` job runs on every
+pushed `v*` tag and asserts the tag matches `.claude-plugin/plugin.json`'s
+version (release discipline: `main` always equals the latest tag).
 
 Harness conventions — every `*.test.sh` suite follows the same shape (see
 `hooks/scripts/block-source-before-finalized.test.sh` for the reference
