@@ -74,7 +74,7 @@ Output gates M1–M4.
 > maturity; v0.4/v0.5 delivered first). v0.3a is the foundation v0.3b builds on —
 > an orchestrator can't mediate review of work it can't see.
 
-### v0.3a — pollable status snapshot (in build, 2026-06-06)
+### v0.3a — pollable status snapshot (shipped in 0.6.0, 2026-06-11)
 
 **Half A — plugin side (shipped, orchestrator-agnostic).** `scripts/status-snapshot.sh`:
 a deterministic, LLM-free emitter of one JSON object (`schema:

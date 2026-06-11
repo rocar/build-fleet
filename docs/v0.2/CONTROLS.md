@@ -118,7 +118,7 @@ This document gates which hooks survive M1, what the new workflow script must ow
 
 **CONTROLS.md does NOT decide:**
 - The exact workflow JS API surface (waiting on `/deep-research` raw script inspection).
-- Plugin packaging for `workflows/<name>.js` discovery (waiting on `hello.js` empirical probe).
+- Plugin packaging for `workflows/<name>.js` discovery (resolved by the hello.js empirical probe — findings preserved in `docs/v0.2/hello-probe.md`).
 - The coder dual-role resolution (Open issue 1).
 - The reviewer-skill-load behavior (Open issue 4).
 

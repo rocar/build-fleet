@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix all 34 confirmed blocker/major findings and all 32 minor findings from `AUDIT-2026-06-09.md`, bringing the build-fleet plugin to professional standard.
+**Goal:** Fix all 34 confirmed blocker/major findings and all 32 minor findings from `docs/audits/2026-06-09-ultracode-audit.md`, bringing the build-fleet plugin to professional standard.
 
 **Architecture:** Nine sequential batches matching the audit's §6 order-of-work. Batch 1 lands the license on `main` as v0.5.1 (standalone release); batches 2–8 land on the feature branch (rebased onto main) as one v0.6.0 release; batch 9 is the release cut + full verification. Hooks work is TDD: every gate change gets a test case in the existing hermetic mktemp harness style before the fix.
 
 **Tech Stack:** bash 3.2-compatible shell (hooks/scripts), Claude Code plugin conventions (plugin.json, hooks.json, commands/agents/skills frontmatter), Claude Code dynamic Workflow JS (workflows/*.js), GitHub Actions.
 
-**Spec of record:** `AUDIT-2026-06-09.md` in the repo root. Each task below cites audit item numbers (§3.N = major N, §4 = minors). The executor MUST read the cited audit items and the target files before editing — the audit gives file:line evidence for every item.
+**Spec of record:** `docs/audits/2026-06-09-ultracode-audit.md`. Each task below cites audit item numbers (§3.N = major N, §4 = minors). The executor MUST read the cited audit items and the target files before editing — the audit gives file:line evidence for every item.
 
 **Testing contract (all tasks):** Hook/script tests run directly: `bash hooks/scripts/<name>.test.sh` and `bash scripts/<name>.test.sh` — each prints a PASS/FAIL summary and exits non-zero on failure. The smoke test is `bash docs/v0.5/smoke/smoke.sh`. After T4 exists, `bash scripts/run-tests.sh` runs everything. A task is done only when every suite passes.
 
@@ -21,12 +21,12 @@
 - Modify on `main`: `.claude-plugin/plugin.json` (add `"license": "MIT"`, bump version 0.5.0→0.5.1), `.claude-plugin/marketplace.json` (bump version if it carries one; add license line), `README.md` (License section at end), `workflows/*.js` (SPDX header line), `CHANGELOG.md` (`[0.5.1]` entry)
 - Note: all of these edits already exist as *uncommitted working-tree changes on the feature branch* — they must move to main, not ship buried in the feature branch.
 
-- [ ] **Step 1:** `git stash -u` on `feat/v0.3a-status-snapshot` (captures LICENSE + the license-field/SPDX/README edits; AUDIT-2026-06-09.md and the plan file ride along, that's fine).
-- [ ] **Step 2:** `git checkout main && git stash pop`. Resolve trivially if README context differs (main lacks e679b49). Keep `AUDIT-2026-06-09.md` and `docs/superpowers/plans/` out of this commit (they get committed on the feature branch later).
+- [ ] **Step 1:** `git stash -u` on `feat/v0.3a-status-snapshot` (captures LICENSE + the license-field/SPDX/README edits; docs/audits/2026-06-09-ultracode-audit.md and the plan file ride along, that's fine).
+- [ ] **Step 2:** `git checkout main && git stash pop`. Resolve trivially if README context differs (main lacks e679b49). Keep `docs/audits/2026-06-09-ultracode-audit.md` and `docs/superpowers/plans/` out of this commit (they get committed on the feature branch later).
 - [ ] **Step 3:** Bump `.claude-plugin/plugin.json` version to `0.5.1`; mirror in `.claude-plugin/marketplace.json` if it pins a version. Add a `[0.5.1] - 2026-06-10` CHANGELOG entry: "Added: MIT LICENSE file, license field in plugin.json, SPDX headers. No functional changes."
 - [ ] **Step 4:** Verify: `jq -e '.license == "MIT" and .version == "0.5.1"' .claude-plugin/plugin.json` and `test -f LICENSE`.
 - [ ] **Step 5:** Commit on main: `chore(release): v0.5.1 — add MIT license (audit §2)`. Tag `v0.5.1` (annotated, local — push left to the human).
-- [ ] **Step 6:** `git checkout feat/v0.3a-status-snapshot && git rebase main`. Re-add the untracked `AUDIT-2026-06-09.md` + plan file if stash juggling moved them; commit them on the feature branch: `docs: check in the 2026-06-09 ultracode audit + remediation plan`.
+- [ ] **Step 6:** `git checkout feat/v0.3a-status-snapshot && git rebase main`. Re-add the untracked `docs/audits/2026-06-09-ultracode-audit.md` + plan file if stash juggling moved them; commit them on the feature branch: `docs: check in the 2026-06-09 ultracode audit + remediation plan`.
 
 ### Task 2: Manifests, CHANGELOG backfill, README requirements, repo hygiene (audit §3.30, §3.31-docs-half, §3.4-README-half, §3.5-README-half, §3.21-plugin.json-half; §4 manifests/hygiene minors)
 
@@ -166,12 +166,12 @@ For every step: write the failing test case first in the existing harness style 
 
 **Files:**
 - Modify: `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `CHANGELOG.md`, `README.md`, `ROADMAP.md`
-- Move: `AUDIT-2026-06-09.md` → `docs/audits/2026-06-09-ultracode-audit.md`
+- Move: `docs/audits/2026-06-09-ultracode-audit.md` → `docs/audits/2026-06-09-ultracode-audit.md`
 
 - [ ] **Step 1:** Re-run the full gauntlet: `bash scripts/run-tests.sh` (every suite + smoke) and `node --check workflows/*.js`. All green or the task stops here.
 - [ ] **Step 2:** Sweep for stale counts/references: README component counts (workflows=4, hooks, skills, commands incl. build/park/resolve-escalation), `grep -rn "hello.js\|estimatedCost\|UNKNOWN_TIME" --include="*.md" --include="*.js" .` → zero hits outside docs/history + docs/audits.
 - [ ] **Step 3:** Bump plugin.json + marketplace.json to `0.6.0`; write the `[0.6.0]` CHANGELOG entry (map ROADMAP v0.3a → 0.6.0; Compatibility section per T8); update ROADMAP.
-- [ ] **Step 4:** `git mv AUDIT-2026-06-09.md docs/audits/2026-06-09-ultracode-audit.md`; commit everything: `chore(release): v0.6.0 — audit remediation complete`.
+- [ ] **Step 4:** `git mv docs/audits/2026-06-09-ultracode-audit.md docs/audits/2026-06-09-ultracode-audit.md`; commit everything: `chore(release): v0.6.0 — audit remediation complete`.
 - [ ] **Step 5:** Report to the human: branch state, local tag v0.5.1 on main, v0.6.0 ready to tag on merge; pushing main/tags and opening the PR is theirs to trigger.
 
 ---

@@ -14,6 +14,70 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.6.0] — 2026-06-11
+
+The professional-standard release: ships the pollable status snapshot (ROADMAP **v0.3a**)
+and remediates all 66 findings of the 2026-06-09 end-to-end audit
+(`docs/audits/2026-06-09-ultracode-audit.md`).
+
+### Added
+
+- **Pollable status snapshot (ROADMAP v0.3a).** `scripts/status-snapshot.sh` emits one
+  machine-readable JSON object (`build-fleet/status-snapshot@1`) describing the full `.sdd/`
+  state — for external orchestrators to poll. README gains an "Orchestrator integration"
+  section (invocation outside Claude Code, signal stability policy).
+- **`/build-fleet:build`** — BUILD orchestration split out of `/build-fleet:finalize`;
+  finalize is now a pure, idempotent gate.
+- **`/build-fleet:park`** and **`/build-fleet:resolve-escalation`** — the sanctioned sev0
+  preemption path and the human escalation-resolution path (both `disable-model-invocation`).
+- **Bash/NotebookEdit write gate** (`guard-bash-writes.sh`): shell-level source writes are
+  blocked during locked phases; write-gate matchers extended to NotebookEdit.
+- **Atomic `.sdd/ACTIVE` acquisition** (`scripts/acquire-active.sh`): noclobber lock with
+  owner metadata; new-feature/triage acquire, handoff/ship-fix/park release.
+- **Deterministic helpers replace prose:** `scripts/intent-block.sh` (backlog intent
+  extraction + quality verdict), `scripts/product-memory-splice.sh` (marker-safe CLAUDE.md
+  splicing — never clobbers content outside the markers).
+- **Test infrastructure:** `scripts/run-tests.sh` single entrypoint (17 suites, 250+ cases),
+  GitHub Actions CI (macOS bash-3.2 + Linux matrix, release-channel version≡tag check),
+  suites for every previously untested gate, severity-rubric drift test.
+
+### Changed
+
+- **Gates fail closed.** Path-traversal (`..`) rejection in all path helpers; hooks anchor at
+  `CLAUDE_PROJECT_DIR`; missing jq blocks (with install instructions) while an item is active;
+  unexpected gate errors trap to exit 2. `stop-tests` honors `stop_hook_active`, retries are
+  bounded (3) and escalate to ESCALATION.md instead of wedging the session.
+- **Workflow contracts are honest.** `now` is a required arg (no more `UNKNOWN_TIME` in audit
+  trails); cost previews parse the real `@cost-ceiling` header; deep-build enforces a
+  3-cycle budget via the new `BUILD_CYCLE` field; scribe application is verified (a failed
+  state write can no longer hide behind a success verdict); transient agent failures return
+  `incomplete` for re-run instead of bricking the feature in ESCALATED; `.workflow-in-flight`
+  markers carry a run token, are released by the owning run only, and orphans reap at 15 min.
+- **Exit-code tables removed everywhere** — slash commands cannot set exit codes. Refusals
+  carry `{"code": <int>, "reason": "<slug>"}` in the `BUILD_FLEET_REFUSE` JSON; the signal
+  lines are the sole machine contract (CONTRACT.md updated).
+- **Documentation describes the shipped system.** sdd-protocol restructured (321-line core +
+  `references/{product-tier,bug-lane}.md`), present tense, classifier contradiction removed;
+  adr skill supports product ADRs + `PROVISIONAL`; agent descriptions enumerate bug-lane
+  roles; CLAUDE.md is now contributor instructions (v0.1 design spec archived in
+  `docs/history/`); milestone jargon stripped from the user-facing surface.
+- **verify counterfactual is snapshot-safe:** a `git stash create` SHA is recorded before any
+  tree mutation and restore is verified before any verdict.
+
+### Removed
+
+- `workflows/hello.js` (dev probe; findings preserved in `docs/v0.2/hello-probe.md`).
+
+### Compatibility
+
+- Scaffolded `.sdd/` files now carry `SDD_SCHEMA: 1`; existing state without the stamp is
+  read fine. New per-worktree coordination files (`ACTIVE.lock`, `.stop-test-retries`) are
+  covered by the scaffolded `.sdd/.gitignore` policy.
+- **Breaking for headless callers:** `/build-fleet:finalize` no longer runs BUILD — dispatch
+  `/build-fleet:build` after it. Exit-code dispatch was never real; parse the
+  `BUILD_FLEET_*` lines (now with `{code, reason}`). Review/deep-build/finalize dispatches
+  must supply `now`. Signal grammar and snapshot schema remain at version 1 (additive).
+
 ## [0.5.1] — 2026-06-10
 
 ### Added

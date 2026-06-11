@@ -325,10 +325,9 @@ export const meta = {
     "Survival vote: retain concerns not refuted by cross-examination",
     "Apply state delta via scribe (1 subagent)",
   ],
-  // VERIFY-AT-M1: does the runtime accept additional meta fields, or
-  // does it validate against a strict allowlist?
-  estimatedCost: { inputTokens: 120_000, outputTokens: 30_000 },
 };
+// @cost-ceiling { "inputTokens": 120000, "outputTokens": 30000 }
+// (cost lives in this header comment, NOT in meta — see §7)
 ```
 
 The `meta` block must be a pure literal — no computed values. The runtime parses it before executing the script body. The `phases` array is shown verbatim in the launch prompt.
@@ -591,27 +590,22 @@ plan-review) returns:
 
 ## 7. Cost ceiling declaration (DECIDED)
 
-Cost ceiling lives in the `meta` block as `estimatedCost`:
+The `meta` block must be a pure literal and carries no extra fields, so the cost
+ceiling lives in a `// @cost-ceiling {...}` JS header comment at the top of each
+workflow script, parsed by the command layer before dispatch:
 
 ```js
-export const meta = {
-  name: "review",
-  description: "...",
-  phases: [...],
-  estimatedCost: { inputTokens: 120_000, outputTokens: 30_000 },
-};
+// @cost-ceiling { "inputTokens": 120000, "outputTokens": 30000 }
 ```
 
 ### Surfacing path
 
-- **Interactive mode**: the platform's launch prompt already shows token caution. The `phases` array names + subagent counts (in phase strings) give human reviewers the picture. `estimatedCost` is supplementary.
-- **Headless mode**: the command body parses `meta.estimatedCost` from the script file *before* invoking the Workflow tool and writes a one-line summary to stdout:
+- **Interactive mode**: the platform's launch prompt already shows token caution. The `phases` array names + subagent counts (in phase strings) give human reviewers the picture. The `@cost-ceiling` comment is supplementary.
+- **Headless mode**: the command body parses the `@cost-ceiling` header comment from the script file *before* invoking the Workflow tool and writes a one-line summary to stdout:
   ```
   BUILD_FLEET_COST_PREVIEW: workflow=review feature=<slug> input_ceiling=120000 output_ceiling=30000
   ```
   Orchestrator (Hermes) parses this line and surfaces on Discord before the workflow dispatches.
-
-VERIFY-AT-M1: does the runtime accept `estimatedCost` as a meta field, or does it reject unknown fields? If rejected, move declaration to a JS header comment (`// @cost-ceiling { ... }`) parsed by the command body separately.
 
 ---
 
