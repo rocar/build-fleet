@@ -1,7 +1,7 @@
 # build-fleet
 
 A spec-driven multi-agent software house, packaged as a Claude Code plugin.
-**v0.6**
+**v0.7**
 
 build-fleet turns Claude Code into a disciplined software house. A fleet of role
 subagents drives every change through a deterministic state machine —
@@ -36,7 +36,8 @@ The pillars:
   test (below).
 
 Plus dynamic-workflow adversarial **REVIEW**, three-tier routing, tests-first
-BUILD, and headless-first machine signals.
+BUILD, configurable review rosters/budgets, a governed **generate-then-pin** lane
+for novel work, and headless-first machine signals.
 
 ---
 
@@ -164,7 +165,8 @@ either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field).
 `diagnose.js` (bug-lane root-cause confirmation — the survival vote, inverted).
 Plus deterministic shared scripts under `scripts/` (the backlog resolver, the
 intent-block extractor, the product-memory splice, the status snapshot, the
-atomic ACTIVE-lock acquirer — each with its own test harness), seven craft
+atomic ACTIVE-lock acquirer, plus the workflow determinism-lint and pinner that
+govern the generate-then-pin lane — each with its own test harness), seven craft
 skills, ten gate-enforcing hooks, and the shared memory layer under `.sdd/`.
 
 ---
@@ -427,6 +429,17 @@ Four phases run as Claude Code **dynamic workflows** (JS scripts under
   concern survives unless refuted. The scribe records the verdict and advances to
   FIX; a **sev0** bug short-circuits the workflow entirely (post-hoc obligation).
 
+**Configurable rosters & budgets.** The review roster + cycle budget, the deep-build and
+diagnose cycle budgets, and the plan-review roster are all tunable per item — a command
+flag (`--roles` / `--cycle-budget`) wins over a durable `PROGRESS.md` field (`REVIEW_ROLES`,
+`REVIEW_CYCLE_BUDGET`, `BUILD_CYCLE_BUDGET`, `DIAGNOSE_CYCLE_BUDGET`, `PLAN_REVIEW_ROLES`),
+which in turn falls back to the historical default. Budgets are **clamped to the 3-cycle
+ceiling** (configurable downward only — the "escalate, don't loop forever" invariant is
+never loosened); a roster must keep **≥2 distinct roles** so cross-examination has a
+different-role refuter. The dispatching command resolves the value, passes it through, and
+emits a `BUILD_FLEET_*_CONFIG` line for the run log; the workflow is the authoritative
+validator. Omitting every flag/field reproduces the original behavior exactly.
+
 Because a workflow can't write files, it emits a structured envelope that the
 **scribe** applies. While a workflow runs, a `.workflow-in-flight` marker (carrying
 the run's id) tells the per-reviewer hooks to stand down (the workflow's
@@ -442,6 +455,56 @@ markers.
 
 ---
 
+## Generate-then-pin (novel work)
+
+The four workflows above are **pre-authored and committed** — that is what makes them
+replayable and auditable. For a **novel, large, unknown-shape task** that fits none of them
+(a repo-wide audit, a big migration, a multi-angle stress-test),
+`/build-fleet:scaffold-workflow` adds a *governed* way to author one on the fly without
+giving up determinism:
+
+```mermaid
+flowchart LR
+    SW["📝 /scaffold-workflow<br/>name + task"]
+    AU["✍️ Claude authors candidate<br/>.sdd/_generated/name.js"]
+    LINT{"🔒 determinism lint"}
+    REV(["🔍 architect + qa<br/>interrogate · advisory"])
+    RAT{"🙋 ratify<br/>explicit token"}
+    PIN["📌 .claude/workflows/name.js<br/>frozen · project artifact"]
+    RUN(["⚙️ /name<br/>static · replayable"])
+
+    SW --> AU --> LINT
+    LINT -->|fail → fix| AU
+    LINT -->|pass| REV --> RAT
+    RAT -->|re-lint · hard gate| PIN --> RUN
+
+    classDef js fill:#f7df1e,color:#000,stroke:#000,stroke-width:2px,font-weight:bold;
+    classDef gate fill:#ff8a65,color:#000,stroke:#d84315,stroke-width:2px;
+    class RUN js;
+    class RAT gate;
+```
+
+> 🔒 The determinism lint is the **hard, fail-closed gate** (enforced again at ratify by
+> `pin-workflow.sh`); the architect/qa review is **advisory**; 🙋 ratify is the human
+> authorization. Generation **never executes** — only the pinned 🟡 `/name` runs, as a static,
+> replayable workflow outside the audited `.sdd/` lanes.
+
+1. **Draft** — `/build-fleet:scaffold-workflow <name> "<task>"` has Claude author a candidate
+   workflow into quarantine (`.sdd/_generated/<name>.js`), runs the **determinism lint**
+   (`scripts/workflow-determinism-lint.sh` — rejects `Date.now()` / `Math.random()` / argless
+   `new Date()`, filesystem/network/Node escapes, and a missing `export const meta`), then fans
+   out architect + qa to **interrogate** it (advisory — nothing auto-kills).
+2. **Ratify** — `/build-fleet:scaffold-workflow ratify <name>` re-runs the lint as a **hard,
+   fail-closed gate** (`scripts/pin-workflow.sh`) and only then freezes the candidate into the
+   project's `.claude/workflows/<name>.js`, invokable as `/<name>`.
+
+Generation is an **authoring accelerator** — the candidate is **never executed** before it is
+pinned, and the pinned artifact is a static, replayable Claude Code workflow that lives in the
+project (not inside build-fleet's audited `.sdd/` lanes). Dynamic authoring, deterministic
+execution.
+
+---
+
 ## Command reference
 
 **Product tier:**
@@ -449,7 +512,7 @@ markers.
 | Command | Phase | What it does |
 |---|---|---|
 | `/build-fleet:new-product <slug>` | PLAN | Scaffolds `.sdd/_product/`; PO drafts vision + phased backlog (with intents); architect ratifies (greenfield) or infers (brownfield) the stack. |
-| `/build-fleet:plan-review` | PLAN_REVIEW | Runs the interrogation workflow over the plan. |
+| `/build-fleet:plan-review` | PLAN_REVIEW | Runs the interrogation workflow over the plan. Accepts `--roles` (else `PLAN_REVIEW_ROLES`). |
 | `/build-fleet:plan-finalize [ratify [force]]` | PLAN_FINALIZE → DEVELOPING | Ratification gate. Bare = dry-run + halt; `ratify` flips to DEVELOPING + writes product memory; `ratify force` overrides open blockers. |
 | `/build-fleet:product-memory` | — | (Re)generates the `CLAUDE.md` product block (non-clobbering, idempotent). |
 | `/build-fleet:next-feature` | — | Resolves + gates the next unblocked backlog feature; emits a dispatch signal (does not auto-start). |
@@ -460,10 +523,10 @@ markers.
 |---|---|---|
 | `/build-fleet:new-feature <slug>` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` + `acceptance.md`. Inherits the product stack + backlog intent if present; asks for a description otherwise. |
 | `/build-fleet:dispatch` | — | Re-classifies the active feature (query-only). |
-| `/build-fleet:review` | REVIEW | Runs the adversarial review workflow. (Skipped for trivial.) |
+| `/build-fleet:review` | REVIEW | Runs the adversarial review workflow. (Skipped for trivial.) Accepts `--roles` / `--cycle-budget` (else `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET`). |
 | `/build-fleet:finalize` | FINALIZE → BUILD | Gate only: refuses on open blockers; on pass flips the spec to FINALIZED. Idempotent — re-running is a safe no-op. |
 | `/build-fleet:build` | BUILD | Orchestrates BUILD: qa drafts the failing suite first, then coder implements (routes to the deep-build workflow when `BUILD_MODE=deep-build`). |
-| `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by `/build-fleet:build`); also the iteration entry point. |
+| `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by `/build-fleet:build`); also the iteration entry point. Accepts `--cycle-budget` (else `BUILD_CYCLE_BUDGET`). |
 | `/build-fleet:handoff` | CHANGE_REVIEW → HANDOFF | architect + PO + qa review the diff; refuses if tests are missing/failing. On pass devops ships, the backlog flips, and the loop advances. |
 | `/build-fleet:status` | — | Prints active feature state, open concerns, cycle counts, the product backlog, and the next unblocked feature. **Bug-lane aware:** `LANE: bug` → phase / `SEV` / `diagnosis.md` STATUS / cycles. |
 | `/build-fleet:park <reason>` | any → PARKED | **Human-only** (not model-invocable). Records the parked state in PROGRESS.md and frees `.sdd/ACTIVE` — the sanctioned sev0-preemption path. Workspace stays intact. |
@@ -475,10 +538,17 @@ markers.
 |---|---|---|
 | `/build-fleet:triage <symptom>` | → REPORT | Scaffolds `.sdd/<bug-slug>/diagnosis.md`; runs the bug-mode classifier (severity + cause-known); bounces a known-cause bug to the forward trivial path. |
 | `/build-fleet:reproduce` | REPORT → REPRODUCE | qa writes a failing reproduction test under `tests/`; flips `diagnosis.md` `REPORTED→REPRODUCING`. |
-| `/build-fleet:diagnose` | REPRODUCE → DIAGNOSE | Gates on a recorded root-cause hypothesis, then runs the `diagnose.js` confirmation workflow (sev0 short-circuits to the fast-path). |
+| `/build-fleet:diagnose` | REPRODUCE → DIAGNOSE | Gates on a recorded root-cause hypothesis, then runs the `diagnose.js` confirmation workflow (sev0 short-circuits to the fast-path). Accepts `--cycle-budget` (else `DIAGNOSE_CYCLE_BUDGET`). |
 | `/build-fleet:fix` | DIAGNOSE (confirmed) → FIX | Flips `diagnosis.md` → CONFIRMED (unlocks source), drives the coder to turn the reproducing test green. sev0 hotfix fast-path. |
 | `/build-fleet:verify` | FIX → VERIFY | Reuses the counterfactual: each reproducing test must fail if the fix is reverted. Clean → `diagnosis.md` → FIXED. |
 | `/build-fleet:ship-fix` | VERIFY → HANDOFF | devops ships (sev0 = hotfix); clears `.sdd/ACTIVE`. |
+
+**Authoring (generate-then-pin):**
+
+| Command | Mode | What it does |
+|---|---|---|
+| `/build-fleet:scaffold-workflow <name> "<task>"` | draft | Authors a candidate workflow for a novel task into quarantine, lints it, and fans out architect + qa to interrogate it. Never pins. |
+| `/build-fleet:scaffold-workflow ratify <name>` | pin | Re-lints (hard gate) and freezes the candidate into the project's `.claude/workflows/<name>.js`, invokable as `/<name>`. |
 
 ---
 
@@ -567,6 +637,7 @@ directory — never inside the plugin:
   ACTIVE                 # the one item in flight (released — emptied — on ship)
   ACTIVE.lock            # owner/slug/held-since while ACTIVE is held (atomic acquire)
   .gitignore             # scaffolded — keeps the coordination files out of git
+  _generated/            # Layer-2 quarantine — generated workflow candidates (gitignored)
   PRODUCT                # product slug marker (if a product tier exists)
   _product/              # the product tier (optional)
     vision.md            # PO — Overview / Goals (+ OUTCOME for standard/large)
@@ -604,10 +675,15 @@ BUILD_CYCLE: <deep-build workflow runs>
 CHANGE_CYCLE: <change-review rounds>
 TIER:    trivial | standard | large | pending
 BUILD_MODE: standard | deep-build | pending
+REVIEW_ROLES: <csv>          # optional — review roster (default architect,qa,coder)
+REVIEW_CYCLE_BUDGET: <int>   # optional — review budget 1..3 (default 3)
+BUILD_CYCLE_BUDGET: <int>    # optional — deep-build budget 1..3 (default 3)
 UPDATED: <iso8601>
 ```
 
-(`SDD_SCHEMA` is stamped by every scaffold — feature, bug, and product —
+(The three optional config fields are seeded by `/build-fleet:new-feature` and read
+with-default by their commands; a `--roles` / `--cycle-budget` flag overrides per run.
+`SDD_SCHEMA` is stamped by every scaffold — feature, bug, and product —
 so future schema changes can be detected; readers tolerate its absence.)
 
 `_product/PROGRESS.md` carries the PLAN-machine fields:
@@ -627,8 +703,9 @@ plugin never touches your `.sdd/` state.
 `sdd-protocol` skill): **commit** the audit trail — every `.sdd/<slug>/`
 workspace, `_product/`, and the `PRODUCT` marker; **ignore** the per-working-tree
 coordination files — `ACTIVE`, `ACTIVE.lock`, `.workflow-in-flight`,
-`.stop-test-retries`, `.skip-stop-tests` (live locks and transient sentinels;
-committing them makes merge conflicts out of state only one worktree owns).
+`.stop-test-retries`, `.skip-stop-tests`, `_generated/` (live locks, transient
+sentinels, and the generate-then-pin quarantine; committing them makes merge
+conflicts out of state only one worktree owns).
 `/build-fleet:new-product`, `/build-fleet:new-feature`, and `/build-fleet:triage`
 scaffold `.sdd/.gitignore` with exactly those entries. Acquisition of `ACTIVE` is
 atomic (`scripts/acquire-active.sh`, a noclobber lock with owner metadata) and

@@ -29,12 +29,13 @@ export const meta = {
 };
 
 // ---------- args ----------
-// { feature, cycle, now, run_id, max_partitions?, partition_hint? }
+// { feature, cycle, now, run_id, max_partitions?, partition_hint?, cycle_budget? }
 // `cycle` is the BUILD cycle number, backed by the BUILD_CYCLE field in
 // PROGRESS.md (the dispatching command reads BUILD_CYCLE, passes BUILD_CYCLE+1,
-// and the scribe writes it back via the envelope's state_delta). Budget is 3 —
-// same semantics as review.js's REVIEW cycles: the run that exhausts the budget
-// with surviving blockers escalates.
+// and the scribe writes it back via the envelope's state_delta). `cycle_budget`
+// (optional) is the escalation budget, integer 1..3; default 3, configurable
+// DOWNWARD only — same semantics as review.js's REVIEW cycles: the run that
+// exhausts the budget with surviving blockers escalates.
 // `run_id` is the token the command wrote into .sdd/<feature>/.workflow-in-flight
 // at dispatch; the scribe releases the marker (empties it) only when its content matches.
 
@@ -49,14 +50,40 @@ const partitionHint = A.partition_hint || null;
 const now = A.now;
 const runId = A.run_id || null;
 
+// --- LAYER1-PURE-HELPERS START — configurable cycle budget ---
+// Extracted VERBATIM by scripts/workflow-cycle-budget.test.sh, so this MUST stay
+// pure: no log()/agent()/args, deterministic, side-effect-free. The BUILD escalation
+// budget is configurable DOWNWARD only — values above the ceiling are clamped, so the
+// "escalate, don't loop forever" invariant holds no matter what a caller asks. Default
+// reproduces the historical budget (3). Consts sit ABOVE the first call site (arg
+// validation) to avoid a temporal-dead-zone read.
+const DEFAULT_CYCLE_BUDGET = 3;
+const MAX_CYCLE_BUDGET = 3; // sdd-protocol ceiling — never exceed
+
+// normalizeCycleBudget(raw) → { budget: int|null, error: string|null, clamped: bool }
+function normalizeCycleBudget(raw) {
+  if (raw === undefined || raw === null) return { budget: DEFAULT_CYCLE_BUDGET, error: null, clamped: false };
+  const n = typeof raw === "string" ? parseInt(raw, 10) : raw;
+  if (typeof n !== "number" || Number.isNaN(n) || !Number.isInteger(n))
+    return { budget: null, error: "cycle_budget: must be an integer between 1 and " + MAX_CYCLE_BUDGET, clamped: false };
+  if (n < 1)
+    return { budget: null, error: "cycle_budget: must be >= 1", clamped: false };
+  const budget = Math.min(n, MAX_CYCLE_BUDGET);
+  return { budget, error: null, clamped: budget !== n };
+}
+// --- LAYER1-PURE-HELPERS END ---
+
 // Validation failures are NEVER a bare throw: a throw would strand the
 // .workflow-in-flight marker the command dropped (this script has no filesystem
 // access — only the scribe can release it). Dispatch a minimal scribe cleanup
 // envelope, then return a structured invalid-args verdict for the orchestrator.
+const budgetResult = normalizeCycleBudget(A.cycle_budget);
+
 const argErrors = [];
 if (!feature || typeof feature !== "string") argErrors.push("feature: required non-empty string");
 if (typeof cycle !== "number" || Number.isNaN(cycle)) argErrors.push("cycle: required integer (BUILD_CYCLE + 1, read from PROGRESS.md by the dispatching command)");
 if (!now || typeof now !== "string") argErrors.push("now: required iso8601 string (the dispatching command supplies it — the script cannot call Date)");
+if (budgetResult.error) argErrors.push(budgetResult.error);
 if (argErrors.length > 0) {
   log(`Invalid args: ${argErrors.join("; ")}. No state advanced.`);
   if (feature && typeof feature === "string") {
@@ -71,7 +98,11 @@ if (argErrors.length > 0) {
   };
 }
 
-const CYCLE_BUDGET = 3;
+const CYCLE_BUDGET = budgetResult.budget;
+log(`Build cycle budget ${CYCLE_BUDGET}.`);
+if (budgetResult.clamped) {
+  log(`cycle_budget requested ${JSON.stringify(A.cycle_budget)} exceeds the protocol ceiling — capped to ${MAX_CYCLE_BUDGET}.`);
+}
 
 // ---------- schemas ----------
 

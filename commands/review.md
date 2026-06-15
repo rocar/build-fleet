@@ -1,5 +1,6 @@
 ---
 description: Run the adversarial spec-review workflow
+argument-hint: "[--roles <r1,r2,...>] [--cycle-budget <1-3>]"
 allowed-tools: Read, Write, Workflow
 ---
 
@@ -29,7 +30,15 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
 
 4. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"review","code":2,"reason":"escalation-present"}`) — tell the user to read it and resolve it with `/build-fleet:resolve-escalation <decision>` (or park the feature).
 
-5. **Check the cycle budget.** Read `CYCLE:` from PROGRESS.md. The budget is **3 review cycles**, and the workflow escalates **on** the cycle that exhausts it: if blockers still survive the survival vote at cycle 3, that run writes ESCALATION.md and sets `PHASE: ESCALATED` (there is no separate "4th cycle" — cycle 3 with surviving blockers is the escalation). This refusal is a belt-and-suspenders guard for the edge where CYCLE is already ≥ 3 without a recorded escalation: if `CYCLE >= 3` AND the most recent REVIEW.md cycle still has open `[blocker]` items, refuse — a further run can only escalate, and the workflow owns that write. Refuse with: `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cycle-budget-exhausted","cycle":<n>}` — the budget is 3 cycles and the workflow escalates on the exhausting cycle; resolve blockers in spec.md or accept the escalation.
+5. **Resolve the review config, then check the cycle budget.**
+
+   **The reviewer roster and the cycle budget are configurable** (default roster `architect, qa, coder`; default budget `3`). Resolve each from two sources — **a per-run flag wins over the durable PROGRESS.md default**:
+   - **roster**: `--roles <r1,r2,...>` in `$ARGUMENTS` → else `REVIEW_ROLES:` in PROGRESS.md → else unset. A roster is a comma-separated, ≥2-element subset of `architect, qa, coder, product-owner`.
+   - **budget**: `--cycle-budget <n>` flag → else `REVIEW_CYCLE_BUDGET:` in PROGRESS.md → else `3`. Call the resolved integer `effective_budget` (treat unset as `3`); clamp it to `1..3` for the precondition below — the workflow re-clamps anything above the 3-cycle ceiling.
+
+   The **workflow is the authoritative validator**: pass the resolved values straight through (step 9) and let `review.js` reject a malformed roster/budget via its `invalid-args` path — do **not** re-implement the allowed-role list or bounds here (that would drift). Do **not** write these into PROGRESS.md; a flag override applies to this run only and is recorded by the config signal line in step 8.
+
+   **Cycle-budget precondition.** The workflow escalates **on** the cycle that exhausts `effective_budget`: if blockers still survive the survival vote at `CYCLE == effective_budget`, that run writes ESCALATION.md and sets `PHASE: ESCALATED` (there is no separate "next cycle" — the exhausting cycle with surviving blockers *is* the escalation). This refusal is a belt-and-suspenders guard for the edge where `CYCLE` is already `>= effective_budget` without a recorded escalation: if `CYCLE >= effective_budget` AND the most recent REVIEW.md cycle still has open `[blocker]` items, refuse — a further run can only escalate, and the workflow owns that write. Refuse with: `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cycle-budget-exhausted","cycle":<n>,"cycle_budget":<effective_budget>}` — resolve blockers in spec.md or accept the escalation.
 
 6. **Pick the new cycle number.** New cycle = `CYCLE + 1`. Pass to the workflow.
 
@@ -43,9 +52,15 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
 
    This substitutes for the interactive launch-prompt's token caution. Orchestrators (Hermes) parse this line and may surface it for human approval before the workflow runs.
 
+   Then emit exactly one **review-config** line recording the effective roster + budget and where each came from — this is what makes a flag override (which is not persisted) auditable in the run log:
+
+   ```
+   BUILD_FLEET_REVIEW_CONFIG: {"feature":"<slug>","cycle":<N>,"roles":<["..."] | "default">,"cycle_budget":<n | "default">,"roles_source":"flag"|"progress"|"default","budget_source":"flag"|"progress"|"default"}
+   ```
+
 9. **Invoke the Workflow tool.** Call `Workflow` with:
    - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/review.js`
-   - `args`: `{ "feature": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step 7>" }`
+   - `args`: `{ "feature": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step 7>" }` — **plus** `"roles": [<resolved roster>]` and/or `"cycle_budget": <resolved int>` ONLY when they were resolved from a flag or a `REVIEW_*` PROGRESS.md field in step 5. **Omit a key entirely when unset** so the workflow applies its own default (omitting both reproduces the historical behavior exactly).
 
    Supply `now` yourself (the script cannot call `Date`); the workflow refuses to run without it. The Workflow tool is async-launched: it returns immediately with a `runId`, `taskId`, and `transcriptDir`.
 
@@ -61,6 +76,7 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
 
 12. **Report and exit.** Tell the user:
     - The workflow is running in the background.
+    - The effective reviewer roster and cycle budget for this run — and note if a `--roles`/`--cycle-budget` flag overrode the PROGRESS.md default (the override applies to this run only and is not persisted).
     - `/workflows` shows progress (in interactive mode).
     - Once it completes, `/build-fleet:status` will show the verdict.
     - Next legal command depends on the workflow's verdict:
@@ -76,6 +92,7 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
 - Does not append to REVIEW.md. The workflow's reviewer subagents return structured payloads; the scribe appends the canonical entries.
 - Does not write ESCALATION.md. The workflow detects budget-exhaustion and writes via the envelope.
 - Does not release `.workflow-in-flight` on success. The scribe does that as the final phase (it empties the marker; the reaper deletes the empty file).
+- Does not persist `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET`. The durable per-feature default lives in PROGRESS.md (set out-of-band — e.g. a human edit; the scribe preserves unknown fields across its state writes). A `--roles`/`--cycle-budget` flag overrides that default for the current run only.
 
 ## Refusal contract (machine-readable)
 

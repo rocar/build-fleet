@@ -60,8 +60,18 @@ and surface that the user must supply a slug.
    BUILD_CYCLE: 0
    TIER: pending
    BUILD_MODE: pending
+   REVIEW_ROLES: architect, qa, coder
+   REVIEW_CYCLE_BUDGET: 3
+   BUILD_CYCLE_BUDGET: 3
    UPDATED: <iso8601>
    ```
+
+   The last three are **optional per-feature config**, seeded at their defaults so they
+   are discoverable and editable: `REVIEW_ROLES` (the `/build-fleet:review` roster — a
+   ≥2 subset of architect, qa, coder, product-owner) and `REVIEW_CYCLE_BUDGET` /
+   `BUILD_CYCLE_BUDGET` (escalation budgets, 1–3, clamped to the 3-cycle ceiling). A
+   command flag overrides these per run; the workflow validates them and falls back to
+   these defaults if absent. Leaving them as-is reproduces the historical behavior.
 
 4. **Scaffold `.sdd/.gitignore`, if absent.** (`.sdd/ACTIVE` was already
    written by step 1's acquire — do not write it again.) If `.sdd/.gitignore`

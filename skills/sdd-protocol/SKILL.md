@@ -129,8 +129,18 @@ CHANGE_CYCLE: <int>   # change-review cycles consumed (one increment per /build-
 BUILD_CYCLE: <int>    # deep-build cycles consumed (one increment per deep-build workflow run)
 TIER: trivial | standard | large    # set by the classifier at /build-fleet:new-feature. `pending` until it runs.
 BUILD_MODE: standard | deep-build   # selects /build-fleet:build's orchestration. Classifier sets deep-build for tier=large. `pending` until it runs.
+REVIEW_ROLES: <csv>         # optional — /build-fleet:review roster (>=2 of architect,qa,coder,product-owner). Default architect,qa,coder. A --roles flag overrides per-run.
+REVIEW_CYCLE_BUDGET: <int>  # optional — /build-fleet:review escalation budget (1..3, clamped to the ceiling). Default 3. A --cycle-budget flag overrides per-run.
+BUILD_CYCLE_BUDGET: <int>   # optional — deep-build escalation budget (1..3, clamped). Default 3. A --cycle-budget flag overrides per-run.
 UPDATED: <iso8601>
 ```
+
+The three optional config fields are **read-with-default** by their commands (absent ⇒
+the workflow's built-in default); a command flag (`--roles` / `--cycle-budget`) overrides
+the PROGRESS value for a single run, and budgets are clamped to the 3-cycle ceiling
+(configurable downward only — escalation is never disabled). The bug lane's diagnose
+budget is `DIAGNOSE_CYCLE_BUDGET` and the product plan-review roster is `PLAN_REVIEW_ROLES`
+(same read-with-default + flag-override contract, each in its own PROGRESS file).
 
 A bug's PROGRESS.md instead carries `LANE: bug` (absence of `LANE` reads as a
 forward feature), `PHASE: REPORT | REPRODUCE | DIAGNOSE | FIX | VERIFY | HANDOFF |

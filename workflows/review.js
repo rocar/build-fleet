@@ -27,7 +27,7 @@ export const meta = {
   name: "build-fleet-review",
   description: "SDD spec review: fan-out reviewers, adversarial cross-examination, survival vote, scribe applies state",
   phases: [
-    { title: "Fan-out review", detail: "architect, qa, coder review the spec in parallel" },
+    { title: "Fan-out review", detail: "reviewers review the spec in parallel (roster configurable; default architect, qa, coder)" },
     { title: "Cross-examination", detail: "each reviewer challenges peers' concerns" },
     { title: "Survival vote", detail: "retain concerns not refuted by a different-role reviewer" },
     { title: "Apply", detail: "scribe writes PROGRESS + REVIEW deltas" },
@@ -35,10 +35,16 @@ export const meta = {
 };
 
 // ---------- args ----------
-// { feature: "<slug>", cycle: <int>, now: "<iso8601>", run_id: "<marker token>" }
+// { feature: "<slug>", cycle: <int>, now: "<iso8601>", run_id: "<marker token>",
+//   roles?: string[], cycle_budget?: <int> }
 // `now` is supplied by the command because the script cannot call Date.
 // `run_id` is the token the command wrote into .sdd/<feature>/.workflow-in-flight
 // at dispatch; the scribe releases the marker (empties it) only when its content matches.
+// `roles` (optional) overrides the reviewer roster — a >=2-element subset of
+//   {architect, qa, coder, product-owner}. Default ["architect","qa","coder"].
+// `cycle_budget` (optional) sets the escalation budget, an integer 1..3; default 3.
+//   Configurable DOWNWARD only — the sdd-protocol 3-cycle ceiling is a hard cap.
+//   Omitting BOTH reproduces the historical behavior exactly.
 
 // The Workflow runtime may deliver `args` as a JSON string rather than a parsed
 // object (confirmed empirically during Phase 6 validation). Normalize.
@@ -65,14 +71,67 @@ const SCRIBE_RESULT_SCHEMA = {
   },
 };
 
+// --- LAYER1-PURE-HELPERS START — configurable reviewer roster + cycle budget ---
+// Extracted VERBATIM by scripts/workflow-review-config.test.sh, so these MUST stay
+// pure: no log()/agent()/args, deterministic, side-effect-free. They make the
+// REVIEW roster and the escalation budget data-driven WITHOUT loosening an
+// invariant — the survival vote is untouched (it keys off severity, not role) and
+// the budget is configurable DOWNWARD only (the 3-cycle ceiling is a hard cap).
+// Defaults reproduce the historical behavior exactly. These consts sit ABOVE the
+// first call site (the arg-validation block) to avoid a temporal-dead-zone read.
+const ALLOWED_REVIEW_ROLES = ["architect", "qa", "coder", "product-owner"];
+const DEFAULT_REVIEW_ROLES = ["architect", "qa", "coder"];
+const DEFAULT_CYCLE_BUDGET = 3;
+const MAX_CYCLE_BUDGET = 3; // sdd-protocol ceiling — never exceed (escalate, don't loop forever)
+
+// normalizeRoles(raw) → { roles: string[]|null, error: string|null }
+// absent/null → default roster; if present it must be a non-empty array of
+// distinct ALLOWED roles, >= 2 (cross-examination needs a different-role refuter
+// for a concern to survive the vote). Anything else is a structured arg error.
+function normalizeRoles(raw) {
+  if (raw === undefined || raw === null) return { roles: DEFAULT_REVIEW_ROLES.slice(), error: null };
+  if (!Array.isArray(raw) || raw.length === 0)
+    return { roles: null, error: "roles: must be a non-empty array of reviewer roles" };
+  const seen = [];
+  for (const r of raw) {
+    if (typeof r !== "string" || ALLOWED_REVIEW_ROLES.indexOf(r) === -1)
+      return { roles: null, error: `roles: unknown reviewer role ${JSON.stringify(r)} (allowed: ${ALLOWED_REVIEW_ROLES.join(", ")})` };
+    if (seen.indexOf(r) === -1) seen.push(r);
+  }
+  if (seen.length < 2)
+    return { roles: null, error: "roles: need at least 2 distinct roles so cross-examination has a different-role refuter" };
+  return { roles: seen, error: null };
+}
+
+// normalizeCycleBudget(raw) → { budget: int|null, error: string|null, clamped: bool }
+// absent/null → default; if present it must be an integer >= 1. Values above the
+// ceiling are CLAMPED down (clamped:true, not an error) so the invariant holds no
+// matter what a caller asks for.
+function normalizeCycleBudget(raw) {
+  if (raw === undefined || raw === null) return { budget: DEFAULT_CYCLE_BUDGET, error: null, clamped: false };
+  const n = typeof raw === "string" ? parseInt(raw, 10) : raw;
+  if (typeof n !== "number" || Number.isNaN(n) || !Number.isInteger(n))
+    return { budget: null, error: "cycle_budget: must be an integer between 1 and " + MAX_CYCLE_BUDGET, clamped: false };
+  if (n < 1)
+    return { budget: null, error: "cycle_budget: must be >= 1", clamped: false };
+  const budget = Math.min(n, MAX_CYCLE_BUDGET);
+  return { budget, error: null, clamped: budget !== n };
+}
+// --- LAYER1-PURE-HELPERS END ---
+
 // Validation failures are NEVER a bare throw: a throw would strand the
 // .workflow-in-flight marker the command dropped (this script has no filesystem
 // access — only the scribe can release it). Dispatch a minimal scribe cleanup
 // envelope, then return a structured invalid-args verdict for the orchestrator.
+const rolesResult = normalizeRoles(A.roles);
+const budgetResult = normalizeCycleBudget(A.cycle_budget);
+
 const argErrors = [];
 if (!feature || typeof feature !== "string") argErrors.push("feature: required non-empty string");
 if (typeof cycle !== "number" || Number.isNaN(cycle)) argErrors.push("cycle: required integer");
 if (!now || typeof now !== "string") argErrors.push("now: required iso8601 string (the dispatching command supplies it — the script cannot call Date)");
+if (rolesResult.error) argErrors.push(rolesResult.error);
+if (budgetResult.error) argErrors.push(budgetResult.error);
 if (argErrors.length > 0) {
   log(`Invalid args: ${argErrors.join("; ")}. No state advanced.`);
   if (feature && typeof feature === "string") {
@@ -87,6 +146,17 @@ if (argErrors.length > 0) {
   };
 }
 
+// Effective configuration (validated above). ROLES drives the fan-out roster AND
+// the schema role enums below; cycleBudget drives the escalation threshold.
+const ROLES = rolesResult.roles;
+const cycleBudget = budgetResult.budget;
+// Record the effective config in the run log so a run is self-documenting no
+// matter where the config came from (command flag, PROGRESS.md, or default).
+log(`Reviewer roster: [${ROLES.join(", ")}]; cycle budget ${cycleBudget}.`);
+if (budgetResult.clamped) {
+  log(`cycle_budget requested ${JSON.stringify(A.cycle_budget)} exceeds the protocol ceiling — capped to ${MAX_CYCLE_BUDGET}.`);
+}
+
 // ---------- schemas (structured agent output) ----------
 
 const CONCERNS_SCHEMA = {
@@ -94,7 +164,8 @@ const CONCERNS_SCHEMA = {
   additionalProperties: false,
   required: ["role", "status", "concerns"],
   properties: {
-    role: { type: "string", enum: ["architect", "qa", "coder"] },
+    // role enum tracks the configured reviewer roster (Layer 1) — not a fixed list.
+    role: { type: "string", enum: ROLES },
     status: { type: "string", enum: ["concerns-raised", "approved"] },
     concerns: {
       type: "array",
@@ -117,7 +188,7 @@ const REFUTATION_SCHEMA = {
   additionalProperties: false,
   required: ["role", "refutations"],
   properties: {
-    role: { type: "string", enum: ["architect", "qa", "coder"] },
+    role: { type: "string", enum: ROLES },
     refutations: {
       type: "array",
       items: {
@@ -143,8 +214,6 @@ const REFUTATION_SCHEMA = {
     },
   },
 };
-
-const ROLES = ["architect", "qa", "coder"];
 
 // ---------- Phase 1: fan-out review ----------
 
@@ -210,7 +279,7 @@ phase("Survival vote");
 const surviving = applySurvivalVote(allConcerns, refutationMap);
 const survivingBlockers = surviving.filter((c) => c.severity === "blocker" && !c.refuted);
 const verdict =
-  survivingBlockers.length > 0 ? (cycle >= 3 ? "escalate" : "revise") : "clean";
+  survivingBlockers.length > 0 ? (cycle >= cycleBudget ? "escalate" : "revise") : "clean";
 
 log(
   `Cycle ${cycle}: ${surviving.length} concerns, ${survivingBlockers.length} surviving blockers → verdict=${verdict}`
@@ -220,7 +289,7 @@ log(
 
 phase("Apply");
 
-const envelope = buildEnvelope({ feature, cycle, now, reviews, surviving, verdict });
+const envelope = buildEnvelope({ feature, cycle, cycleBudget, now, reviews, surviving, verdict });
 const scribeResult = await applyScribe(envelope);
 
 return {
@@ -345,7 +414,7 @@ function applySurvivalVote(concerns, refutationMap) {
   });
 }
 
-function buildEnvelope({ feature, cycle, now, reviews, surviving, verdict }) {
+function buildEnvelope({ feature, cycle, cycleBudget, now, reviews, surviving, verdict }) {
   const reviewEntries = reviews.map((r) => {
     const own = surviving.filter((c) => c.raised_by === r.role);
     const lines = [`## Cycle ${cycle} — ${r.role} — ${now}`];
@@ -367,6 +436,7 @@ function buildEnvelope({ feature, cycle, now, reviews, surviving, verdict }) {
       ? {
           reason: "cycle-budget-exhausted-with-open-blockers",
           cycle,
+          cycle_budget: cycleBudget,
           surviving_blockers: surviving.filter(
             (c) => c.severity === "blocker" && !c.refuted
           ),

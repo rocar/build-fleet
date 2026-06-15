@@ -33,7 +33,9 @@ export const meta = {
   ],
 };
 
-// ---------- args: { slug, cycle, now, run_id } ----------
+// ---------- args: { slug, cycle, now, run_id, cycle_budget? } ----------
+// `cycle_budget` (optional) is the escalation budget, integer 1..3; default 3,
+// configurable DOWNWARD only (the workflow clamps anything above the ceiling).
 // `run_id` is the token the command wrote into .sdd/<slug>/.workflow-in-flight
 // at dispatch; the scribe releases the marker (empties it) only when its content matches.
 const A = typeof args === "string" ? JSON.parse(args) : (args || {});
@@ -42,14 +44,40 @@ const cycle = typeof A.cycle === "string" ? parseInt(A.cycle, 10) : A.cycle;
 const now = A.now;
 const runId = A.run_id || null;
 
+// --- LAYER1-PURE-HELPERS START — configurable cycle budget ---
+// Extracted VERBATIM by scripts/workflow-cycle-budget.test.sh, so this MUST stay
+// pure: no log()/agent()/args, deterministic, side-effect-free. The DIAGNOSE
+// escalation budget is configurable DOWNWARD only — values above the ceiling are
+// clamped, so the "escalate, don't loop forever" invariant holds no matter what a
+// caller asks. Default reproduces the historical budget (3). Consts sit ABOVE the
+// first call site (arg validation) to avoid a temporal-dead-zone read.
+const DEFAULT_CYCLE_BUDGET = 3;
+const MAX_CYCLE_BUDGET = 3; // sdd-protocol ceiling — never exceed
+
+// normalizeCycleBudget(raw) → { budget: int|null, error: string|null, clamped: bool }
+function normalizeCycleBudget(raw) {
+  if (raw === undefined || raw === null) return { budget: DEFAULT_CYCLE_BUDGET, error: null, clamped: false };
+  const n = typeof raw === "string" ? parseInt(raw, 10) : raw;
+  if (typeof n !== "number" || Number.isNaN(n) || !Number.isInteger(n))
+    return { budget: null, error: "cycle_budget: must be an integer between 1 and " + MAX_CYCLE_BUDGET, clamped: false };
+  if (n < 1)
+    return { budget: null, error: "cycle_budget: must be >= 1", clamped: false };
+  const budget = Math.min(n, MAX_CYCLE_BUDGET);
+  return { budget, error: null, clamped: budget !== n };
+}
+// --- LAYER1-PURE-HELPERS END ---
+
 // Validation failures are NEVER a bare throw: a throw would strand the
 // .workflow-in-flight marker the command dropped (this script has no filesystem
 // access — only the scribe can release it). Dispatch a minimal scribe cleanup
 // envelope, then return a structured invalid-args verdict for the orchestrator.
+const budgetResult = normalizeCycleBudget(A.cycle_budget);
+
 const argErrors = [];
 if (!slug || typeof slug !== "string") argErrors.push("slug: required non-empty string");
 if (typeof cycle !== "number" || Number.isNaN(cycle)) argErrors.push("cycle: required integer");
 if (!now || typeof now !== "string") argErrors.push("now: required iso8601 string (the dispatching command supplies it — the script cannot call Date)");
+if (budgetResult.error) argErrors.push(budgetResult.error);
 if (argErrors.length > 0) {
   log(`Invalid args: ${argErrors.join("; ")}. No state advanced.`);
   if (slug && typeof slug === "string") {
@@ -65,6 +93,11 @@ if (argErrors.length > 0) {
 }
 
 const ROLES = ["architect", "coder"];
+const cycleBudget = budgetResult.budget;
+log(`Refuter roster: [${ROLES.join(", ")}]; cycle budget ${cycleBudget}.`);
+if (budgetResult.clamped) {
+  log(`cycle_budget requested ${JSON.stringify(A.cycle_budget)} exceeds the protocol ceiling — capped to ${MAX_CYCLE_BUDGET}.`);
+}
 
 // ---------- schemas ----------
 
@@ -188,7 +221,7 @@ phase("Survival vote");
 const judged = applyHypothesisVote(challenges, crossMap);
 const survivingRefutations = judged.filter((c) => !c.refuted);
 const verdict =
-  survivingRefutations.length > 0 ? (cycle >= 3 ? "escalate" : "refuted") : "confirmed";
+  survivingRefutations.length > 0 ? (cycle >= cycleBudget ? "escalate" : "refuted") : "confirmed";
 
 log(
   `Cycle ${cycle}: ${challenges.length} substantive refutation(s), ` +
@@ -199,7 +232,7 @@ log(
 
 phase("Apply");
 
-const envelope = buildEnvelope({ slug, cycle, now, refutals, judged, verdict });
+const envelope = buildEnvelope({ slug, cycle, cycleBudget, now, refutals, judged, verdict });
 const scribeResult = await applyScribe(envelope);
 
 return {
@@ -345,7 +378,7 @@ function applyHypothesisVote(challenges, crossMap) {
   });
 }
 
-function buildEnvelope({ slug, cycle, now, refutals, judged, verdict }) {
+function buildEnvelope({ slug, cycle, cycleBudget, now, refutals, judged, verdict }) {
   const reviewEntries = refutals.map((r) => {
     const p = r.payload;
     const lines = [`## Cycle ${cycle} — ${r.role} — ${now}`];
@@ -368,6 +401,7 @@ function buildEnvelope({ slug, cycle, now, refutals, judged, verdict }) {
           // field name `surviving_blockers` matches the reused scribe's ESCALATION renderer
           reason: "diagnosis-not-confirmed-cycle-budget-exhausted",
           cycle,
+          cycle_budget: cycleBudget,
           surviving_blockers: judged.filter((c) => !c.refuted),
           emitted_at: now,
         }

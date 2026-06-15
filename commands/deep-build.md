@@ -1,6 +1,6 @@
 ---
 description: Fan out parallel coders over a planned file partition
-argument-hint: "[max_partitions]"
+argument-hint: "[max_partitions] [--cycle-budget <1-3>]"
 allowed-tools: Read, Write, Edit, Workflow
 ---
 
@@ -23,7 +23,8 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
 
 ## Arguments
 
-- `$ARGUMENTS` — optional integer override for `max_partitions` (default 3, hard cap 8). E.g., `/build-fleet:deep-build 5`.
+- `$ARGUMENTS` — a leading optional integer overrides `max_partitions` (default 3, hard cap 8), e.g. `/build-fleet:deep-build 5`.
+- `--cycle-budget <1-3>` — optional override of the BUILD escalation budget (default 3, clamped to the 3-cycle ceiling), e.g. `/build-fleet:deep-build 5 --cycle-budget 2`.
 
 ## What you do
 
@@ -39,11 +40,13 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
 
 5. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"deep-build","code":2,"reason":"escalation-present"}`) — `/build-fleet:resolve-escalation` is the unblock path.
 
-6. **Check the BUILD cycle budget.** Read `BUILD_CYCLE:` from `.sdd/<slug>/PROGRESS.md`. If the field is absent (a feature scaffolded before BUILD_CYCLE existed), add `BUILD_CYCLE: 0` to PROGRESS.md first — the workflow's scribe replaces fields **in place**, so the field must exist before dispatch (an `.sdd/` write; always gate-permitted). The budget is **3 build cycles**, and the workflow escalates **on** the cycle that exhausts it: blocker-severity concerns surviving the adversarial review at cycle 3 make that run write ESCALATION.md and set `PHASE: ESCALATED`. If `BUILD_CYCLE >= 3` AND the last run left surviving blockers, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"build-cycle-budget-exhausted","build_cycle":<n>}` — the budget is 3 cycles and the workflow escalates on the exhausting cycle; resolve the surviving blockers or accept the escalation.
+6. **Resolve the cycle budget, then check it.** The BUILD escalation budget is configurable (default 3). Resolve it — **a per-run flag wins over the durable default**: `--cycle-budget <n>` in `$ARGUMENTS` → else `BUILD_CYCLE_BUDGET:` in `.sdd/<slug>/PROGRESS.md` → else `3`. Call the resolved integer `effective_budget` (treat unset as `3`); clamp it to `1..3` (the workflow re-clamps anything above the ceiling). The **workflow is the authoritative validator** — pass the resolved value through (step 11) and let `deep-build.js` reject a malformed budget via its `invalid-args` path; do **not** persist `BUILD_CYCLE_BUDGET` (a flag override is per-run).
+
+   Read `BUILD_CYCLE:` from `.sdd/<slug>/PROGRESS.md`. If the field is absent (a feature scaffolded before BUILD_CYCLE existed), add `BUILD_CYCLE: 0` to PROGRESS.md first — the workflow's scribe replaces fields **in place**, so the field must exist before dispatch (an `.sdd/` write; always gate-permitted). The workflow escalates **on** the cycle that exhausts `effective_budget`: blocker-severity concerns surviving the adversarial review at `BUILD_CYCLE == effective_budget` make that run write ESCALATION.md and set `PHASE: ESCALATED`. If `BUILD_CYCLE >= effective_budget` AND the last run left surviving blockers, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"build-cycle-budget-exhausted","build_cycle":<n>,"cycle_budget":<effective_budget>}` — resolve the surviving blockers or accept the escalation.
 
 7. **Pick the new cycle number.** New cycle = `BUILD_CYCLE + 1`. Pass it to the workflow as `cycle`; the workflow's scribe writes it back to `BUILD_CYCLE` via the envelope's `state_delta`.
 
-8. **Parse arguments.** If `$ARGUMENTS` is an integer in `[1, 8]`, use it as `max_partitions`. Otherwise default to `3`.
+8. **Parse arguments.** A leading integer in `[1, 8]` is `max_partitions` (else default `3`). A `--cycle-budget <n>` token sets the budget already resolved in step 6. Both are optional and independent.
 
 9. **Compose the run id and drop the workflow-in-flight marker.** Compose a run id: `deep-build-<slug>-c<new_cycle>-<iso8601 now>` (the same `now` you pass to the workflow in step 11). Write `.sdd/<slug>/.workflow-in-flight` containing exactly that run id as its single line. Hooks skip while the marker is live. The marker is **owned by this run**: the scribe releases it (empties it) only if its content still matches the envelope's `run_id`. Cleanup obligation: see "Cleanup obligation" below.
 
@@ -53,9 +56,15 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
    BUILD_FLEET_COST_PREVIEW: {"workflow":"deep-build","feature":"<slug>","cycle":<N>,"max_partitions":<N>,"input_ceiling":<N>,"output_ceiling":<N>}
    ```
 
+   Then emit one **config** line recording the effective budget and its source (so a non-persisted flag override is auditable in the run log):
+
+   ```
+   BUILD_FLEET_DEEP_BUILD_CONFIG: {"feature":"<slug>","cycle":<N>,"cycle_budget":<n | "default">,"budget_source":"flag"|"progress"|"default"}
+   ```
+
 11. **Invoke the Workflow tool.** Call `Workflow` with:
    - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/deep-build.js`
-   - `args`: `{ "feature": "<slug>", "cycle": <new_cycle>, "max_partitions": <N>, "now": "<iso8601>", "run_id": "<run id from step 9>" }`
+   - `args`: `{ "feature": "<slug>", "cycle": <new_cycle>, "max_partitions": <N>, "now": "<iso8601>", "run_id": "<run id from step 9>" }` — **plus** `"cycle_budget": <resolved int>` ONLY when resolved from a flag or `BUILD_CYCLE_BUDGET` in step 6. **Omit it when unset** so the workflow uses its default (omitting it reproduces the historical behavior exactly).
 
    Supply `now` yourself (the script cannot call `Date`); the workflow refuses to run without `feature`, `cycle`, or `now`.
 
@@ -84,6 +93,7 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
 - Does not bump PHASE, `BUILD_CYCLE`, or run CHANGE_REVIEW. The workflow's scribe writes `BUILD_CYCLE` (and the rest of the BUILD-completion delta) via the envelope's `state_delta`; this command only normalizes a missing `BUILD_CYCLE: 0` field pre-dispatch. CHANGE_REVIEW is `/build-fleet:handoff`'s job.
 - Does not write source. Only its coder subagents (inside the workflow) write source — each restricted to its partition.
 - Does not release `.workflow-in-flight` on success. Scribe does that as the final phase (only when the marker still contains this run's id; it empties the marker and the reaper deletes the empty file).
+- Does not persist `BUILD_CYCLE_BUDGET`. The durable default lives in `.sdd/<slug>/PROGRESS.md` (scaffolded by `/build-fleet:new-feature`; the scribe preserves it); a `--cycle-budget` flag overrides it for this run only.
 
 ## Cleanup obligation
 

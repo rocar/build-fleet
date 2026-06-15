@@ -31,17 +31,20 @@ export const meta = {
   name: "build-fleet-plan-review",
   description: "Product-tier PLAN_REVIEW: interrogate the product plan from each role's lens, consolidate findings (no survival vote), scribe appends the report",
   phases: [
-    { title: "Interrogate", detail: "product-owner, architect, qa interrogate vision/backlog/STACK in parallel" },
+    { title: "Interrogate", detail: "the roster interrogates vision/backlog/STACK in parallel (configurable; default product-owner, architect, qa)" },
     { title: "Consolidate", detail: "group + count findings by severity — nothing is auto-killed" },
     { title: "Apply", detail: "scribe appends the interrogation report to _product/REVIEW.md and sets PHASE=PLAN_REVIEW" },
   ],
 };
 
 // ---------- args ----------
-// { product: "<slug>", cycle: <int>, now: "<iso8601>", run_id: "<marker token>" }
+// { product: "<slug>", cycle: <int>, now: "<iso8601>", run_id: "<marker token>", roles?: string[] }
 // `now` is supplied by the command because the script cannot call Date.
 // `run_id` is the token the command wrote into .sdd/_product/.workflow-in-flight
 // at dispatch; the scribe releases the marker (empties it) only when its content matches.
+// `roles` (optional) overrides the interrogation roster — a >=2-element subset of
+//   {product-owner, architect, qa} (the lenses defined below). Default is all three.
+//   There is NO cycle_budget here: plan-review never votes or escalates.
 
 const A = typeof args === "string" ? JSON.parse(args) : (args || {});
 
@@ -52,14 +55,45 @@ const runId = A.run_id || null;
 
 const WORKSPACE = ".sdd/_product/";
 
+// --- LAYER1-PURE-HELPERS START — configurable interrogation roster ---
+// Extracted VERBATIM by scripts/workflow-plan-review-config.test.sh, so this MUST
+// stay pure: no log()/agent()/args, deterministic, side-effect-free. plan-review has
+// NO cycle budget (it never votes or escalates), so ONLY the roster is configurable.
+// Allowed roles are exactly those with a LENS entry below — {product-owner, architect,
+// qa}; `coder` is not a product-plan lens. >= 2 distinct, so the plan is interrogated
+// from more than one lens. Default reproduces the historical roster. The const sits
+// ABOVE the first call site (arg validation) to avoid a temporal-dead-zone read.
+const ALLOWED_INTERROGATION_ROLES = ["product-owner", "architect", "qa"];
+const DEFAULT_INTERROGATION_ROLES = ["product-owner", "architect", "qa"];
+
+// normalizeRoles(raw) → { roles: string[]|null, error: string|null }
+function normalizeRoles(raw) {
+  if (raw === undefined || raw === null) return { roles: DEFAULT_INTERROGATION_ROLES.slice(), error: null };
+  if (!Array.isArray(raw) || raw.length === 0)
+    return { roles: null, error: "roles: must be a non-empty array of interrogation roles" };
+  const seen = [];
+  for (const r of raw) {
+    if (typeof r !== "string" || ALLOWED_INTERROGATION_ROLES.indexOf(r) === -1)
+      return { roles: null, error: `roles: unknown interrogation role ${JSON.stringify(r)} (allowed: ${ALLOWED_INTERROGATION_ROLES.join(", ")})` };
+    if (seen.indexOf(r) === -1) seen.push(r);
+  }
+  if (seen.length < 2)
+    return { roles: null, error: "roles: need at least 2 distinct roles so the plan is interrogated from more than one lens" };
+  return { roles: seen, error: null };
+}
+// --- LAYER1-PURE-HELPERS END ---
+
 // Validation failures are NEVER a bare throw: a throw would strand the
 // .workflow-in-flight marker the command dropped (this script has no filesystem
 // access — only the scribe can release it). Dispatch a minimal scribe cleanup
 // envelope, then return a structured invalid-args verdict for the orchestrator.
+const rolesResult = normalizeRoles(A.roles);
+
 const argErrors = [];
 if (!product || typeof product !== "string") argErrors.push("product: required non-empty string");
 if (typeof cycle !== "number" || Number.isNaN(cycle)) argErrors.push("cycle: required integer");
 if (!now || typeof now !== "string") argErrors.push("now: required iso8601 string (the dispatching command supplies it — the script cannot call Date)");
+if (rolesResult.error) argErrors.push(rolesResult.error);
 if (argErrors.length > 0) {
   log(`Invalid args: ${argErrors.join("; ")}. No state advanced.`);
   if (product && typeof product === "string") {
@@ -74,6 +108,10 @@ if (argErrors.length > 0) {
   };
 }
 
+// Effective roster (validated above) — drives the fan-out AND the schema role enum.
+const ROLES = rolesResult.roles;
+log(`Interrogation roster: [${ROLES.join(", ")}].`);
+
 // ---------- schema (structured interrogation output) ----------
 //
 // One object per interrogating role. `findings` is a flat list across the three
@@ -86,7 +124,8 @@ const INTERROGATION_SCHEMA = {
   additionalProperties: false,
   required: ["role", "findings"],
   properties: {
-    role: { type: "string", enum: ["product-owner", "architect", "qa"] },
+    // role enum tracks the configured interrogation roster (Layer 1) — not a fixed list.
+    role: { type: "string", enum: ROLES },
     findings: {
       type: "array",
       items: {
@@ -104,8 +143,6 @@ const INTERROGATION_SCHEMA = {
     },
   },
 };
-
-const ROLES = ["product-owner", "architect", "qa"];
 
 // ---------- Phase 1: fan-out interrogation ----------
 

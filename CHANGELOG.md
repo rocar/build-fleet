@@ -14,6 +14,58 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.7.0] — 2026-06-15
+
+The **dynamic-workflow enrichment**: build-fleet keeps its deterministic static core but gains
+(1) per-item configurable review rosters and cycle budgets, and (2) a governed *generate-then-pin*
+lane for novel work. Determinism/auditability is preserved throughout — new configuration is
+validated and clamped, and generated workflows are linted, reviewed, and frozen before they can
+run. Research + design: `docs/history/2026-06-15-layer2-scaffold-workflow.md`.
+
+### Added
+
+- **Configurable review rosters + cycle budgets (Layer 1).** All four workflows accept optional,
+  validated config that defaults to the historical behavior exactly:
+  - `review.js` — `roles` (≥2 of architect/qa/coder/product-owner; the structured-output role enum
+    tracks the roster) and `cycle_budget` (1–3, clamped to the ceiling — configurable downward only).
+  - `plan-review.js` — `roles` (≥2 of product-owner/architect/qa).
+  - `deep-build.js`, `diagnose.js` — `cycle_budget` (1–3, clamped).
+  The pure validators are unit-tested by verbatim extraction from each workflow.
+- **Command wiring.** `/build-fleet:review`, `:plan-review`, `:deep-build`, and `:diagnose` resolve
+  config as **flag > durable PROGRESS field > default** (`--roles` / `--cycle-budget`; `REVIEW_ROLES`,
+  `REVIEW_CYCLE_BUDGET`, `BUILD_CYCLE_BUDGET`, `DIAGNOSE_CYCLE_BUDGET`, `PLAN_REVIEW_ROLES`), pass the
+  resolved value through to the authoritative workflow validator, and emit a `BUILD_FLEET_*_CONFIG`
+  audit line. `/build-fleet:new-feature` scaffolds the feature-lane fields at their defaults.
+- **`/build-fleet:scaffold-workflow` — governed generate-then-pin lane (Layer 2)** for novel, large,
+  unknown-shape tasks. *Draft*: Claude authors a candidate workflow into quarantine
+  (`.sdd/_generated/<name>.js`), the determinism lint runs, and architect + qa interrogate it
+  (advisory). *Ratify*: a hard, fail-closed lint gate (`scripts/pin-workflow.sh`) then freezes the
+  candidate into the project's `.claude/workflows/<name>.js`, invokable as `/<name>`. The candidate is
+  **never executed before pinning**; the pinned artifact is static and replayable.
+- **`scripts/workflow-determinism-lint.sh`** — determinism + sandbox-safety gate (rejects
+  `Date.now()` / `Math.random()` / argless `new Date()`, `require`/`import`/`process`/`fs`/`fetch`/
+  `eval`, and a missing `export const meta`; strips comments/strings first). With test harness.
+- **`scripts/pin-workflow.sh`** — fail-closed pin (lint gate + validated, traversal-rejecting copy
+  into `.claude/workflows/`). With test harness.
+- Optional PROGRESS fields `REVIEW_ROLES`, `REVIEW_CYCLE_BUDGET`, `BUILD_CYCLE_BUDGET` (feature lane;
+  the bug/product analogs `DIAGNOSE_CYCLE_BUDGET` / `PLAN_REVIEW_ROLES` are read-with-default).
+- `.sdd/_generated/` quarantine namespace (gitignored).
+- Signals: `BUILD_FLEET_REVIEW_CONFIG`, `_PLAN_REVIEW_CONFIG`, `_DEEP_BUILD_CONFIG`, `_DIAGNOSE_CONFIG`,
+  `_SCAFFOLD_DRAFT`, `_WORKFLOW_PINNED`, `_WORKFLOW_PIN_REFUSED`, and the lint's
+  `_LINT_PASS` / `_LINT_FAIL` / `_LINT_VIOLATION`.
+
+### Changed
+
+- Slash commands 21 → 22 (`scaffold-workflow` added).
+- README gains a generate-then-pin section + diagram and a configurable-rosters/budgets note;
+  command reference, PROGRESS schema, and the `.sdd/` tree updated. The `sdd-protocol` skill's
+  PROGRESS schema documents the new optional fields.
+
+**Compatibility.** Additive only. New PROGRESS fields are optional (readers ignore unknown lines),
+and the new `BUILD_FLEET_*` signal names are additive. `SDD_SCHEMA` stays `1`, the signal-line
+grammar stays at version 1, and the status snapshot stays `build-fleet/status-snapshot@1`. No
+migration required; in-flight `.sdd/` items are unaffected.
+
 ## [0.6.2] — 2026-06-11
 
 ### Fixed

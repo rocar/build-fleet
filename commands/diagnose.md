@@ -1,5 +1,6 @@
 ---
 description: Adversarially confirm the bug's root-cause hypothesis
+argument-hint: "[--cycle-budget <1-3>]"
 allowed-tools: Read, Write, Edit, Workflow
 ---
 
@@ -62,10 +63,18 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
    still holds. **Stop here** (no workflow). `sev1`/`sev2` continue to step 7. *(An operator who
    wants full confirmation on a `sev0` can lower `SEV` in PROGRESS.md before re-running.)*
 
-7. **Check the cycle budget.** Read `CYCLE`. If `CYCLE >= 3` and the most recent diagnose cycle
-   in `REVIEW.md` still records a surviving refutation, refuse — the next run would escalate;
-   let the workflow own that write only on a fresh attempt:
-   > `BUILD_FLEET_REFUSE: {"command":"diagnose","code":2,"reason":"cycle-budget-exhausted","cycle":<n>}`
+7. **Resolve the cycle budget, then check it.** The DIAGNOSE escalation budget is configurable
+   (default 3). Resolve it — **a per-run flag wins over the durable default**: `--cycle-budget <n>`
+   in `$ARGUMENTS` → else `DIAGNOSE_CYCLE_BUDGET:` in `.sdd/<slug>/PROGRESS.md` → else `3`. Call the
+   resolved integer `effective_budget` (treat unset as `3`); clamp it to `1..3` (the workflow
+   re-clamps anything above the ceiling). The **workflow is the authoritative validator** — pass the
+   resolved value through (step 11) and let `diagnose.js` reject a malformed budget via its
+   `invalid-args` path; do **not** persist `DIAGNOSE_CYCLE_BUDGET` (a flag override is per-run).
+
+   Read `CYCLE`. If `CYCLE >= effective_budget` and the most recent diagnose cycle in `REVIEW.md`
+   still records a surviving refutation, refuse — the next run would escalate; let the workflow own
+   that write only on a fresh attempt:
+   > `BUILD_FLEET_REFUSE: {"command":"diagnose","code":2,"reason":"cycle-budget-exhausted","cycle":<n>,"cycle_budget":<effective_budget>}`
    then tell the user: revise the hypothesis in diagnosis.md or accept the escalation.
 
 8. **Pick the new cycle.** `new_cycle = CYCLE + 1`.
@@ -84,10 +93,15 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
     ```
     BUILD_FLEET_COST_PREVIEW: {"workflow":"diagnose","slug":"<slug>","cycle":<N>,"input_ceiling":<N>,"output_ceiling":<N>}
     ```
+    Then emit one **config** line recording the effective budget and its source (so a non-persisted
+    flag override is auditable in the run log):
+    ```
+    BUILD_FLEET_DIAGNOSE_CONFIG: {"slug":"<slug>","cycle":<N>,"cycle_budget":<n | "default">,"budget_source":"flag"|"progress"|"default"}
+    ```
 
 11. **Invoke the Workflow tool** with:
     - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/diagnose.js`
-    - `args`: `{ "slug": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step 9>" }`
+    - `args`: `{ "slug": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step 9>" }` — **plus** `"cycle_budget": <resolved int>` ONLY when resolved from a flag or `DIAGNOSE_CYCLE_BUDGET` in step 7. **Omit it when unset** so the workflow uses its default.
 
 12. **Emit the launch line** once the tool returns:
     ```
@@ -131,6 +145,7 @@ synchronous gate command rather than inside the fire-and-forget workflow.
 - Does not flip `diagnosis.md` to `CONFIRMED` — that is `/build-fleet:fix`'s gate (above).
 - Does not append to `REVIEW.md` or write `ESCALATION.md` — the workflow's scribe does, via the envelope.
 - Does not release `.workflow-in-flight` on success — the scribe does, as the final phase.
+- Does not persist `DIAGNOSE_CYCLE_BUDGET`. Set the durable default out-of-band in `.sdd/<slug>/PROGRESS.md` (the scribe preserves unknown fields); a `--cycle-budget` flag overrides it for this run only.
 
 ## Refusal contract (machine-readable)
 

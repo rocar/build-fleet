@@ -17,7 +17,7 @@ fleet runs; this file only covers how to work on the plugin itself.
 .claude-plugin/plugin.json    # manifest (+ marketplace.json)
 agents/                       # 7 role subagents: product-owner, architect, coder,
                               #   qa, devops, classifier, scribe
-commands/                     # 21 slash commands (/build-fleet:*)
+commands/                     # 22 slash commands (/build-fleet:*)
 skills/                       # 7 skills: sdd-protocol (+references/), adr,
                               #   review-rubric, sdd-spec-template,
                               #   sdd-diagnosis-template, test-plan, skill-routing

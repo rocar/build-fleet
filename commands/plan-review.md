@@ -1,5 +1,6 @@
 ---
 description: Interrogate the product plan from each role's lens
+argument-hint: "[--roles <r1,r2,...>]"
 allowed-tools: Read, Write, Edit, Workflow
 ---
 
@@ -69,6 +70,16 @@ workflows — there is no non-workflow fallback.
    interrogated many times and may need a ratification decision rather than another
    cycle — but proceed.
 
+7b. **Resolve the interrogation roster.** The roster is configurable (default
+   `product-owner, architect, qa`). Resolve it — **a per-run flag wins over the durable
+   default**: `--roles <r1,r2,...>` in `$ARGUMENTS` → else `PLAN_REVIEW_ROLES:` in
+   `.sdd/_product/PROGRESS.md` → else unset. A roster is a comma-separated, ≥2-element
+   subset of `{product-owner, architect, qa}`. The **workflow is the authoritative
+   validator**: pass the resolved value through (step 10) and let `plan-review.js` reject a
+   malformed roster via its `invalid-args` path — do not re-implement the allowed-role list
+   here. Do **not** write `PLAN_REVIEW_ROLES` into PROGRESS; a flag override applies to this
+   run only and is recorded by the config line in step 9.
+
 8. **Compose the run id and drop the workflow-in-flight marker.** Compose a run id:
    `plan-review-<product>-c<new_cycle>-<iso8601 now>` (the same `now` you pass in
    step 10). Write `.sdd/_product/.workflow-in-flight` containing exactly that run
@@ -86,10 +97,15 @@ workflows — there is no non-workflow fallback.
    ```
    BUILD_FLEET_COST_PREVIEW: {"workflow":"plan-review","product":"<slug>","cycle":<N>,"input_ceiling":<N>,"output_ceiling":<N>}
    ```
+   Then emit one **config** line recording the effective roster and its source (so a
+   non-persisted flag override is auditable in the run log):
+   ```
+   BUILD_FLEET_PLAN_REVIEW_CONFIG: {"product":"<slug>","cycle":<N>,"roles":<["..."] | "default">,"roles_source":"flag"|"progress"|"default"}
+   ```
 
 10. **Invoke the Workflow tool** with:
     - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/plan-review.js`
-    - `args`: `{ "product": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step 8>" }`
+    - `args`: `{ "product": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step 8>" }` — **plus** `"roles": [<resolved roster>]` ONLY when resolved from a flag or `PLAN_REVIEW_ROLES` in step 7b. **Omit `roles` entirely when unset** so the workflow uses its default (omitting it reproduces the historical behavior exactly).
 
     Supply `now` yourself (the script cannot call `Date`); the workflow refuses to
     run without it. The tool is async-launched.
@@ -130,6 +146,7 @@ workflows — there is no non-workflow fallback.
 - Does not write `_product/ESCALATION.md` — plan-review never auto-escalates. Only a
   human halts a plan.
 - Does not vote, refute, or auto-pass. Ratification is `/build-fleet:plan-finalize`.
+- Does not persist `PLAN_REVIEW_ROLES`. The durable default lives in `_product/PROGRESS.md` (set out-of-band — the scribe preserves unknown fields across its writes); a `--roles` flag overrides it for this run only.
 
 ## Refusal contract (machine-readable)
 
