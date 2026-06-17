@@ -158,6 +158,52 @@ const retrieval = updateDate;'
 lookalike=$(mk lookalike "$LOOKALIKE")
 assert_stdout lookalike-identifiers-ok "$lookalike" 'BUILD_FLEET_LINT_PASS'
 
+# ---- TDZ: scribe result schema must be declared BEFORE the first applyScribe()
+#      call. applyScribe is a hoisted function declaration so the CALL resolves,
+#      but it reads SCRIBE_RESULT_SCHEMA (a const) via agent(...,{schema}). A
+#      declaration below the first call site sits in the temporal dead zone and
+#      throws "Cannot access 'SCRIBE_RESULT_SCHEMA' before initialization" at run
+#      time — deterministic, so EVERY scribe apply fails. This is the bug that hit
+#      deep-build/diagnose/plan-review; review.js was fixed in 9e50f8a.
+TDZBAD='export const meta = { name: "x", description: "y" };
+const now = args.now;
+const r = await applyScribe({ feature: "f" });
+return { r };
+async function applyScribe(env) {
+  return await agent("apply", { schema: SCRIBE_RESULT_SCHEMA });
+}
+const SCRIBE_RESULT_SCHEMA = { type: "object" };'
+tdzbad=$(mk tdzbad "$TDZBAD")
+assert_stdout scribe-tdz-flagged  "$tdzbad" '"rule":"scribe-schema-tdz"'
+assert_rc     scribe-tdz-rc       "$tdzbad" 2
+
+# Declaration ABOVE the first applyScribe() call is correct — passes. This is the
+# shape review.js was fixed into, and the shape the other three are fixed into.
+TDZOK='export const meta = { name: "x", description: "y" };
+const SCRIBE_RESULT_SCHEMA = { type: "object" };
+const now = args.now;
+const r = await applyScribe({ feature: "f" });
+return { r };
+async function applyScribe(env) {
+  return await agent("apply", { schema: SCRIBE_RESULT_SCHEMA });
+}'
+tdzok=$(mk tdzok "$TDZOK")
+assert_stdout scribe-tdz-ordered-ok "$tdzok" 'BUILD_FLEET_LINT_PASS'
+assert_rc     scribe-tdz-ordered-rc "$tdzok" 0
+
+# A back-reference COMMENT below the call (review.js's documented style) must not
+# be mistaken for the declaration — only the real `const` decl counts.
+TDZCOMMENT='export const meta = { name: "x", description: "y" };
+const SCRIBE_RESULT_SCHEMA = { type: "object" };
+const r = await applyScribe({ feature: "f" });
+return { r };
+async function applyScribe(env) {
+  return await agent("apply", { schema: SCRIBE_RESULT_SCHEMA });
+}
+// (SCRIBE_RESULT_SCHEMA is declared near the top, above the first call site.)'
+tdzcomment=$(mk tdzcomment "$TDZCOMMENT")
+assert_stdout scribe-tdz-comment-ok "$tdzcomment" 'BUILD_FLEET_LINT_PASS'
+
 # ---- contract: must declare export const meta ----
 NOMETA='const x = 1;
 function build() { return x + 1; }'

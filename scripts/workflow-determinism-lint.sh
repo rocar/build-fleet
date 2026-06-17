@@ -134,6 +134,26 @@ if ! printf '%s\n' "$stripped" | grep -qE 'export[[:space:]]+const[[:space:]]+me
   emit "missing-meta" 0 "no 'export const meta' declaration — not a workflow contract"
 fi
 
+# --- TDZ ordering: SCRIBE_RESULT_SCHEMA must be declared ABOVE the first
+# applyScribe() CALL. applyScribe is a hoisted function declaration, so the call
+# resolves anywhere; but it reads the SCRIBE_RESULT_SCHEMA const via
+# agent(...,{schema}). If the const's declaration line is at/below the first call
+# site, every scribe apply throws "Cannot access 'SCRIBE_RESULT_SCHEMA' before
+# initialization" (temporal dead zone) at run time — a deterministic failure
+# `node --check` cannot see. This guards the exact bug class that hit
+# review.js (fixed in 9e50f8a), deep-build.js, diagnose.js, and plan-review.js.
+# We scan the stripped source (comments/strings are blanked), and exclude the
+# hoisted `function applyScribe` declaration line so only CALL sites count.
+scribe_call_line="$(printf '%s\n' "$stripped" | grep -nE "${WB}applyScribe[[:space:]]*\(" | grep -vE 'function[[:space:]]+applyScribe' | head -n1 | cut -d: -f1 || true)"
+if [ -n "$scribe_call_line" ]; then
+  schema_decl_line="$(printf '%s\n' "$stripped" | grep -nE "${WB}const[[:space:]]+SCRIBE_RESULT_SCHEMA${WB}" | head -n1 | cut -d: -f1 || true)"
+  if [ -z "$schema_decl_line" ]; then
+    emit "scribe-schema-tdz" "$scribe_call_line" "applyScribe() is called (line $scribe_call_line) but SCRIBE_RESULT_SCHEMA is never declared — the scribe schema read will throw at run time"
+  elif [ "$schema_decl_line" -ge "$scribe_call_line" ]; then
+    emit "scribe-schema-tdz" "$schema_decl_line" "SCRIBE_RESULT_SCHEMA declared at line $schema_decl_line, at/after the first applyScribe() call at line $scribe_call_line — temporal dead zone; every scribe apply throws 'Cannot access ... before initialization'. Hoist the const above the first call site."
+  fi
+fi
+
 if [ "$violations" -gt 0 ]; then
   printf 'BUILD_FLEET_LINT_FAIL: {"violations":%s}\n' "$violations"
   echo "build-fleet: $violations determinism/safety violation(s) — this generated workflow must NOT be pinned until fixed." >&2

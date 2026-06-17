@@ -14,6 +14,34 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.7.1] — 2026-06-17
+
+A correctness patch: a temporal-dead-zone (TDZ) crash made the **deep-build**, **diagnose**, and
+**plan-review** workflows fail *every* scribe apply, so verdicts were computed but never written to
+`.sdd/` and the in-flight marker was stranded. The deterministic determinism-lint now catches the
+class so it can never recur silently. No schema, signal-grammar, or config changes.
+
+### Fixed
+
+- **Scribe-apply TDZ in `deep-build.js`, `diagnose.js`, and `plan-review.js`.** `SCRIBE_RESULT_SCHEMA`
+  was declared below every `applyScribe()` call site. `applyScribe` is a hoisted function declaration,
+  so the call resolved — but it reads the const via `agent(…, {schema})`, and because the script
+  `return`s before reaching the declaration the const stayed in its temporal dead zone: every scribe
+  apply threw `ReferenceError: Cannot access 'SCRIBE_RESULT_SCHEMA' before initialization`. The const
+  is now hoisted above the first call site in all three, matching the fix `review.js` already received
+  (commit `9e50f8a`, shipped in 0.7.0); the sibling workflows were missed by that sweep. `node --check`
+  cannot see this — it is a runtime error, not a syntax error.
+
+### Added
+
+- **Determinism-lint rule `scribe-schema-tdz`** (`scripts/workflow-determinism-lint.sh`) — asserts
+  `SCRIBE_RESULT_SCHEMA` is declared above the first `applyScribe()` call, so this TDZ class fails the
+  lint (and CI) at authoring/pin time instead of reaching a run. With test-harness coverage, including
+  a regression assertion that the three previously-broken workflows now pass.
+
+**Compatibility.** None affected. No `.sdd/` schema or signal-grammar change — a correctness fix plus a
+new static guard.
+
 ## [0.7.0] — 2026-06-15
 
 The **dynamic-workflow enrichment**: build-fleet keeps its deterministic static core but gains

@@ -44,6 +44,21 @@ const cycle = typeof A.cycle === "string" ? parseInt(A.cycle, 10) : A.cycle;
 const now = A.now;
 const runId = A.run_id || null;
 
+// Scribe result schema — declared HERE, above the first applyScribe() call site.
+// The applyScribe function declaration is hoisted, but SCRIBE_RESULT_SCHEMA is a
+// const: if any call site runs before this line, reading the schema throws
+// "Cannot access 'SCRIBE_RESULT_SCHEMA' before initialization" (temporal dead
+// zone). scripts/workflow-determinism-lint.sh's scribe-schema-tdz rule guards this.
+const SCRIBE_RESULT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ok", "error"],
+  properties: {
+    ok: { type: "boolean" },
+    error: { type: ["string", "null"] },
+  },
+};
+
 // --- LAYER1-PURE-HELPERS START — configurable cycle budget ---
 // Extracted VERBATIM by scripts/workflow-cycle-budget.test.sh, so this MUST stay
 // pure: no log()/agent()/args, deterministic, side-effect-free. The DIAGNOSE
@@ -459,16 +474,8 @@ function cleanupEnvelope(slug, now, runId) {
 }
 
 // ---------- verified scribe application ----------
-
-const SCRIBE_RESULT_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["ok", "error"],
-  properties: {
-    ok: { type: "boolean" },
-    error: { type: ["string", "null"] },
-  },
-};
+// (SCRIBE_RESULT_SCHEMA is declared near the top of this file, above the first
+// applyScribe() call site, to avoid a temporal-dead-zone error.)
 
 // The scribe returns a structured {ok, error} aligned with its
 // SCRIBE_OK:/SCRIBE_ERROR: contract (agents/scribe.md). One retry on failure;
