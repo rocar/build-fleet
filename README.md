@@ -265,16 +265,20 @@ take effect on an installed instance.
 ### Feature-only (no product tier)
 
 ```
-/build-fleet:new-feature my-feature   # asks what it should do if not in context
+/build-fleet:new-feature my-feature "what it should do"   # inline detail; omit to use context, else it asks
 /build-fleet:review                   # standard/large only
 /build-fleet:finalize                 # the gate
 /build-fleet:build                    # tests-first BUILD
 /build-fleet:handoff
 ```
 
-`new-feature` will **ask you what the feature should do** if it can't find a
-description in the conversation *or* a usable backlog intent — the slug alone is
-never treated as a spec. The exact path depends on the routing tier (below).
+You can describe the feature three ways, in precedence order: **inline after the
+slug** (`/build-fleet:new-feature <slug> "<what it should do>"`), in the
+**conversation** before you run it, or via a **backlog intent** (product tier). An
+inline description wins. If none is found — or what's found is too thin —
+`new-feature` **asks you in a short structured loop** until it has enough; the slug
+alone is never treated as a spec. (The clarify loop is interactive; headless callers
+pass the inline description.) The exact path depends on the routing tier (below).
 
 ---
 
@@ -521,7 +525,7 @@ execution.
 
 | Command | Phase | What it does |
 |---|---|---|
-| `/build-fleet:new-feature <slug>` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` + `acceptance.md`. Inherits the product stack + backlog intent if present; asks for a description otherwise. |
+| `/build-fleet:new-feature <slug> [details]` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` + `acceptance.md`. Takes the feature description from an optional inline `[details]` arg (wins), else the conversation, else a backlog intent; asks in a structured clarify loop if none is usable. Inherits the product stack if present. |
 | `/build-fleet:dispatch` | — | Re-classifies the active feature (query-only). |
 | `/build-fleet:review` | REVIEW | Runs the adversarial review workflow. (Skipped for trivial.) Accepts `--roles` / `--cycle-budget` (else `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET`). |
 | `/build-fleet:finalize` | FINALIZE → BUILD | Gate only: refuses on open blockers; on pass flips the spec to FINALIZED. Idempotent — re-running is a safe no-op. |
