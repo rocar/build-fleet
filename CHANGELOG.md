@@ -14,6 +14,41 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.8.0] — 2026-06-20
+
+`/build-fleet:new-feature` gains a richer feature-detail intake: an optional inline detail
+argument, an explicit source-precedence, and a bounded interactive clarify loop in place of the
+old one-shot ask. Additive and backward-compatible — the slug-only invocation still works. No
+`.sdd/` schema, signal-grammar, or config changes.
+
+### Added
+
+- **Inline feature-detail argument** — `/build-fleet:new-feature <slug> [feature details…]`. The
+  first whitespace-delimited token is the slug; everything after it is an optional free-text
+  description. When present it is the authoritative description for the run, and is the channel
+  headless / `claude -p` callers use to supply detail (`commands/new-feature.md` Arguments + step 5;
+  `argument-hint` updated).
+- **Structured clarify loop** — when no usable description is found, `new-feature` now asks via
+  `AskUserQuestion` (added to the command's `allowed-tools`) in a bounded loop that targets the
+  missing components and repeats until the ≥2-of-3 quality floor is met, the user picks
+  "proceed anyway", or a 3-round soft cap is reached. Replaces the previous single stop-and-ask.
+- **Thin-description hand-off** — if the clarify loop ends below the floor, the product-owner
+  delegation labels the description "best-effort / below the usual detail floor" and asks PO to
+  surface the gaps in `## Self-review notes` rather than inventing requirements.
+
+### Changed
+
+- **Description sourcing is now an explicit precedence** — inline arg → conversation context →
+  product-backlog intent, with **the inline arg winning** when present. The ≥2-of-3 quality floor
+  (what the feature is / its scope boundary / its non-goals) now governs *all* sources: the
+  deterministic `INTENT_VERDICT` from `intent-block.sh` for backlog intents, and an orchestrator
+  judgment for free-text arg / conversation descriptions. The clarify loop fires on a description
+  that is empty **or** below the floor (previously only when entirely absent).
+- **`/build-fleet:new-feature` is interactive-only when no detail is provided.** With no inline
+  arg and nothing usable in context, the clarify loop needs a human responder; in a headless /
+  `claude -p` run, supply the description via the inline argument instead. The `BUILD_FLEET_*`
+  signal grammar is unchanged.
+
 ## [0.7.1] — 2026-06-17
 
 A correctness patch: a temporal-dead-zone (TDZ) crash made the **deep-build**, **diagnose**, and

@@ -1,7 +1,7 @@
 # build-fleet
 
 A spec-driven multi-agent software house, packaged as a Claude Code plugin.
-**v0.7**
+**v0.8**
 
 build-fleet turns Claude Code into a disciplined software house. A fleet of role
 subagents drives every change through a deterministic state machine —
