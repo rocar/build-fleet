@@ -1,7 +1,7 @@
 ---
 description: Scaffold a feature workspace and draft its spec
-argument-hint: "<feature-slug>"
-allowed-tools: Read, Write, Edit, Task, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*)
+argument-hint: "<feature-slug> [feature details]"
+allowed-tools: Read, Write, Edit, Task, AskUserQuestion, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*)
 ---
 
 # /build-fleet:new-feature
@@ -15,8 +15,15 @@ spec STATUS contract.
 
 ## Arguments
 
-`$ARGUMENTS` — the feature slug. Kebab-case, no whitespace. If empty, refuse
-and surface that the user must supply a slug.
+`$ARGUMENTS` — `<slug> [feature details…]`:
+
+- The **first whitespace-delimited token is the feature slug** (kebab-case, no
+  whitespace). If `$ARGUMENTS` is empty, refuse and surface that the user must
+  supply a slug.
+- **Everything after the first token is an optional inline feature description**
+  (free text), trimmed. When present it is the authoritative description for this
+  run (see step 5, "Establish the feature description") and is the channel headless
+  / `claude -p` callers use to supply detail.
 
 ## What you do
 
@@ -88,39 +95,64 @@ and surface that the user must supply a slug.
 
 5. **Establish the feature description.** Before classifying or drafting,
    determine *what the feature actually is* — the slug alone is not a spec.
+   Resolve the description from these sources, in precedence order (**an explicit
+   inline arg wins**):
 
-   - Look back through the conversation for a description the user already gave
-     (e.g. "build a celsius→fahrenheit converter that handles negatives").
-   - **Check the product backlog for an inherited intent.** If
-     `.sdd/_product/backlog.md` exists, run the shared intent-block extractor — the
-     SAME script `/build-fleet:next-feature` uses, so the two always reach the same
-     verdict (one grammar, one quality floor, one implementation):
-     ```bash
-     bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh" --slug "<slug>" .sdd/_product/backlog.md
-     ```
-     It prints the canonical intent block (the 1–3 indented lines under the feature
-     row) and a final `INTENT_VERDICT: usable|too-thin` line. On `usable`, that
-     intent is the **plan author's starting description** — carry it forward (prefer
-     it over re-deriving from the slug) and label it to the PO as the inherited
-     intent (step 8). (If the slug has no backlog row, the script errors — that just
-     means there is no inherited intent; continue.)
-   - **Quality floor — a thin intent does NOT suppress the gate.** The script's
-     verdict encodes the floor: usable = at least 2 of the intent's 3 components
-     (what the feature is / its scope boundary / its non-goals); a missing intent or
-     a bare slug-restatement ("the API client") is `too-thin`. On `too-thin`, treat
-     the intent as absent and fall through to the STOP-and-ask below — the mere
-     presence of a line does not excuse the gate. (The canonical prose definition of
-     the floor lives in the `sdd-protocol` skill's `references/product-tier.md`.)
-   - **If no usable description exists in context *and* no usable backlog intent, STOP and ask the user.**
-     Do not infer requirements from the slug — a slug like `celsius-converter`
-     names the feature but says nothing about behavior, inputs/outputs, edge
-     cases, or constraints. Ask a focused prompt, e.g.: "What should `<slug>`
-     do? Briefly: the behavior, inputs/outputs, and any edge cases or
-     constraints." Wait for the answer before continuing. The classifier and
-     product-owner both consume this description; classifying from a bare slug
-     produces a hallucinated spec.
-   - Carry the description (from context or from the user) verbatim into the
-     classifier prompt below and into the product-owner delegation in step 8.
+   1. **Inline detail arg.** If `$ARGUMENTS` carried text after the slug (see
+      Arguments), that text is the authoritative description for this invocation —
+      use it even if the conversation also holds detail (passing the arg is a
+      deliberate "use *this*"). Headless / `claude -p` callers MUST use this
+      channel; the clarify loop below cannot run without a human.
+   2. **Conversation context.** If there was no inline arg, look back through the
+      conversation for a description the user already gave (e.g. "build a
+      celsius→fahrenheit converter that handles negatives", or the conclusions of a
+      design/research discussion earlier in the same session).
+   3. **Product backlog intent.** If neither of the above is present and
+      `.sdd/_product/backlog.md` exists, run the shared intent-block extractor — the
+      SAME script `/build-fleet:next-feature` uses, so the two always reach the same
+      verdict (one grammar, one quality floor, one implementation):
+      ```bash
+      bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh" --slug "<slug>" .sdd/_product/backlog.md
+      ```
+      It prints the canonical intent block (the 1–3 indented lines under the feature
+      row) and a final `INTENT_VERDICT: usable|too-thin` line. On `usable`, that
+      intent is the **plan author's starting description** — carry it forward and
+      label it to the PO as the inherited intent (step 8). (If the slug has no
+      backlog row, the script errors — that just means there is no inherited intent;
+      continue.)
+
+   **Quality floor (≥2-of-3).** Whatever the source, the description must clear the
+   floor: at least 2 of the 3 components — *what the feature is* / *its scope
+   boundary* / *its non-goals*. For a backlog intent the floor is the script's
+   deterministic `INTENT_VERDICT` (`usable` clears it; `too-thin` does not). For an
+   inline arg or a conversation description there is no script — **you judge it
+   against the same 3-component floor** (a judgment, not a deterministic gate —
+   consistent with the `sdd-protocol` principle "gates are deterministic; judgments
+   are adversarial"; the canonical prose definition lives in the `sdd-protocol`
+   skill's `references/product-tier.md`). A bare slug-restatement ("the API client")
+   or a one-word arg ("converter") is below the floor.
+
+   **Clarify loop (interactive only) — run when the description is empty OR below the
+   floor.** Do not infer requirements from the slug — a slug like `celsius-converter`
+   names the feature but says nothing about behavior, inputs/outputs, edge cases, or
+   constraints. Use **`AskUserQuestion`** to ask a structured, sectioned prompt
+   targeting the *missing* components (behavior, inputs/outputs, edge cases,
+   non-goals / scope boundary). **Repeat** until one of: the gathered description
+   clears the ≥2-of-3 floor; the user chooses a "proceed anyway" option; or you have
+   asked **3 rounds** — then proceed with whatever was gathered and tell the
+   product-owner the description is thin (step 8). If an inline arg was present but
+   thin while the conversation held detail, the arg stays the authoritative base; the
+   loop may pre-fill or *suggest* answers from that context, but the user confirms.
+   The classifier and product-owner both consume this description; classifying from a
+   bare slug produces a hallucinated spec.
+
+   > **Interactive-only.** This command is a human-driven entry point. In a headless
+   > / `claude -p` run with no inline detail, `AskUserQuestion` has no responder and
+   > the command cannot proceed — supply the description via the inline arg instead.
+
+   - Carry the resolved description (from the arg, context, backlog, or the clarify
+     loop) verbatim into the classifier prompt below and into the product-owner
+     delegation in step 8.
 
 5b. **Inherit the product stack, if a product tier exists.** Check for
    `.sdd/_product/STACK.md`. If it exists:
@@ -247,6 +279,13 @@ and surface that the user must supply a slug.
    Criteria), and to flag in `## Self-review notes` if the spec must deviate from the
    stated intent rather than silently drifting. If there was no intent line, omit this
    block — PO drafts from the established description as usual.
+
+   **Thin description (clarify loop hit its cap).** If step 5's clarify loop ended
+   below the quality floor (the 3-round cap or an explicit "proceed anyway"), say so
+   plainly in the PO prompt — label the description "best-effort / below the usual
+   detail floor" and instruct PO to surface the resulting gaps in `## Self-review
+   notes` rather than inventing requirements. (Omit this block when the description
+   cleared the floor.)
 
    Tell PO not to set STATUS=IN_REVIEW regardless of tier — that's `/build-fleet:review`'s
    job (which trivial features skip; standard/large run normally).
