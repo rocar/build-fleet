@@ -97,6 +97,21 @@ printf 'test:\n\t@exit 1\n' > "$p/Makefile"
 run "$p"
 assert "no-active-inert" "[ $rc -eq 0 ]"
 
+# --- pytest stack: prefer a project-local .venv interpreter over bare `pytest` ---
+# A bare `pytest` on PATH may be a DIFFERENT Python lacking the project's deps; the
+# hook must run `.venv/bin/python -m pytest` when a project .venv exists.
+p=$(new_proj venvpref 0)                                     # Makefile test: exit 0 (green)
+printf '[tool.pytest.ini_options]\n' > "$p/pyproject.toml"   # activates the pytest branch
+mkdir -p "$p/.venv/bin"
+printf '#!/usr/bin/env bash\ntouch "%s/.venv-python-ran"\nexit 0\n' "$p" > "$p/.venv/bin/python"
+chmod +x "$p/.venv/bin/python"
+fakebin="$work/fakebin-red"; mkdir -p "$fakebin"             # a bare `pytest` that FAILS if used
+printf '#!/usr/bin/env bash\nexit 1\n' > "$fakebin/pytest"; chmod +x "$fakebin/pytest"
+rc=0
+( cd "$p" && printf '{"stop_hook_active":false}' | PATH="$fakebin:$PATH" CLAUDE_PROJECT_DIR="$p" bash "$HOOK" >/dev/null 2>&1 ); rc=$?
+assert "pytest-branch-prefers-venv" "[ -f '$p/.venv-python-ran' ]"
+assert "pytest-branch-ignores-bare-red-pytest" "[ $rc -eq 0 ]"
+
 echo "-----"
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]

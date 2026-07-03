@@ -56,7 +56,19 @@ if [ -f package.json ]; then
   fi
 fi
 if [ -f pyproject.toml ] || [ -f pytest.ini ] || [ -f setup.cfg ]; then
-  if command -v pytest >/dev/null 2>&1; then
+  # Prefer the project's own venv interpreter over a global/bare `pytest`. A bare
+  # `pytest` on PATH may be a DIFFERENT Python that lacks the project's deps —
+  # observed: a repo adding its first root pyproject.toml flipped this detection
+  # onto a homebrew python@3.14 `pytest` that lacked python-multipart, producing
+  # hundreds of false errors while the project's .venv (3.11) suite was green. A
+  # project-local .venv is the interpreter `make test` and CI actually use.
+  if [ -x .venv/bin/python ]; then
+    test_cmds="${test_cmds}.venv/bin/python -m pytest -q
+"
+  elif [ -x venv/bin/python ]; then
+    test_cmds="${test_cmds}venv/bin/python -m pytest -q
+"
+  elif command -v pytest >/dev/null 2>&1; then
     test_cmds="${test_cmds}pytest -q
 "
   fi
@@ -81,7 +93,7 @@ while IFS= read -r run_test_cmd; do
   # is a missing-suite signal. Treat it as a pass so an empty collection never
   # hard-blocks a stop — a genuinely missing suite is surfaced by the BUILD
   # orchestration and the CHANGE_REVIEW coverage gate, not by deadlocking Stop.
-  if [ "$rc" -eq 5 ] && printf '%s' "$run_test_cmd" | grep -q '^pytest'; then
+  if [ "$rc" -eq 5 ] && printf '%s' "$run_test_cmd" | grep -q 'pytest'; then
     rc=0
   fi
 
