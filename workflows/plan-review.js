@@ -159,6 +159,38 @@ const INTERROGATION_SCHEMA = {
   },
 };
 
+// LENS text per interrogating role. Declared ABOVE the fan-out (below) because
+// interrogatePrompt() reads LENS[role] and is first invoked inside the parallel()
+// dispatch — a const declared after that call site is read in its temporal dead
+// zone ("Cannot access 'LENS' before initialization"), the same hazard the
+// roster/schema consts near the top of this file are hoisted to avoid.
+const LENS = {
+  "product-owner":
+`- Is the vision coherent and falsifiable? For standard/large, is OUTCOME measurable?
+- Is the backlog genuinely PHASED — each phase a shippable increment, not a dumping ground?
+- Are depends-on edges real and acyclic? Does phase 1 stand alone?
+- Is scope honest, or is this a roadmap that gets abandoned at feature 3? Flag over-ceremony.
+- INTENT: is each feature's intent line a clear, single-responsibility scope, or vague/
+  bloated? Do sibling intents partition the product cleanly — no overlap, no gap?`,
+  "architect":
+`- Is the stack-of-record sound for the stated goals and scale? Any load-bearing gap?
+- Is each ADR justified, or are there silent/unexplained choices?
+- Brownfield: is the Baseline captured accurately? Is any PROVISIONAL forward direction
+  incremental (migrate/wrap) rather than a rewrite, and is its risk named?
+- What failure modes (data integrity, blast radius, coupling) does the plan not address?
+- INTENT: do the intents' stated boundaries/deferrals match the stack's module seams,
+  and justify the depends-on edges? Is a load-bearing piece deferred into a feature
+  whose intent does not actually claim it (a boundary gap)?`,
+  "qa":
+`- Is the OUTCOME / are the goals actually measurable and testable as written?
+- Does each backlog phase have a discernible acceptance shape, or is "done" undefined?
+- What observability / verification is the plan silent on?
+- Are there cross-feature integration risks the phasing hides?
+- INTENT: is each intent concrete enough that a tester could see *that* it's testable
+  (not *what* the tests are), or so vague that "done" is undefinable? Flag intents too
+  thin to anchor a spec — but never demand acceptance criteria here (that's the spec).`,
+};
+
 // ---------- Phase 1: fan-out interrogation ----------
 
 phase("Interrogate");
@@ -295,33 +327,6 @@ Return the structured object you are required to produce:
   If the plan is sound from your lens, return an empty findings array — that is a
   legitimate signal (you found nothing ratification-relevant), not a failure.`;
 }
-
-const LENS = {
-  "product-owner":
-`- Is the vision coherent and falsifiable? For standard/large, is OUTCOME measurable?
-- Is the backlog genuinely PHASED — each phase a shippable increment, not a dumping ground?
-- Are depends-on edges real and acyclic? Does phase 1 stand alone?
-- Is scope honest, or is this a roadmap that gets abandoned at feature 3? Flag over-ceremony.
-- INTENT: is each feature's intent line a clear, single-responsibility scope, or vague/
-  bloated? Do sibling intents partition the product cleanly — no overlap, no gap?`,
-  "architect":
-`- Is the stack-of-record sound for the stated goals and scale? Any load-bearing gap?
-- Is each ADR justified, or are there silent/unexplained choices?
-- Brownfield: is the Baseline captured accurately? Is any PROVISIONAL forward direction
-  incremental (migrate/wrap) rather than a rewrite, and is its risk named?
-- What failure modes (data integrity, blast radius, coupling) does the plan not address?
-- INTENT: do the intents' stated boundaries/deferrals match the stack's module seams,
-  and justify the depends-on edges? Is a load-bearing piece deferred into a feature
-  whose intent does not actually claim it (a boundary gap)?`,
-  "qa":
-`- Is the OUTCOME / are the goals actually measurable and testable as written?
-- Does each backlog phase have a discernible acceptance shape, or is "done" undefined?
-- What observability / verification is the plan silent on?
-- Are there cross-feature integration risks the phasing hides?
-- INTENT: is each intent concrete enough that a tester could see *that* it's testable
-  (not *what* the tests are), or so vague that "done" is undefinable? Flag intents too
-  thin to anchor a spec — but never demand acceptance criteria here (that's the spec).`,
-};
 
 function mergeFindings(reports) {
   const out = [];
