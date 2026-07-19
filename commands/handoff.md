@@ -58,10 +58,14 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
      - architect: design adherence + ADR compliance.
      - product-owner: meets `acceptance.md`?
      - qa: coverage gaps before handoff.
-   - The REVIEW.md entry format and severity rubric reminder.
+   - The REVIEW.md entry format and severity rubric reminder. **CHANGE_REVIEW
+     blocks are headed `## Change-Cycle <CHANGE_CYCLE> — <role> — <iso8601>`**
+     (distinct from spec-review's `## Cycle N`, so they never collide in one
+     REVIEW.md and the `check-review-written` hook enforces the right block).
 
-8. **Evaluate the cycle.** Once all three CHANGE_CYCLE blocks exist in
-   REVIEW.md:
+8. **Evaluate the cycle.** Once all three `## Change-Cycle <CHANGE_CYCLE>` reviewer
+   blocks exist in REVIEW.md — evaluate ONLY those, never a same-numbered spec-review
+   `## Cycle N` block:
    - If any open `[blocker]` or any reviewer's `status: concerns-raised`
      → delegate to `build-fleet:coder` to fix (PHASE returns to `BUILD`).
      Do not auto-loop; tell the user that BUILD is open again and they

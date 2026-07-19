@@ -184,6 +184,15 @@ On non-workflow review paths (CHANGE_REVIEW, direct role invocation) the
 `check-review-written` SubagentStop hook rejects a reviewer that stops without
 appending its block for the current cycle.
 
+**CHANGE_REVIEW uses a distinct heading.** The spec-review `CYCLE` and the
+CHANGE_REVIEW `CHANGE_CYCLE` counters both start at 1, so to keep the two from
+colliding in one REVIEW.md, CHANGE_REVIEW reviewer blocks are headed
+`## Change-Cycle <N> — <role> — <iso8601>` (not `## Cycle <N>`). The
+`check-review-written` hook and `/build-fleet:handoff`'s cycle evaluation key off the
+phase-specific heading — spec review matches `## Cycle N`, CHANGE_REVIEW matches
+`## Change-Cycle N` — so a same-numbered spec-review block can never be mistaken for
+a CHANGE_REVIEW one.
+
 ## Severity rubric
 
 | Severity | Definition | Gate effect |

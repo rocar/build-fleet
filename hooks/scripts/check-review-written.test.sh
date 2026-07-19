@@ -23,9 +23,10 @@ new_proj() {
   printf 'PHASE: %s\n%s: %s\n' "$2" "$cyc_field" "$3" > "$p/.sdd/feat/PROGRESS.md"
   printf '%s' "$p"
 }
-# review_block <proj> <cycle> <role>  → append a canonical REVIEW.md block
+# review_block <proj> <cycle> <role> [heading]  → append a REVIEW.md block.
+# heading defaults to "Cycle" (spec review); pass "Change-Cycle" for CHANGE_REVIEW.
 review_block() {
-  printf '## Cycle %s — %s — 2026-06-10T00:00:00Z\n- [minor] nit\nstatus: approved\n' "$2" "$3" >> "$1/.sdd/feat/REVIEW.md"
+  printf '## %s %s — %s — 2026-06-10T00:00:00Z\n- [minor] nit\nstatus: approved\n' "${4:-Cycle}" "$2" "$3" >> "$1/.sdd/feat/REVIEW.md"
 }
 # check <name> <proj> <json_payload> <want_rc>
 check() {
@@ -61,14 +62,31 @@ check "no-agent-field-allows" "$p" '{}' 0
 # product-owner reviews in CHANGE_REVIEW, not REVIEW
 check "po-not-a-REVIEW-reviewer" "$p" '{"agent_type":"product-owner"}' 0
 
-# --- CHANGE_REVIEW: reads CHANGE_CYCLE; product-owner is a valid reviewer ---
-p=$(new_proj c1 CHANGE_REVIEW 2); review_block "$p" 2 product-owner
+# --- CHANGE_REVIEW: reads CHANGE_CYCLE; product-owner is a valid reviewer;
+#     blocks are headed "## Change-Cycle N" (distinct from spec review) ---
+p=$(new_proj c1 CHANGE_REVIEW 2); review_block "$p" 2 product-owner Change-Cycle
 check "change-review-po-wrote-block" "$p" '{"agent_type":"product-owner"}' 0
-p=$(new_proj c2 CHANGE_REVIEW 2); review_block "$p" 1 product-owner
+p=$(new_proj c2 CHANGE_REVIEW 2); review_block "$p" 1 product-owner Change-Cycle
 check "change-review-wrong-change-cycle" "$p" '{"agent_type":"product-owner"}' 2
 # coder reviews in REVIEW, not CHANGE_REVIEW
 p=$(new_proj c3 CHANGE_REVIEW 2)
 check "coder-not-a-CHANGE_REVIEW-reviewer" "$p" '{"agent_type":"coder"}' 0
+
+# --- heading-collision regression (the bug this fix closes) ---
+# A stale spec-review "## Cycle 1" block must NOT satisfy a CHANGE_CYCLE-1 check;
+# before the phase-specific heading it false-passed and let a CHANGE_REVIEW
+# reviewer stop without appending its own block.
+p=$(new_proj cc1 CHANGE_REVIEW 1); review_block "$p" 1 architect
+check "change-review-ignores-stale-spec-Cycle" "$p" '{"agent_type":"architect"}' 2
+# the correct "## Change-Cycle 1" block satisfies it
+p=$(new_proj cc2 CHANGE_REVIEW 1); review_block "$p" 1 architect Change-Cycle
+check "change-review-ChangeCycle-block-ok" "$p" '{"agent_type":"architect"}' 0
+# realistic: a stale spec "## Cycle 1" AND the real "## Change-Cycle 1" coexist → ok
+p=$(new_proj cc3 CHANGE_REVIEW 1); review_block "$p" 1 architect; review_block "$p" 1 architect Change-Cycle
+check "change-review-mixed-blocks-ok" "$p" '{"agent_type":"architect"}' 0
+# disjoint the other way: spec REVIEW ignores a stray "## Change-Cycle 1" block
+p=$(new_proj cc4 REVIEW 1); review_block "$p" 1 architect Change-Cycle
+check "review-ignores-ChangeCycle-block" "$p" '{"agent_type":"architect"}' 2
 
 # --- phase scoping: outside REVIEW/CHANGE_REVIEW the hook stands down ---
 p=$(new_proj b1 BUILD 1)

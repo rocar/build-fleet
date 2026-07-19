@@ -28,14 +28,20 @@ fi
 
 phase=$(read_progress_field "$slug" PHASE)
 
+# The heading label is phase-specific so CHANGE_REVIEW blocks never collide with
+# spec-review blocks in the same REVIEW.md: the CYCLE and CHANGE_CYCLE counters
+# both start at 1, so spec review writes "## Cycle N" and CHANGE_REVIEW writes
+# "## Change-Cycle N" — two disjoint heading families.
 case "$phase" in
   REVIEW)
     cycle=$(read_progress_field "$slug" CYCLE)
     valid_reviewers="architect qa coder"
+    heading="Cycle"
     ;;
   CHANGE_REVIEW)
     cycle=$(read_progress_field "$slug" CHANGE_CYCLE)
     valid_reviewers="architect product-owner qa"
+    heading="Change-Cycle"
     ;;
   *) exit 0 ;;
 esac
@@ -75,10 +81,12 @@ if [ ! -f "$review_file" ]; then
   exit 2
 fi
 
-# Accept en-dash, em-dash, or hyphen between fields in the heading.
-if ! grep -Eq "^##[[:space:]]+Cycle[[:space:]]+${cycle}[[:space:]]+[—–-][[:space:]]+${agent_short}[[:space:]]+[—–-]" "$review_file"; then
-  echo "build-fleet: ${agent_short} stopped without appending its Cycle ${cycle} block to REVIEW.md." >&2
-  echo "Expected a heading matching: ## Cycle ${cycle} — ${agent_short} — <iso8601>" >&2
+# Accept en-dash, em-dash, or hyphen between fields in the heading. ${heading} is
+# phase-specific ("Cycle" | "Change-Cycle"), so a stale spec-review "## Cycle N"
+# block can never satisfy a CHANGE_REVIEW "## Change-Cycle N" check (and vice versa).
+if ! grep -Eq "^##[[:space:]]+${heading}[[:space:]]+${cycle}[[:space:]]+[—–-][[:space:]]+${agent_short}[[:space:]]+[—–-]" "$review_file"; then
+  echo "build-fleet: ${agent_short} stopped without appending its ${heading} ${cycle} block to REVIEW.md." >&2
+  echo "Expected a heading matching: ## ${heading} ${cycle} — ${agent_short} — <iso8601>" >&2
   exit 2
 fi
 
