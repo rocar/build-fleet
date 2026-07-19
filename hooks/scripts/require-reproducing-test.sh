@@ -2,7 +2,7 @@
 # PreToolUse (Write|Edit): the inviolable reproducing-test gate for the bug lane (B7).
 # When the active item is a BUG, a write to SOURCE (outside .sdd/ and outside tests/)
 # is blocked (exit 2) unless BOTH:
-#   (a) diagnosis.md STATUS == CONFIRMED, and
+#   (a) diagnosis.md STATUS == CONFIRMED (or == FIXED, the verified HANDOFF state), and
 #   (b) at least one test exists under tests/.
 # Writes under .sdd/ or tests/ are always allowed — the reproducing test must be
 # writable before CONFIRMED. The gate is SEVERITY-INDEPENDENT: it holds even for sev0
@@ -42,7 +42,7 @@ fi
 
 # A source write on an active bug: require BOTH CONFIRMED and a reproducing test.
 dstatus=$(read_diagnosis_status "$slug")
-if [ "$dstatus" != "CONFIRMED" ]; then
+if [ "$dstatus" != "CONFIRMED" ] && [ "$dstatus" != "FIXED" ]; then
   echo "build-fleet: active bug '${slug}' has diagnosis STATUS=${dstatus:-<none>}. No fix source may land until the root cause is CONFIRMED (run /build-fleet:diagnose)." >&2
   echo "Refused write: ${file_path}" >&2
   exit 2
