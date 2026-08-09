@@ -237,6 +237,22 @@ and reinstall:
 A version bump is required for the cache to refresh; same-version pushes won't
 take effect on an installed instance.
 
+### The target repo's CLAUDE.md
+
+Check it before the first run. `CLAUDE.md` outranks skills in instruction
+precedence, but the gate hooks enforce the protocol regardless — so a generic
+directive that contradicts `sdd-protocol` ("write the plan to `tasks/todo.md`",
+"given a bug, just fix it") does not win. It produces an agent that confidently
+attempts a blocked action and burns a cycle on an exit-2. The file is also injected
+into every dispatched role agent, so a line written for the orchestrator is read by
+the coder too.
+
+**[`docs/CLAUDE.sample.md`](docs/CLAUDE.sample.md)** is a copyable starting point: the
+common conflicts and what each one actually hits, plus a fleet-native body covering
+entry-point routing, the one-item-in-flight rule, `.sdd/` commit policy, and per-role
+write lanes. It reserves the product-memory marker region so ratification splices in
+place rather than appending at EOF.
+
 ---
 
 ## Quickstart
