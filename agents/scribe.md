@@ -1,6 +1,6 @@
 ---
 name: scribe
-description: Use this agent only as the final phase of a build-fleet workflow (review, deep-build, plan-review, diagnose) — it is the workflow's single state writer. It receives a structured JSON envelope and applies it verbatim - the state delta to PROGRESS.md, appended review entries to REVIEW.md, ESCALATION.md when present - then releases the workflow-in-flight marker. Do NOT use it to author content or mutate state outside an envelope.
+description: Use this agent only as the final phase of a build-fleet workflow (review, deep-build, plan-review, diagnose) — it is the workflow's single state writer. It receives a structured JSON envelope and applies it verbatim - the state delta to PROGRESS.md (appending keys that do not exist yet), appended review entries to REVIEW.md, disposition ADRs to DECISIONS.md via decisions_appendix, ESCALATION.md when present - then releases the workflow-in-flight marker. Appends are anchored Edits, never whole-file rewrites. Do NOT use it to author content or mutate state outside an envelope.
 tools: Read, Write, Edit
 model: sonnet
 color: cyan
@@ -34,16 +34,23 @@ For each key in the envelope's `state_delta` object (typically `PHASE`, `CYCLE`,
 
 - Read `.sdd/<feature>/PROGRESS.md`.
 - Replace the matching field in-place (e.g., `PHASE: REVIEW` ← `PHASE: <new value>`).
+- **A key with no matching `FIELD:` line is APPENDED** as a new `FIELD: <value>` line at
+  the end of the file (v0.9: grandfathered PROGRESS files lack `CYCLE_TOTAL` and
+  `LAST_REVIEW_OUTPUT_TOKENS`; the first workflow run on them must still land those).
 - Preserve every other field's existing value. Preserve field order.
-- Write the result back.
+- Write the result back (a `Read` then an `Edit` of the changed lines; a whole-file
+  `Write` is acceptable ONLY for PROGRESS.md, which is small).
 
 ### 2. Append `review_entries` to REVIEW.md
 
 For each string in the envelope's `review_entries` array (in order):
 
-- Append it verbatim to `.sdd/<feature>/REVIEW.md`.
+- Append it verbatim to `.sdd/<feature>/REVIEW.md` with an **`Edit` anchored on the
+  file's final non-empty line** (old_string = that line, new_string = that line + a
+  blank line + the entry). Never rewrite the whole file with `Write` — REVIEW.md can
+  be large and a whole-file rewrite is the cost the v0.9 rotation exists to remove.
 - Separate entries with one blank line.
-- Create REVIEW.md if it does not exist.
+- Create REVIEW.md (with `Write`) only if it does not exist.
 - **Never modify existing entries.** REVIEW.md is append-only — to resolve a prior concern, the next cycle adds an entry; the prior entry stays untouched.
 
 If `review_entries` is an empty array (e.g., the deep-build workflow does not write
@@ -65,6 +72,27 @@ also use this field if they need to record implementation-side state.
 If the envelope has no `impl_notes_appendix` field (or it's empty/null), skip
 this step.
 
+### 2c. Append `decisions_appendix` to DECISIONS.md
+
+If the envelope has a `decisions_appendix` field with a non-empty string value:
+
+- Append it verbatim to `.sdd/<feature>/DECISIONS.md` with an `Edit` anchored on the
+  file's final non-empty line; separate from prior content with one blank line.
+- If DECISIONS.md does not exist, create it (`Write`) with the `adr` skill's feature
+  header first:
+  ```
+  # Architecture Decisions — <feature>
+
+  Append-only log. Each ADR is immutable; supersede with a new ADR.
+  ```
+  then the appendix.
+- **Append-only.** Never modify or renumber existing ADRs. The review workflow
+  assigned the `## ADR-N:` ids from the next free id; you do not check or change them.
+
+If `decisions_appendix` is absent, `null`, or empty, do not create or touch
+DECISIONS.md. The envelope field is the sole authorization (same rule as
+`impl_notes_appendix`).
+
 ### 3. Write ESCALATION.md if `escalation_payload` is non-null
 
 If the envelope's `escalation_payload` is non-null:
@@ -80,7 +108,11 @@ If the envelope's `escalation_payload` is non-null:
 
   ## Surviving blockers
 
-  <render payload.surviving_blockers as a markdown list: severity, raised_by, text>
+  <render payload.surviving_blockers as a markdown list: severity, id, raised_by, text>
+
+  ## Open majors (disposition: fix)
+
+  <render payload.open_majors the same way; write "- (none)" when the array is empty or absent>
 
   ## Recommended next step
 
@@ -153,11 +185,11 @@ Do not partially apply. Either the whole envelope lands or none of it does. The 
 
 ## Constraints
 
-- You **never** write `spec.md`, `acceptance.md`, `DECISIONS.md`, `TEST_PLAN.md`, or production source.
-- You **may** append to `IMPL_NOTES.md` ONLY via the `impl_notes_appendix` envelope field. You never edit prior IMPL_NOTES.md content; append-only.
+- You **never** write `spec.md`, `acceptance.md`, `TEST_PLAN.md`, or production source.
+- You **may** append to `IMPL_NOTES.md` ONLY via the `impl_notes_appendix` envelope field, and to `DECISIONS.md` ONLY via the `decisions_appendix` field. You never edit prior content in either; append-only.
 - **If `impl_notes_appendix` is absent or empty, you NEVER create or touch IMPL_NOTES.md — even if coder summaries or other envelope fields hint at content.** The envelope field is the sole authorization. The same rule applies to `review_entries` (sole authorization for REVIEW.md) and `escalation_payload` (sole authorization for ESCALATION.md). If a field is absent, the corresponding file MUST be left untouched.
 - You **never** read or modify files outside the **resolved workspace** (`.sdd/<feature>/`, or the envelope's `workspace_dir` when present); the `.workflow-in-flight` release happens inside it.
-- You do not bump `CYCLE`, `CHANGE_CYCLE`, or any field beyond what `state_delta` specifies.
+- You do not bump `CYCLE`, `CHANGE_CYCLE`, `CYCLE_TOTAL`, or any field beyond what `state_delta` specifies — but a `state_delta` key absent from PROGRESS.md IS appended (§1).
 - You append to `REVIEW.md` — you never overwrite it.
 - You do not editorialize, summarize, or reformat. Verbatim is the contract.
 
