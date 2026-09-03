@@ -1,6 +1,6 @@
 ---
 description: Gate: flip the spec to FINALIZED and unlock source
-allowed-tools: Read, Edit
+allowed-tools: Read, Edit, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh":*), Bash(date:*)
 ---
 
 # /build-fleet:finalize
@@ -64,18 +64,29 @@ cycle.
    the feature is escalated and only a human can unblock it
    (`/build-fleet:resolve-escalation` is the sanctioned path).
 
-4. **Check the most recent review cycle.** Read REVIEW.md. Find every block
-   tagged with the current `CYCLE:` value. The gate requires:
-   - Exactly three reviewer blocks for the current cycle (one each for
-     architect, qa, coder). Missing reviewer → refuse.
-   - Every block ends in `status: approved`. Any `status: concerns-raised`
-     → refuse.
-   - Zero open `[blocker]` items across all current-cycle blocks.
-     (A `[blocker]` in a prior cycle that the reviewer's current-cycle
-     block approves through is fine — what matters is the latest verdict.)
-   - `[major]` items in the current cycle are acceptable **only** if each
-     is cited by an ADR ID in DECISIONS.md, or resolved in the spec. If a
-     `[major]` is neither fixed nor recorded as an ADR, refuse.
+4. **Run the gate script.** The gate is deterministic (v0.9) — never evaluate REVIEW.md
+   in prose. Run:
+
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh" "<slug>"
+   ```
+
+   (add `--roster <r1,r2,...>` only if a `--roles` flag was given; by default the script
+   reads `REVIEW_ROLES` from PROGRESS.md). It prints exactly one line:
+
+   ```
+   BUILD_FLEET_FINALIZE_GATE: {"feature":"<slug>","cycle":<N>,"pass":true|false,"reasons":[...],"open_blockers":[...],"open_majors":[...],"majors_without_adr":[...]}
+   ```
+
+   The rule it enforces, over the LAST block per roster role for the current `CYCLE`:
+   - every roster role has a block (else `missing-<role>`);
+   - zero `[blocker]` lines (else `open-blockers`);
+   - zero `[major]` lines whose disposition is `fix` or absent (else `majors-open`);
+   - every `disposition: adr ADR-N` cites an `## ADR-N:` present in the feature
+     `DECISIONS.md` (else `majors-without-adr`).
+   `status:` lines are informational and NOT evaluated. Exit 0 ⇒ pass (step 6);
+   exit 2 ⇒ refuse (step 5), relaying the script's `reasons`; exit 1 ⇒ the workspace
+   is unreadable — report it and stop.
 
 5. **Refusal output.** If the gate refuses, emit exactly one machine-readable line
    first (for headless orchestrators), then the human-readable structured list:
@@ -84,23 +95,23 @@ cycle.
    BUILD_FLEET_FINALIZE_REFUSE: {"feature":"<slug>","cycle":<N>,"code":2,"reasons":["missing-<role>","open-blockers","majors-without-adr"]}
    ```
 
-   Reason codes (combine as needed):
-   - `missing-<role>` — reviewer block absent for current cycle (one code per missing role)
+   Reason codes (from the gate script; combine as needed):
+   - `missing-<role>` — reviewer block absent for the current cycle (one per missing role)
    - `open-blockers` — current cycle has open `[blocker]` items
-   - `majors-without-adr` — `[major]` items lacking ADR citations
-   - `not-approved` — at least one reviewer block ends in `status: concerns-raised`
+   - `majors-open` — `[major]` items dispositioned `fix` (or carrying no disposition line)
+   - `majors-without-adr` — `[major]` items whose `disposition: adr ADR-N` cites an ADR absent from DECISIONS.md
+   - `not-approved` — **no longer emitted since v0.9** (status lines are informational); kept in the grammar for older orchestrators
 
    Then the structured list (human-readable):
    - Reviewers missing their current-cycle block.
    - Open `[blocker]` items, verbatim, with the reviewer attribution.
    - `[major]` items lacking ADRs.
-   - The recommended next command (`/build-fleet:review` to run another
-     cycle, after PO has revised).
+   - The recommended next command: `/build-fleet:revise` (hands the PO exactly the open items), then `/build-fleet:review`.
 
 6. **Pass output — flip state and stop.** If the gate passes:
 
    - Edit `spec.md` so the STATUS line reads `STATUS: FINALIZED`.
-   - Edit PROGRESS.md: set `PHASE: BUILD`, refresh `UPDATED:`. The
+   - Edit PROGRESS.md: set `PHASE: BUILD`, refresh `UPDATED:` with `date -u +%Y-%m-%dT%H:%M:%SZ`. The
      source-write block lifts at this point.
    - Emit:
 
@@ -123,9 +134,12 @@ cycle.
   orchestration is `/build-fleet:build`'s job.
 - This command **never** edits REVIEW.md. Reviewer blocks are append-only
   and owned by reviewers.
-- This command **never** writes ADRs. If a `[major]` needs an ADR, the
-  refusal output should say so and a subsequent `/build-fleet:review`
-  cycle is where architect records it.
+- This command **never** writes ADRs. A `[major]` reaches the gate already
+  dispositioned by the review workflow's architect leg (`adr` = accepted, ADR
+  written by the scribe; `fix` = open). `majors-open` means the PO has not closed a
+  `fix` item — run `/build-fleet:revise`, then `/build-fleet:review`.
+- This command **never** evaluates REVIEW.md itself — `scripts/finalize-gate.sh` is
+  the gate; the command relays its line.
 - A failing finalize is **not** a workflow failure — it's the gate doing
   its job. Report what's missing and let the user iterate.
 - **Headless contract.** Every branch above emits exactly one `BUILD_FLEET_*:` line
