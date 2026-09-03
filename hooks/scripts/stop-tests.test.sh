@@ -112,6 +112,25 @@ rc=0
 assert "pytest-branch-prefers-venv" "[ -f '$p/.venv-python-ran' ]"
 assert "pytest-branch-ignores-bare-red-pytest" "[ $rc -eq 0 ]"
 
+# --- v0.9 ride-along: the BUILD tests-first window. Between qa authoring the failing
+# suite (TEST_PLAN.md has content) and coder recording work (IMPL_NOTES.md has none),
+# a RED suite is the expected state — the gate must stand down, and re-engage the
+# moment coder writes. "Has content" = a line that is neither blank nor a heading.
+p=$(new_proj window 1)
+printf '# Test Plan — feat\n\n- AC-1 → test_a\n' > "$p/.sdd/feat/TEST_PLAN.md"
+printf '# Implementation Notes — feat\n' > "$p/.sdd/feat/IMPL_NOTES.md"
+run "$p"
+assert "tests-first-window-red-allows-stop" "[ $rc -eq 0 ]"
+assert "tests-first-window-no-counter" "[ ! -f '$p/.sdd/feat/.stop-test-retries' ]"
+printf 'deviation: x\n' >> "$p/.sdd/feat/IMPL_NOTES.md"
+run "$p"
+assert "coder-wrote-gate-re-engages" "[ $rc -eq 2 ]"
+p=$(new_proj window2 1)   # heading-only TEST_PLAN.md is NOT "authored" → gate stays on
+printf '# Test Plan — feat\n' > "$p/.sdd/feat/TEST_PLAN.md"
+printf '# Implementation Notes — feat\n' > "$p/.sdd/feat/IMPL_NOTES.md"
+run "$p"
+assert "heading-only-test-plan-not-a-window" "[ $rc -eq 2 ]"
+
 echo "-----"
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]

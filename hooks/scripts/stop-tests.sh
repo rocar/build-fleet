@@ -45,6 +45,26 @@ case "$phase" in
   *) exit 0 ;;
 esac
 
+# Tests-first window inside BUILD: between qa authoring the failing suite and
+# coder implementing against it, the suite is REQUIRED to be red — that failing
+# suite IS the counterfactual the protocol is built on. Enforcing a green suite
+# in that window contradicts the very phase this gate exists to cover, and would
+# wedge every feature's BUILD until escalation. Detected with the same signal
+# /build-fleet:build's re-run guard uses: qa has written TEST_PLAN.md and coder
+# has not yet recorded work in IMPL_NOTES.md. The gate re-engages the moment
+# coder writes, and is never skipped in CHANGE_REVIEW/HANDOFF.
+# "Has content" = at least one line that is neither blank nor a markdown heading,
+# so the scaffolded header alone does not count as authored.
+has_content() {
+  [ -f "$1" ] && grep -qvE '^[[:space:]]*($|#)' "$1"
+}
+if [ "$phase" = "BUILD" ] \
+   && has_content ".sdd/${slug}/TEST_PLAN.md" \
+   && ! has_content ".sdd/${slug}/IMPL_NOTES.md"; then
+  echo "build-fleet: '${slug}' is in the BUILD tests-first window — qa's suite is authored and coder has recorded no work in IMPL_NOTES.md, so a red suite is the expected state. stop-tests gate skipped; it re-engages once coder writes." >&2
+  exit 0
+fi
+
 # Stack detection: independent fall-throughs, NOT an elif chain — a repo with
 # package.json AND pytest AND a Makefile test target runs all of them (audit
 # §4 hooks minor: package.json must not shadow the others).

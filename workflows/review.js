@@ -314,10 +314,17 @@ function reviewPrompt(role, feature, cycle) {
 Read these files yourself (you have Read/Grep/Glob):
 - .sdd/${feature}/spec.md
 - .sdd/${feature}/acceptance.md
-- .sdd/${feature}/REVIEW.md   (prior cycles; may not exist on cycle 1)
+- .sdd/${feature}/REVIEW.md      (prior cycles; may not exist on cycle 1)
+- .sdd/${feature}/DECISIONS.md   (feature ADRs; may not exist on cycle 1)
 
 Review the spec through your role's lens. The review-rubric skill is preloaded —
 use it for severity definitions (blocker / major / minor).
+
+DECISIONS.md is dispositive. The rubric gives a [major] two resolution paths — fixed in
+the spec, or explicitly ACCEPTED in an ADR. An ADR covering a finding IS that finding's
+disposition: do not re-raise it as still open. If you believe an accepted trade-off is
+wrong, raise that as a new finding arguing against the ADR by id — not as a re-issue of
+the original as unaddressed.
 
 Return your review as the structured object you are required to produce:
 - role: "${role}"
@@ -330,7 +337,9 @@ function crossExamPrompt(role, allConcerns, feature, cycle) {
   const peers = allConcerns.filter((c) => c.raised_by !== role);
   return `You are the ${role} reviewer in CROSS-EXAMINATION, cycle ${cycle}. Active feature: ${feature}.
 
-Read .sdd/${feature}/spec.md and .sdd/${feature}/acceptance.md yourself if you need to cite them.
+Read .sdd/${feature}/spec.md, .sdd/${feature}/acceptance.md and .sdd/${feature}/DECISIONS.md
+yourself if you need to cite them. An ADR that dispositions a peer's concern is a
+substantive refutation — cite it by id.
 
 Below are concerns raised by OTHER reviewers (not your own). For each, decide whether to
 REFUTE it (you believe it is not a real problem) or AFFIRM it (you agree it stands).
@@ -338,7 +347,8 @@ REFUTE it (you believe it is not a real problem) or AFFIRM it (you agree it stan
 A refutation only counts if it is substantive: at least ~40 characters of reasoning AND a
 structured citation pointing at the evidence. On every "refute" entry, set the citation
 field to { file, locator } — e.g. { "file": "spec.md", "locator": "§ Constraints" } or
-{ "file": "acceptance.md", "locator": "line 12" }. A refute without a citation is
+{ "file": "acceptance.md", "locator": "line 12" } or
+{ "file": "DECISIONS.md", "locator": "ADR-7" }. A refute without a citation is
 discarded by the script. If you cannot substantively refute, AFFIRM — that is the safe
 default (no citation needed on an affirm).
 You cannot refute your own concerns (the script filters self-refutation).
