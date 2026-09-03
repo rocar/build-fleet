@@ -224,6 +224,21 @@ assert_rc no-arg-fails        ""                    2
 assert_rc traversal-fails     "../etc/passwd"       2
 assert_rc nonexistent-fails   "$TMP/does-not-exist.js" 2
 
+# --- v0.9: pipefail + grep -q SIGPIPE flake (issue found on the 803-line review.js) ---
+# A valid workflow whose stripped text (~400 KB) far exceeds any pipe buffer must lint
+# PASS on every run; before the fix, grep -q closing the pipe early made printf die with
+# SIGPIPE under pipefail and the run reported missing-meta intermittently.
+big="$TMP/big-valid.js"
+{
+  printf 'export const meta = { name: "big", description: "big valid workflow" };\n'
+  i=0; while [ $i -lt 4000 ]; do printf 'const v%s = "%s"; // %s\n' "$i" "$(printf 'x%.0s' $(seq 1 60))" "$(printf 'c%.0s' $(seq 1 40))"; i=$((i+1)); done
+  printf 'return { ok: true };\n'
+} > "$big"
+flaky=0; k=0
+while [ $k -lt 25 ]; do bash "$SCRIPT" "$big" >/dev/null 2>&1 || flaky=$((flaky+1)); k=$((k+1)); done
+if [ "$flaky" -eq 0 ]; then pass=$((pass+1)); printf 'ok   %-40s\n' "large-valid-workflow-passes-25-of-25"
+else fail=$((fail+1)); printf 'FAIL %-40s %s of 25 runs failed (SIGPIPE flake)\n' "large-valid-workflow-passes-25-of-25" "$flaky"; fi
+
 echo "-----"
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]

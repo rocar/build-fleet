@@ -130,7 +130,11 @@ scan "forbidden-api" "${WB}new[[:space:]]+Function"
 scan "forbidden-api" "${WB}fetch[[:space:]]*\("
 
 # --- contract: a workflow must declare `export const meta` ---
-if ! printf '%s\n' "$stripped" | grep -qE 'export[[:space:]]+const[[:space:]]+meta'; then
+# NOT `grep -q`: under pipefail, grep -q exiting on the first match closes the pipe while
+# printf may still be writing a stripped source larger than the pipe buffer (macOS: 16 KB
+# initial); printf then dies with SIGPIPE (141) and a VALID workflow reads as missing-meta.
+# Reading to EOF makes the pipeline status deterministic. Seen on review.js at ~7%/run.
+if ! printf '%s\n' "$stripped" | grep -E 'export[[:space:]]+const[[:space:]]+meta' >/dev/null; then
   emit "missing-meta" 0 "no 'export const meta' declaration — not a workflow contract"
 fi
 
