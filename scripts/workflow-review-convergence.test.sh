@@ -84,6 +84,29 @@ check(
 dsr = enforceDeltaSeverity([{ id: "qa-c2-1", severity: "major", raised_by: "qa", text: "m", refuted: false }], undefined);
 check("delta-severity-undefined-cycle-passthrough", dsr.concerns[0].severity === "major" && eq(dsr.demoted, []));
 
+// enforceDeltaSeverity (fix round 2): demote ANY post-cycle-1 major, not only ===cycle —
+// a major demoted at cycle 2 must not resurface as major at cycle 3.
+dsr = enforceDeltaSeverity([{ id: "qa-c2-1", severity: "major", raised_by: "qa", text: "still open", refuted: false }], 3);
+check(
+  "delta-severity-demotes-post-cycle1-major-at-later-cycle",
+  dsr.concerns[0].severity === "minor" &&
+    dsr.concerns[0].text === "[demoted from major: new majors are not permitted on a delta cycle] still open" &&
+    eq(dsr.demoted, ["qa-c2-1"])
+);
+dsr = enforceDeltaSeverity([{ id: "qa-c1-4", severity: "major", raised_by: "qa", text: "re-raised", refuted: false }], 3);
+check("delta-severity-keeps-cycle1-major-at-cycle3", dsr.concerns[0].severity === "major" && eq(dsr.demoted, []));
+dsr = enforceDeltaSeverity(
+  [
+    { id: "qa-c1-9", severity: "blocker", raised_by: "qa", text: "b1", refuted: false },
+    { id: "qa-c3-9", severity: "blocker", raised_by: "qa", text: "b2", refuted: false },
+  ],
+  3
+);
+check(
+  "delta-severity-blockers-never-demoted-any-origin",
+  dsr.concerns[0].severity === "blocker" && dsr.concerns[1].severity === "blocker" && eq(dsr.demoted, [])
+);
+
 // fixtures
 const S = [
   { id: "architect-c1-1", severity: "blocker", raised_by: "architect", text: "b", refuted: false },
@@ -100,9 +123,13 @@ cov = dispositionCoverage(S, [{ id: "architect-c1-2", action: "adr" }, { id: "qa
 check("coverage-extra-refuted-ignored", eq(cov.missing, []) && eq(cov.extra, ["qa-c1-2"]));
 check("coverage-empty", eq(dispositionCoverage([], []), { missing: [], extra: [], duplicates: [], invalid: [] }));
 
-// dispositionCoverage: duplicates (fix round 1)
-cov = dispositionCoverage(S, [{ id: "x", action: "adr", adr_body: "b" }, { id: "x", action: "adr", adr_body: "b" }]);
-check("coverage-duplicates", eq(cov.duplicates, ["x"]));
+// dispositionCoverage: duplicates/invalid computed ONLY over surviving-major ids (fix
+// round 2) — an extra id (not a surviving major) never blocks, whatever its action,
+// body, or repetition.
+cov = dispositionCoverage(S, [{ id: "zzz", action: "adr", adr_body: "" }]);
+check("coverage-extra-empty-body-not-invalid", eq(cov.invalid, []) && eq(cov.extra, ["zzz"]));
+cov = dispositionCoverage(S, [{ id: "zzz", action: "adr", adr_body: "b" }, { id: "zzz", action: "adr", adr_body: "b" }]);
+check("coverage-extra-duplicate-not-duplicates", eq(cov.duplicates, []));
 cov = dispositionCoverage(S, [{ id: "qa-c1-1", action: "fix" }, { id: "qa-c1-1", action: "fix" }]);
 check(
   "coverage-duplicate-real-major-not-in-missing",

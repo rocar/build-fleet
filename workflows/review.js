@@ -135,18 +135,21 @@ function originCycle(id) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-// v0.9 fix round 1: enforce in CODE what the cycle >= 2 prompt only asks for — a
-// brand-new [major] (originCycle(id) === cycle, i.e. minted THIS cycle) cannot
-// survive as major on a delta cycle, so the open-major set never grows after cycle 1
-// even if a reviewer ignores the instruction. Demoted concerns keep their id and
-// raiser but drop to minor, with the reason visible in REVIEW.md text. Blockers,
-// minors, and majors re-raised from an earlier cycle pass through unchanged. Cycle 1
-// (or an undefined/non-delta cycle) is a full review — pass everything through.
+// v0.9 fix round 2: enforce in CODE what the cycle >= 2 prompt only asks for — ONLY a
+// cycle-1 [major] may exist on a delta cycle. Any major whose originCycle(id) >= 2 is
+// demoted, not only one minted THIS cycle: a major demoted at cycle 2 must not
+// resurface as major at cycle 3 (originCycle(id) === cycle alone would let that
+// through — fixed in this round). This holds the open-major set from growing after
+// cycle 1 even if a reviewer ignores the instruction. Demoted concerns keep their id
+// and raiser but drop to minor, with the reason visible in REVIEW.md text. Blockers
+// and minors are NEVER demoted, regardless of origin cycle. Cycle 1 (or an
+// undefined/non-delta cycle) is a full review — pass everything through.
 function enforceDeltaSeverity(concerns, cycle) {
   if (!(typeof cycle === "number" && cycle >= 2)) return { concerns, demoted: [] };
   const demoted = [];
   const out = (concerns || []).map((c) => {
-    if (c.severity === "major" && originCycle(c.id) === cycle) {
+    const origin = originCycle(c.id);
+    if (c.severity === "major" && origin !== null && origin >= 2) {
       demoted.push(c.id);
       return {
         ...c,
@@ -161,21 +164,25 @@ function enforceDeltaSeverity(concerns, cycle) {
 
 // v0.9: disposition coverage — every surviving (unrefuted) major must be dispositioned
 // exactly once, with a real ADR body when accepted as a trade-off. Returns the ids the
-// leg missed, the ids it invented, ids it listed more than once, and `adr` entries
-// whose adr_body is empty/whitespace (an empty ADR would silently close a major).
+// leg missed, the ids it invented (`extra`), ids it listed more than once, and `adr`
+// entries whose adr_body is empty/whitespace (an empty ADR would silently close a
+// major). v0.9 fix round 2: `duplicates`/`invalid` are computed ONLY over entries whose
+// id is a surviving major — i.e. after excluding `extra` ids — so a malformed `extra`
+// entry (an id the leg invented, already reported via `extra`) never blocks apply.
 function dispositionCoverage(surviving, dispositions) {
   const majors = surviving.filter((c) => c.severity === "major" && !c.refuted).map((c) => c.id);
   const list = dispositions || [];
   const given = list.map((d) => d.id);
   const missing = majors.filter((id) => given.indexOf(id) === -1);
   const extra = given.filter((id) => majors.indexOf(id) === -1);
+  const covering = list.filter((d) => majors.indexOf(d.id) !== -1);
   const seen = {};
   const duplicates = [];
-  for (const id of given) {
-    seen[id] = (seen[id] || 0) + 1;
-    if (seen[id] === 2) duplicates.push(id);
+  for (const d of covering) {
+    seen[d.id] = (seen[d.id] || 0) + 1;
+    if (seen[d.id] === 2) duplicates.push(d.id);
   }
-  const invalid = list
+  const invalid = covering
     .filter((d) => d.action === "adr" && String(d.adr_body || "").trim() === "")
     .map((d) => d.id);
   return { missing, extra, duplicates, invalid };
