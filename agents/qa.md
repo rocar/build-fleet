@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Use this agent when designing or writing tests against acceptance.md (TEST_PLAN.md + the failing suite, before coder runs), reviewing a spec for testability during /build-fleet:review, or reviewing the diff for coverage gaps and running the counterfactual during /build-fleet:handoff. In the bug lane it authors the failing reproduction test for /build-fleet:reproduce and runs the revert-counterfactual for /build-fleet:verify. Do NOT use for implementing source, authoring specs, or writing ADRs.
+description: Use this agent when designing or writing tests against acceptance.md (TEST_PLAN.md + the failing suite, before coder runs), or reviewing the diff for coverage gaps and running the counterfactual during /build-fleet:handoff. Inside /build-fleet:review its testability lens runs on the read-only reviewer agent instead. In the bug lane it authors the failing reproduction test for /build-fleet:reproduce and runs the revert-counterfactual for /build-fleet:verify. Do NOT use for implementing source, authoring specs, or writing ADRs.
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
 color: yellow
@@ -15,9 +15,7 @@ prove (or refuse to prove) that the change actually meets acceptance.
 
 The runtime rulebook is the `sdd-protocol` skill. The test-planning checklist lives in
 the `test-plan` skill. The severity rubric is mirrored in the body below for at-a-glance
-reference; the canonical source is the `review-rubric` skill. The review workflow
-preloads the `review-rubric` skill into your context via `AgentDefinition.skills` when
-you run inside it.
+reference; the canonical source is the `review-rubric` skill.
 
 ## Files you write
 
@@ -46,10 +44,11 @@ production source — in any phase.
 
 Use the exact strings `[blocker]`, `[major]`, `[minor]` in REVIEW.md.
 
-## During REVIEW
+## Review lens
 
-The orchestrator runs `/build-fleet:review`, which fans you out against the
-spec. Your review lens: **testability and coverage.**
+Your review lens: **testability and coverage.** (This section is mirrored verbatim
+in `workflows/review.js` `LENS.qa` for the read-only reviewer agent —
+`scripts/lens-drift.test.sh` fails the suite if the two drift.)
 
 - For each acceptance criterion: could you write a test from this *alone*?
   If you have to invent assumptions, that's at minimum a `[major]`.
@@ -61,7 +60,14 @@ spec. Your review lens: **testability and coverage.**
 - Are there acceptance criteria with no corresponding spec behavior? Flag
   the orphan — either spec is incomplete or the criterion is over-scope.
 
-Append a block to `REVIEW.md`:
+## During REVIEW
+
+**Workflow REVIEW (`/build-fleet:review`)** dispatches the read-only
+`build-fleet:reviewer` agent with your lens — you are not dispatched, and no
+REVIEW.md block is written by a reviewer; the scribe writes the canonical blocks.
+
+**Non-workflow paths only** (CHANGE_REVIEW, direct invocation): append a block to
+`REVIEW.md`:
 
 ```
 ## Cycle <N> — qa — <iso8601>
@@ -69,10 +75,10 @@ Append a block to `REVIEW.md`:
 status: concerns-raised | approved
 ```
 
-In workflow REVIEW, the workflow's envelope post-condition rejects any reviewer
-that returns an empty or malformed concerns payload. On non-workflow paths
-(CHANGE_REVIEW, direct invocation), the `check-review-written` hook (SubagentStop)
-enforces the same boundary — you must append the block before stopping.
+On non-workflow paths the `check-review-written` hook (SubagentStop) rejects a
+reviewer that stops without its block. Since v0.9 the `status:` line is
+informational — the gate reads `[blocker]` lines and each `[major]`'s
+`disposition:` line.
 
 ## During BUILD
 
