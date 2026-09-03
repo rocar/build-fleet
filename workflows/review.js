@@ -1,53 +1,48 @@
 // SPDX-License-Identifier: MIT
 // workflows/review.js
 //
-// build-fleet v0.2 — M1 review workflow (rewritten against the real Workflow API,
-// grounded during Phase 6 against the Workflow tool's authoritative description).
+// build-fleet v0.9 — convergent REVIEW workflow.
 //
-// SDD spec review with adversarial cross-examination and survival vote.
-// Replaces v0.1's parallel-Task fan-out + agent-teams cycle-3 fallback.
+// SDD spec review with adversarial cross-examination, survival vote, and — new in
+// v0.9 — an in-workflow DISPOSITION leg that classifies every surviving [major] as
+// `adr` (a design trade-off, recorded by the scribe in the feature DECISIONS.md) or
+// `fix` (the PO must close it in the spec). From cycle 2 the fan-out is a DELTA
+// review: reviewers verify closure of their own prior `fix` findings and may raise
+// new findings only at blocker severity, so the open-major set never grows after
+// cycle 1. The return object carries `finalize_ready` (zero blockers AND zero `fix`
+// majors) — the finalize gate's rule, computed here so the two never disagree.
 //
-// CONTRACT: docs/v0.2/CONTRACT.md.
+// CONTRACT: docs/v0.2/CONTRACT.md §6.
 //
 // @cost-ceiling {"input_tokens":120000,"output_tokens":30000}
 // (Cost ceiling lives in this header comment, NOT meta — meta must be a pure
 // literal and the runtime ignores unknown meta fields. commands/review.md parses
-// this line to emit BUILD_FLEET_COST_PREVIEW in headless mode.)
+// this line to emit BUILD_FLEET_COST_PREVIEW and to judge cost-runaway.)
 //
 // API NOTES (confirmed against the Workflow tool description):
-//   - agent(prompt, opts) → returns final text (string), OR a validated object
-//     when opts.schema is supplied. opts: {label, phase, schema, model, agentType, isolation}.
-//   - parallel(thunks) → thunks is an Array<() => Promise>. BARRIER. Errors → null in result array.
-//   - phase(title) → void marker; subsequent agent() calls group under it.
-//   - args → the Workflow `args` input, verbatim.
-//   - NO Date.now()/Math.random()/new Date() — they throw. Timestamps come via args.now.
-//   - Scripts are plain JS, not TS. No filesystem/Node API from the script itself.
+//   - agent(prompt, opts) → final text (string), or a validated object when
+//     opts.schema is supplied. opts: {label, phase, schema, model, effort, agentType, isolation}.
+//     There is NO opts.tools — reviewer isolation lives in agents/reviewer.md.
+//   - parallel(thunks) → BARRIER. Errors → null in the result array.
+//   - budget.spent() → output tokens spent this turn (main loop + workflows).
+//   - NO Date.now()/Math.random()/new Date() — timestamps come via args.now.
 
 export const meta = {
   name: "build-fleet-review",
-  description: "SDD spec review: fan-out reviewers, adversarial cross-examination, survival vote, scribe applies state",
+  description: "SDD spec review: fan-out reviewers (delta review from cycle 2), adversarial cross-examination, survival vote, architect disposition of surviving majors, scribe applies state",
   phases: [
-    { title: "Fan-out review", detail: "reviewers review the spec in parallel (roster configurable; default architect, qa, coder)" },
-    { title: "Cross-examination", detail: "each reviewer challenges peers' concerns" },
+    { title: "Fan-out review", detail: "read-only reviewer agents review the spec in parallel (roster configurable; default architect, qa, coder); cycle >= 2 is a delta review" },
+    { title: "Cross-examination", detail: "each reviewer challenges peers' concerns, citing spec/acceptance/DECISIONS" },
     { title: "Survival vote", detail: "retain concerns not refuted by a different-role reviewer" },
-    { title: "Apply", detail: "scribe writes PROGRESS + REVIEW deltas" },
+    { title: "Disposition", detail: "architect classifies each surviving major: adr (trade-off, ADR drafted) or fix (PO must close it in the spec)" },
+    { title: "Apply", detail: "scribe writes PROGRESS + REVIEW + DECISIONS deltas" },
   ],
 };
 
 // ---------- args ----------
-// { feature: "<slug>", cycle: <int>, now: "<iso8601>", run_id: "<marker token>",
-//   roles?: string[], cycle_budget?: <int> }
-// `now` is supplied by the command because the script cannot call Date.
-// `run_id` is the token the command wrote into .sdd/<feature>/.workflow-in-flight
-// at dispatch; the scribe releases the marker (empties it) only when its content matches.
-// `roles` (optional) overrides the reviewer roster — a >=2-element subset of
-//   {architect, qa, coder, product-owner}. Default ["architect","qa","coder"].
-// `cycle_budget` (optional) sets the escalation budget, an integer 1..3; default 3.
-//   Configurable DOWNWARD only — the sdd-protocol 3-cycle ceiling is a hard cap.
-//   Omitting BOTH reproduces the historical behavior exactly.
-
-// The Workflow runtime may deliver `args` as a JSON string rather than a parsed
-// object (confirmed empirically during Phase 6 validation). Normalize.
+// { feature, cycle, now, run_id, roles?, cycle_budget?, cycle_total?, next_adr_id? }
+// `cycle_total`  — cumulative review cycles BEFORE this run (never reset); absent ⇒ cycle - 1.
+// `next_adr_id`  — next free feature ADR integer (scripts/adr-index.sh --next); absent ⇒ 1.
 const A = typeof args === "string" ? JSON.parse(args) : (args || {});
 
 const feature = A.feature;
@@ -55,12 +50,15 @@ const cycle = typeof A.cycle === "string" ? parseInt(A.cycle, 10) : A.cycle;
 const now = A.now;
 const runId = A.run_id || null;
 
-// Scribe result schema — declared HERE, above the first applyScribe() call site
-// (the invalid-args guard just below, and the survival-vote apply later). The
-// applyScribe function declaration is hoisted, but SCRIBE_RESULT_SCHEMA is a
-// const: if any call site runs before this line, reading the schema throws
-// "Cannot access 'SCRIBE_RESULT_SCHEMA' before initialization" (temporal dead
-// zone). Keep this declaration above line ~60.
+// Output-token accounting: budget.spent() is a runtime global (absent on older
+// runtimes — `typeof` guards the reference so the workflow never throws on it).
+const spentAtStart = (typeof budget !== "undefined" && budget && typeof budget.spent === "function") ? budget.spent() : null;
+function outputTokensSoFar() {
+  return spentAtStart === null ? null : Math.max(0, budget.spent() - spentAtStart);
+}
+
+// Scribe result schema — declared ABOVE the first applyScribe() call site (TDZ;
+// scripts/workflow-determinism-lint.sh's scribe-schema-tdz rule guards this).
 const SCRIBE_RESULT_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -71,23 +69,15 @@ const SCRIBE_RESULT_SCHEMA = {
   },
 };
 
-// --- LAYER1-PURE-HELPERS START — configurable reviewer roster + cycle budget ---
-// Extracted VERBATIM by scripts/workflow-review-config.test.sh, so these MUST stay
-// pure: no log()/agent()/args, deterministic, side-effect-free. They make the
-// REVIEW roster and the escalation budget data-driven WITHOUT loosening an
-// invariant — the survival vote is untouched (it keys off severity, not role) and
-// the budget is configurable DOWNWARD only (the 3-cycle ceiling is a hard cap).
-// Defaults reproduce the historical behavior exactly. These consts sit ABOVE the
-// first call site (the arg-validation block) to avoid a temporal-dead-zone read.
+// --- LAYER1-PURE-HELPERS START — configurable roster + budget, and the v0.9 convergence helpers ---
+// Extracted VERBATIM by scripts/workflow-review-config.test.sh and
+// scripts/workflow-review-convergence.test.sh, so everything here MUST stay pure:
+// no log()/agent()/args/budget, deterministic, side-effect-free.
 const ALLOWED_REVIEW_ROLES = ["architect", "qa", "coder", "product-owner"];
 const DEFAULT_REVIEW_ROLES = ["architect", "qa", "coder"];
 const DEFAULT_CYCLE_BUDGET = 3;
 const MAX_CYCLE_BUDGET = 3; // sdd-protocol ceiling — never exceed (escalate, don't loop forever)
 
-// normalizeRoles(raw) → { roles: string[]|null, error: string|null }
-// absent/null → default roster; if present it must be a non-empty array of
-// distinct ALLOWED roles, >= 2 (cross-examination needs a different-role refuter
-// for a concern to survive the vote). Anything else is a structured arg error.
 function normalizeRoles(raw) {
   if (raw === undefined || raw === null) return { roles: DEFAULT_REVIEW_ROLES.slice(), error: null };
   if (!Array.isArray(raw) || raw.length === 0)
@@ -103,10 +93,6 @@ function normalizeRoles(raw) {
   return { roles: seen, error: null };
 }
 
-// normalizeCycleBudget(raw) → { budget: int|null, error: string|null, clamped: bool }
-// absent/null → default; if present it must be an integer >= 1. Values above the
-// ceiling are CLAMPED down (clamped:true, not an error) so the invariant holds no
-// matter what a caller asks for.
 function normalizeCycleBudget(raw) {
   if (raw === undefined || raw === null) return { budget: DEFAULT_CYCLE_BUDGET, error: null, clamped: false };
   const n = typeof raw === "string" ? parseInt(raw, 10) : raw;
@@ -117,12 +103,152 @@ function normalizeCycleBudget(raw) {
   const budget = Math.min(n, MAX_CYCLE_BUDGET);
   return { budget, error: null, clamped: budget !== n };
 }
+
+// v0.9: cumulative cycle count BEFORE this run. Absent/malformed ⇒ derived from the
+// cycle number (grandfathered PROGRESS files carry no CYCLE_TOTAL yet).
+function normalizeCycleTotal(raw, cycle) {
+  const fallback = Math.max(0, (Number.isInteger(cycle) ? cycle : 1) - 1);
+  if (raw === undefined || raw === null) return fallback;
+  const n = typeof raw === "string" ? parseInt(raw, 10) : raw;
+  if (typeof n !== "number" || Number.isNaN(n) || !Number.isInteger(n) || n < 0) return fallback;
+  return n;
+}
+
+// v0.9: next free feature ADR id. Absent/malformed ⇒ 1.
+function normalizeNextAdrId(raw) {
+  if (raw === undefined || raw === null) return 1;
+  const n = typeof raw === "string" ? parseInt(raw, 10) : raw;
+  if (typeof n !== "number" || Number.isNaN(n) || !Number.isInteger(n) || n < 1) return 1;
+  return n;
+}
+
+// v0.9: finding ids are stable across cycles — "<role>-c<cycle>-<n>". A reviewer may
+// only mint ids in its own namespace; a re-raised finding keeps its original id.
+function findingIdPattern(role) {
+  return "^" + role + "-c[0-9]+-[0-9]+$";
+}
+
+// v0.9: disposition coverage — every surviving (unrefuted) major must be dispositioned
+// exactly once. Returns the ids the leg missed and the ids it invented.
+function dispositionCoverage(surviving, dispositions) {
+  const majors = surviving.filter((c) => c.severity === "major" && !c.refuted).map((c) => c.id);
+  const given = (dispositions || []).map((d) => d.id);
+  const missing = majors.filter((id) => given.indexOf(id) === -1);
+  const extra = given.filter((id) => majors.indexOf(id) === -1);
+  return { missing, extra };
+}
+
+// v0.9: assign sequential feature ADR ids to `adr` dispositions, in the order given.
+// Returns { map: {id → {action, adr_id|null, ...}}, next: <next free id after assignment> }.
+function assignAdrIds(dispositions, nextAdrId) {
+  const map = {};
+  let next = nextAdrId;
+  for (const d of dispositions || []) {
+    if (d.action === "adr") {
+      map[d.id] = { action: "adr", adr_id: next, adr_title: d.adr_title || "", adr_body: d.adr_body || "", reason: d.reason || "" };
+      next += 1;
+    } else {
+      map[d.id] = { action: "fix", adr_id: null, adr_title: "", adr_body: "", reason: d.reason || "" };
+    }
+  }
+  return { map, next };
+}
+
+// v0.9: the finalize gate's rule, computed in-workflow so verdict and gate agree.
+// finalize_ready ⇔ zero open blockers AND zero open (`fix` or undispositioned) majors.
+function computeFinalizeReady(surviving, dispositionMap) {
+  const openBlockers = surviving.filter((c) => c.severity === "blocker" && !c.refuted);
+  const openMajors = surviving.filter((c) => {
+    if (c.severity !== "major" || c.refuted) return false;
+    const d = dispositionMap[c.id];
+    return !d || d.action !== "adr";
+  });
+  return { finalize_ready: openBlockers.length === 0 && openMajors.length === 0, openBlockers, openMajors };
+}
+
+// v0.9: verdict keeps its blocker meaning; escalation fires on the exhausting cycle
+// when blockers OR `fix` majors remain (escalate, don't loop forever).
+function decideVerdict(openBlockerCount, openMajorCount, cycle, cycleBudget) {
+  if (cycle >= cycleBudget && (openBlockerCount > 0 || openMajorCount > 0)) return "escalate";
+  if (openBlockerCount > 0) return "revise";
+  return "clean";
+}
+
+// v0.9: render one ADR block per the `adr` skill's entry format (feature scope).
+// `nowIso` is the run's args.now; the date is its first 10 characters (no Date API).
+function formatAdr(adrId, title, body, cycle, nowIso, findingId, raisedBy) {
+  const date = String(nowIso || "").slice(0, 10);
+  const cleanTitle = String(title || "").trim() || `accept review finding ${findingId}`;
+  const cleanBody = String(body || "").trim();
+  return [
+    `## ADR-${adrId}: ${cleanTitle}`,
+    "",
+    `- **Date:** ${date}`,
+    "- **Status:** accepted",
+    `- **Cycle:** ${cycle}`,
+    `- **Dispositions:** ${findingId} (raised by ${raisedBy}) — accepted as a trade-off at review cycle ${cycle}`,
+    "",
+    cleanBody,
+  ].join("\n");
+}
+
+// v0.9: REVIEW.md line grammar — "- [sev] (id) text", then optional indented
+// continuation lines: refuted-by (survival vote) and disposition (majors only).
+function formatFindingLines(c, dispositionMap) {
+  const lines = [`- [${c.severity}] (${c.id}) ${c.text}`];
+  if (c.refuted) {
+    const cite = c.refutation_citation ? ` (cites ${c.refutation_citation.file} ${c.refutation_citation.locator})` : "";
+    lines.push(`  refuted-by: ${c.refuted_by} — reason: ${c.refutation_reason}${cite}`);
+  } else if (c.severity === "major") {
+    const d = dispositionMap[c.id];
+    lines.push(d && d.action === "adr" ? `  disposition: adr ADR-${d.adr_id}` : "  disposition: fix");
+  }
+  return lines;
+}
 // --- LAYER1-PURE-HELPERS END ---
 
-// Validation failures are NEVER a bare throw: a throw would strand the
-// .workflow-in-flight marker the command dropped (this script has no filesystem
-// access — only the scribe can release it). Dispatch a minimal scribe cleanup
-// envelope, then return a structured invalid-args verdict for the orchestrator.
+// --- LENS START — reviewer lenses, injected into the read-only reviewer agent ---
+// architect/qa/coder are VERBATIM copies of each role agent's "## Review lens"
+// section (scripts/lens-drift.test.sh fails the suite if they drift). product-owner
+// exists only here. Between the markers: a pure object literal, nothing else.
+const LENS = {
+  architect: `- **Correctness.** Does the proposal actually do what \`acceptance.md\`
+  demands? Are there contradictions between spec sections, or between spec
+  and code?
+- **Failure modes.** What happens on partial failure, network loss, retries,
+  concurrent callers, malformed input? If the spec is silent, that is a
+  finding.
+- **Data integrity.** Schema migrations, write ordering, idempotency,
+  transactional boundaries.
+- **Security.** Auth, authz, input validation, secrets handling, blast
+  radius of compromised credentials.
+- **Scalability.** What breaks at 10× load? At 100×?
+- **Blast radius.** If this change is wrong, what else breaks?
+- **ADR compliance** (during CHANGE_REVIEW). Does the diff honor every ADR
+  in \`DECISIONS.md\`? A silent override is a \`[blocker]\`.`,
+  qa: `- For each acceptance criterion: could you write a test from this *alone*?
+  If you have to invent assumptions, that's at minimum a \`[major]\`.
+- Are non-functional requirements (performance, security, accessibility)
+  testable as written? Or are they aspirational?
+- Are the criteria measurable? "Fast", "robust", "user-friendly" are
+  \`[blocker]\`-tier vagueness.
+- Is there spec behavior with no acceptance coverage? Flag the gap.
+- Are there acceptance criteria with no corresponding spec behavior? Flag
+  the orphan — either spec is incomplete or the criterion is over-scope.`,
+  coder: `- Missing or unclear interface contracts (signatures, error envelopes).
+- Acceptance criteria that can't be implemented as written.
+- Spec behavior with no corresponding acceptance coverage (you'll have to
+  guess what "done" means).
+- Implicit dependencies on infra or libraries the spec doesn't mention.`,
+  "product-owner": `- Does the spec realize the inherited backlog intent, or has it drifted
+  in scope without saying so in its Self-review notes?
+- Is every acceptance criterion testable and mapped 1:1 to a described behavior?
+- Are the Non-goals explicit enough that a reviewer cannot raise scope creep
+  as a defect?`,
+};
+// --- LENS END ---
+
+// Validation failures are NEVER a bare throw (a throw would strand the marker).
 const rolesResult = normalizeRoles(A.roles);
 const budgetResult = normalizeCycleBudget(A.cycle_budget);
 
@@ -146,42 +272,47 @@ if (argErrors.length > 0) {
   };
 }
 
-// Effective configuration (validated above). ROLES drives the fan-out roster AND
-// the schema role enums below; cycleBudget drives the escalation threshold.
 const ROLES = rolesResult.roles;
 const cycleBudget = budgetResult.budget;
-// Record the effective config in the run log so a run is self-documenting no
-// matter where the config came from (command flag, PROGRESS.md, or default).
-log(`Reviewer roster: [${ROLES.join(", ")}]; cycle budget ${cycleBudget}.`);
+const cycleTotalBefore = normalizeCycleTotal(A.cycle_total, cycle);
+const nextAdrId = normalizeNextAdrId(A.next_adr_id);
+log(`Reviewer roster: [${ROLES.join(", ")}]; cycle budget ${cycleBudget}; cumulative cycles before this run ${cycleTotalBefore}; next feature ADR id ${nextAdrId}.`);
 if (budgetResult.clamped) {
   log(`cycle_budget requested ${JSON.stringify(A.cycle_budget)} exceeds the protocol ceiling — capped to ${MAX_CYCLE_BUDGET}.`);
 }
 
+// Per-role model: the architect lens and the disposition leg run on opus (today's
+// cost profile); the read-only reviewer agent's own default is sonnet.
+function modelFor(role) {
+  return role === "architect" ? "opus" : undefined;
+}
+
 // ---------- schemas (structured agent output) ----------
 
-const CONCERNS_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["role", "status", "concerns"],
-  properties: {
-    // role enum tracks the configured reviewer roster (Layer 1) — not a fixed list.
-    role: { type: "string", enum: ROLES },
-    status: { type: "string", enum: ["concerns-raised", "approved"] },
-    concerns: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["id", "severity", "text"],
-        properties: {
-          id: { type: "string" },
-          severity: { type: "string", enum: ["blocker", "major", "minor"] },
-          text: { type: "string" },
+function concernsSchemaFor(role) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["role", "status", "concerns"],
+    properties: {
+      role: { type: "string", enum: [role] },
+      status: { type: "string", enum: ["concerns-raised", "approved"] },
+      concerns: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["id", "severity", "text"],
+          properties: {
+            id: { type: "string", pattern: findingIdPattern(role) },
+            severity: { type: "string", enum: ["blocker", "major", "minor"] },
+            text: { type: "string" },
+          },
         },
       },
     },
-  },
-};
+  };
+}
 
 const REFUTATION_SCHEMA = {
   type: "object",
@@ -199,7 +330,6 @@ const REFUTATION_SCHEMA = {
           concern_id: { type: "string" },
           verdict: { type: "string", enum: ["refute", "affirm"] },
           reason: { type: "string" },
-          // Required (validated in JS) when verdict is "refute"; omitted on "affirm".
           citation: {
             type: "object",
             additionalProperties: false,
@@ -215,26 +345,46 @@ const REFUTATION_SCHEMA = {
   },
 };
 
+const DISPOSITION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["role", "dispositions"],
+  properties: {
+    role: { type: "string", enum: ["architect"] },
+    dispositions: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "action", "reason"],
+        properties: {
+          id: { type: "string" },
+          action: { type: "string", enum: ["adr", "fix"] },
+          reason: { type: "string" },
+          adr_title: { type: "string" },
+          adr_body: { type: "string" },
+        },
+      },
+    },
+  },
+};
+
 // ---------- Phase 1: fan-out review ----------
 
 phase("Fan-out review");
 
 const reviewerResults = await parallel(
   ROLES.map((role) => () =>
-    agent(reviewPrompt(role, feature, cycle), {
+    agent(reviewPrompt(role, feature, cycle, LENS[role]), {
       label: `review:${role}`,
       phase: "Fan-out review",
-      agentType: `build-fleet:${role}`,
-      schema: CONCERNS_SCHEMA,
+      agentType: "build-fleet:reviewer",
+      model: modelFor(role),
+      schema: concernsSchemaFor(role),
     })
   )
 );
 
-// Post-condition (replaces the retired check-review-written hook for workflow REVIEW):
-// every reviewer must return a usable structured payload. A null (agent error /
-// timeout / schema failure) is a transient runtime fault, NOT a review outcome —
-// so it does NOT escalate (ESCALATED + ESCALATION.md is reserved for genuine
-// cycle exhaustion). Clean up the marker, leave PHASE/CYCLE untouched, re-run.
 const reviews = ROLES.map((role, i) => ({ role, payload: reviewerResults[i] }));
 for (const r of reviews) {
   if (!r.payload || !Array.isArray(r.payload.concerns)) {
@@ -264,7 +414,8 @@ const xaResults = await parallel(
     agent(crossExamPrompt(role, allConcerns, feature, cycle), {
       label: `cross-exam:${role}`,
       phase: "Cross-examination",
-      agentType: `build-fleet:${role}`,
+      agentType: "build-fleet:reviewer",
+      model: modelFor(role),
       schema: REFUTATION_SCHEMA,
     })
   )
@@ -277,60 +428,144 @@ const refutationMap = mergeRefutations(ROLES, xaResults);
 phase("Survival vote");
 
 const surviving = applySurvivalVote(allConcerns, refutationMap);
-const survivingBlockers = surviving.filter((c) => c.severity === "blocker" && !c.refuted);
-const verdict =
-  survivingBlockers.length > 0 ? (cycle >= cycleBudget ? "escalate" : "revise") : "clean";
+
+// ---------- Phase 4: disposition (architect, read-only; scribe writes the ADRs) ----------
+
+phase("Disposition");
+
+const survivingMajors = surviving.filter((c) => c.severity === "major" && !c.refuted);
+let dispositionMap = {};
+let decisionsAppendix = null;
+let adrsWritten = 0;
+
+if (survivingMajors.length === 0) {
+  log("No surviving majors — disposition leg skipped.");
+} else {
+  const exhausting = cycle >= cycleBudget;
+  const dispo = await agent(dispositionPrompt(feature, cycle, survivingMajors, nextAdrId, exhausting), {
+    label: "disposition:architect",
+    phase: "Disposition",
+    agentType: "build-fleet:reviewer",
+    model: "opus",
+    schema: DISPOSITION_SCHEMA,
+  });
+  const coverage = dispositionCoverage(surviving, dispo && dispo.dispositions);
+  if (!dispo || !Array.isArray(dispo.dispositions) || coverage.missing.length > 0) {
+    log(`Disposition incomplete: ${dispo ? "missing " + coverage.missing.join(", ") : "no payload"}. Cleaning up without advancing state.`);
+    const scribeResult = await applyScribe(cleanupEnvelope(feature, now, runId));
+    return {
+      verdict: "incomplete",
+      reason: "disposition-incomplete",
+      missing: coverage.missing,
+      feature,
+      cycle,
+      scribe_apply: scribeResult.ok ? "applied" : "failed",
+      scribe_error: scribeResult.error,
+      note: "No REVIEW.md entries written; PHASE/CYCLE unchanged. Re-run /build-fleet:review.",
+    };
+  }
+  if (coverage.extra.length > 0) {
+    log(`Disposition named ids that are not surviving majors (ignored): ${coverage.extra.join(", ")}.`);
+  }
+  const kept = dispo.dispositions.filter((d) => coverage.extra.indexOf(d.id) === -1);
+  const assigned = assignAdrIds(kept, nextAdrId);
+  dispositionMap = assigned.map;
+  const adrBlocks = [];
+  for (const c of survivingMajors) {
+    const d = dispositionMap[c.id];
+    if (d && d.action === "adr") {
+      adrBlocks.push(formatAdr(d.adr_id, d.adr_title, d.adr_body, cycle, now, c.id, c.raised_by));
+    }
+  }
+  adrsWritten = adrBlocks.length;
+  decisionsAppendix = adrBlocks.length > 0 ? adrBlocks.join("\n\n") : null;
+  log(`Disposition: ${adrsWritten} accepted via ADR, ${survivingMajors.length - adrsWritten} to fix.`);
+}
+
+const ready = computeFinalizeReady(surviving, dispositionMap);
+const verdict = decideVerdict(ready.openBlockers.length, ready.openMajors.length, cycle, cycleBudget);
 
 log(
-  `Cycle ${cycle}: ${surviving.length} concerns, ${survivingBlockers.length} surviving blockers → verdict=${verdict}`
+  `Cycle ${cycle}: ${surviving.length} concerns, ${ready.openBlockers.length} open blockers, ${ready.openMajors.length} open majors → verdict=${verdict}, finalize_ready=${ready.finalize_ready}`
 );
 
-// ---------- Phase 4: apply via scribe ----------
+// ---------- Phase 5: apply via scribe ----------
 
 phase("Apply");
 
-const envelope = buildEnvelope({ feature, cycle, cycleBudget, now, reviews, surviving, verdict });
+const outputTokens = outputTokensSoFar();
+const envelope = buildEnvelope({
+  feature, cycle, cycleBudget, cycleTotalBefore, now, reviews, surviving, dispositionMap,
+  decisionsAppendix, ready, verdict, outputTokens,
+});
 const scribeResult = await applyScribe(envelope);
 
 return {
   verdict,
+  finalize_ready: ready.finalize_ready,
   feature,
   cycle,
+  cycle_total: cycleTotalBefore + 1,
   surviving_concerns: surviving.length,
-  surviving_blockers: survivingBlockers.length,
+  surviving_blockers: ready.openBlockers.length,
+  open_majors: ready.openMajors.map((c) => c.id),
+  adrs_written: adrsWritten,
+  output_tokens: outputTokens,
   scribe_apply: scribeResult.ok ? "applied" : "failed",
   scribe_error: scribeResult.error,
   next: scribeResult.ok ? envelope.next_legal_commands : [],
   note: scribeResult.ok
     ? undefined
-    : "SCRIBE APPLY FAILED after retry — REVIEW.md/PROGRESS.md did NOT land and the .workflow-in-flight marker may remain. The dispatching command must report failure, not success.",
+    : "SCRIBE APPLY FAILED after retry — REVIEW.md/PROGRESS.md/DECISIONS.md did NOT land and the .workflow-in-flight marker may remain. The dispatching command must report failure, not success.",
 };
 
 // ================= helpers =================
 
-function reviewPrompt(role, feature, cycle) {
-  return `You are the ${role} reviewer. Cycle ${cycle}. Active feature: ${feature}.
-
-Read these files yourself (you have Read/Grep/Glob):
+function reviewPrompt(role, feature, cycle, lens) {
+  const files = `Read these files yourself (you have Read/Grep/Glob and NOTHING that writes):
 - .sdd/${feature}/spec.md
 - .sdd/${feature}/acceptance.md
-- .sdd/${feature}/REVIEW.md      (prior cycles; may not exist on cycle 1)
+- .sdd/${feature}/REVIEW.md      (the PREVIOUS cycle only — older cycles are archived in REVIEW-archive.md; do not read the archive)
 - .sdd/${feature}/DECISIONS.md   (feature ADRs; may not exist on cycle 1)
+Read product ADRs (.sdd/_product/DECISIONS.md) only for the specific ADR ids the spec cites — never the whole file.`;
 
-Review the spec through your role's lens. The review-rubric skill is preloaded —
-use it for severity definitions (blocker / major / minor).
+  const rules = `Finding ids are STABLE across cycles and namespaced to you: "${role}-c<cycle>-<n>"
+(e.g. "${role}-c${cycle}-1"). A finding you re-raise from an earlier cycle KEEPS its original id.
 
-DECISIONS.md is dispositive. The rubric gives a [major] two resolution paths — fixed in
-the spec, or explicitly ACCEPTED in an ADR. An ADR covering a finding IS that finding's
-disposition: do not re-raise it as still open. If you believe an accepted trade-off is
-wrong, raise that as a new finding arguing against the ADR by id — not as a re-issue of
-the original as unaddressed.
+DECISIONS.md is dispositive. A [major] with "disposition: adr ADR-N" in REVIEW.md is CLOSED by that
+ADR: do not re-raise it. If you believe the accepted trade-off is wrong, raise a NEW [blocker]
+arguing against the ADR by id.
 
-Return your review as the structured object you are required to produce:
+Do NOT write, edit, or create any file. Return only the structured object.`;
+
+  const cycleRules = cycle <= 1
+    ? `This is cycle 1: a FULL review of the spec through your lens.`
+    : `This is cycle ${cycle}: a DELTA review. Two jobs, in order:
+1. CLOSURE — for each of YOUR OWN findings from the previous cycle that carries "disposition: fix",
+   and each of your own [blocker] findings, check whether the current spec/acceptance closes it.
+   Still open ⇒ return it again with its ORIGINAL id (and the same severity). Closed ⇒ omit it.
+2. NEW findings — [blocker] severity ONLY (correctness, security, data loss, or a contradiction
+   of spec/acceptance — including a regression introduced by a fix). You may add [minor] notes
+   (advisory). You may NOT raise a new [major]: the open-major set only shrinks after cycle 1.`;
+
+  return `You are the ${role} reviewer. Cycle ${cycle}. Active feature: ${feature}.
+
+${files}
+
+Review through YOUR lens:
+${lens}
+
+The severity rubric (blocker / major / minor) is in your instructions — use those exact words.
+
+${cycleRules}
+
+${rules}
+
+Return the structured object:
 - role: "${role}"
-- status: "concerns-raised" if you have any blocker/major items, else "approved"
-- concerns: array of { id, severity, text }. Use stable IDs "${role}-1", "${role}-2", ...
-  If you have no findings, return an empty concerns array and status "approved".`;
+- status: "concerns-raised" if you hold any blocker/major, else "approved" (informational — the
+  gate reads dispositions, not this line)
+- concerns: array of { id, severity, text }. Empty array + "approved" when you have nothing.`;
 }
 
 function crossExamPrompt(role, allConcerns, feature, cycle) {
@@ -339,7 +574,7 @@ function crossExamPrompt(role, allConcerns, feature, cycle) {
 
 Read .sdd/${feature}/spec.md, .sdd/${feature}/acceptance.md and .sdd/${feature}/DECISIONS.md
 yourself if you need to cite them. An ADR that dispositions a peer's concern is a
-substantive refutation — cite it by id.
+substantive refutation — cite it by id. Do NOT write any file.
 
 Below are concerns raised by OTHER reviewers (not your own). For each, decide whether to
 REFUTE it (you believe it is not a real problem) or AFFIRM it (you agree it stands).
@@ -361,6 +596,46 @@ Return the structured object:
 - refutations: array of { concern_id, verdict ("refute"|"affirm"), reason, citation? }.
   citation = { file, locator } and is REQUIRED when verdict is "refute".
   Include one entry per peer concern.`;
+}
+
+function dispositionPrompt(feature, cycle, majors, nextAdrId, exhausting) {
+  const list = majors.map((c) => ({ id: c.id, raised_by: c.raised_by, text: c.text }));
+  return `You are the architect, DISPOSITIONING the surviving [major] findings of review cycle ${cycle}
+for feature ${feature}. Read .sdd/${feature}/spec.md, .sdd/${feature}/acceptance.md and
+.sdd/${feature}/DECISIONS.md yourself. Do NOT write any file — the scribe records your ADRs.
+
+For EVERY finding below, choose exactly one action:
+- "adr" — the finding is a genuine design TRADE-OFF the spec should not absorb: the current
+  choice is defensible, and the concern is a cost we accept. Supply adr_title (short imperative:
+  what the decision IS, not what triggered it) and adr_body: the four sections of the ADR format
+  below, WITHOUT the heading and metadata lines (the scribe adds "## ADR-N: title", Date, Status,
+  Cycle). ADR ids are assigned sequentially from ADR-${nextAdrId} in the order you list them.
+- "fix" — a missing behaviour, an unsatisfiable or untestable criterion, a contradiction, or
+  an under-specification a coder would have to guess at. The product-owner must close it in the
+  spec next cycle.
+${exhausting ? `
+This is the EXHAUSTING cycle of the budget: any "fix" you leave open ESCALATES the feature to a
+human. Choose "fix" only where the spec genuinely cannot ship as written.` : ""}
+Rule of thumb: if closing it would make the spec LONGER without making the system more correct,
+it is an "adr". If a test could fail because of it, it is a "fix".
+
+ADR body format (write these four sections, in this order, as markdown):
+### Context
+What forced the decision — name the finding id and who raised it.
+### Decision
+The decision in one or two sentences, stated as a positive choice.
+### Alternatives considered
+The rejected options with a one-line reason each.
+### Consequences
+What this makes easier, what harder, what now depends on it. Concrete.
+
+Findings to disposition (cover EVERY id, exactly once):
+${JSON.stringify(list, null, 2)}
+
+Return the structured object:
+- role: "architect"
+- dispositions: array of { id, action ("adr"|"fix"), reason, adr_title?, adr_body? } — adr_title
+  and adr_body are REQUIRED when action is "adr".`;
 }
 
 function mergeConcerns(reviews) {
@@ -398,9 +673,6 @@ function mergeRefutations(roles, xaResults) {
   return map;
 }
 
-// A structured citation is valid when both file and locator are non-empty strings.
-// (Deliberately NOT validated against a fixed file list — locators like
-// "§ Constraints" or "line 12" against any cited artifact are acceptable.)
 function validCitation(c) {
   return !!c &&
     typeof c.file === "string" && c.file.trim().length > 0 &&
@@ -424,18 +696,12 @@ function applySurvivalVote(concerns, refutationMap) {
   });
 }
 
-function buildEnvelope({ feature, cycle, cycleBudget, now, reviews, surviving, verdict }) {
+function buildEnvelope({ feature, cycle, cycleBudget, cycleTotalBefore, now, reviews, surviving, dispositionMap, decisionsAppendix, ready, verdict, outputTokens }) {
   const reviewEntries = reviews.map((r) => {
     const own = surviving.filter((c) => c.raised_by === r.role);
     const lines = [`## Cycle ${cycle} — ${r.role} — ${now}`];
     for (const c of own) {
-      lines.push(`- [${c.severity}] ${c.text}`);
-      if (c.refuted) {
-        const cite = c.refutation_citation
-          ? ` (cites ${c.refutation_citation.file} ${c.refutation_citation.locator})`
-          : "";
-        lines.push(`  refuted-by: ${c.refuted_by} — reason: ${c.refutation_reason}${cite}`);
-      }
+      for (const l of formatFindingLines(c, dispositionMap)) lines.push(l);
     }
     lines.push(`status: ${r.payload.status || "concerns-raised"}`);
     return lines.join("\n");
@@ -444,15 +710,22 @@ function buildEnvelope({ feature, cycle, cycleBudget, now, reviews, surviving, v
   const escalation_payload =
     verdict === "escalate"
       ? {
-          reason: "cycle-budget-exhausted-with-open-blockers",
+          reason: "cycle-budget-exhausted-with-open-findings",
           cycle,
           cycle_budget: cycleBudget,
-          surviving_blockers: surviving.filter(
-            (c) => c.severity === "blocker" && !c.refuted
-          ),
+          surviving_blockers: ready.openBlockers,
+          open_majors: ready.openMajors,
           emitted_at: now,
         }
       : null;
+
+  const state_delta = {
+    PHASE: verdict === "escalate" ? "ESCALATED" : "REVIEW",
+    CYCLE: cycle,
+    CYCLE_TOTAL: cycleTotalBefore + 1,
+    UPDATED: now,
+  };
+  if (outputTokens !== null) state_delta.LAST_REVIEW_OUTPUT_TOKENS = outputTokens;
 
   return {
     build_fleet_version: "0.2",
@@ -461,29 +734,18 @@ function buildEnvelope({ feature, cycle, cycleBudget, now, reviews, surviving, v
     phase: "REVIEW",
     cycle,
     verdict,
+    finalize_ready: ready.finalize_ready,
     surviving_concerns: surviving,
     review_entries: reviewEntries,
-    state_delta: {
-      PHASE: verdict === "escalate" ? "ESCALATED" : "REVIEW",
-      CYCLE: cycle,
-      UPDATED: now,
-    },
+    decisions_appendix: decisionsAppendix,
+    state_delta,
     next_legal_commands:
-      verdict === "clean"
-        ? ["/build-fleet:finalize"]
-        : verdict === "escalate"
-        ? []
-        : ["/build-fleet:review"],
+      verdict === "escalate" ? [] : ready.finalize_ready ? ["/build-fleet:finalize"] : ["/build-fleet:revise"],
+    estimated_cost_actual: { input_tokens: null, output_tokens: outputTokens },
     escalation_payload,
   };
 }
 
-// Minimal envelope for the incomplete/invalid-args paths (pattern ported from
-// plan-review.js): releases the workflow marker (ownership-checked against
-// run_id) and refreshes UPDATED only. state_delta deliberately OMITS PHASE and
-// CYCLE so the scribe leaves them at their pre-run values; nothing is appended
-// to REVIEW.md and no ESCALATION.md is written — ESCALATED is reserved for
-// genuine cycle exhaustion.
 function cleanupEnvelope(feature, now, runId) {
   return {
     build_fleet_version: "0.2",
@@ -492,22 +754,19 @@ function cleanupEnvelope(feature, now, runId) {
     phase: "REVIEW",
     cycle: 0,
     verdict: "incomplete",
+    finalize_ready: false,
     surviving_concerns: [],
     review_entries: [],
+    decisions_appendix: null,
     state_delta: now ? { UPDATED: now } : {},
     next_legal_commands: ["/build-fleet:review"],
+    estimated_cost_actual: { input_tokens: null, output_tokens: null },
     escalation_payload: null,
   };
 }
 
 // ---------- verified scribe application ----------
-// (SCRIBE_RESULT_SCHEMA is declared near the top of this file, above the first
-// applyScribe() call site, to avoid a temporal-dead-zone error.)
 
-// The scribe returns a structured {ok, error} aligned with its
-// SCRIBE_OK:/SCRIBE_ERROR: contract (agents/scribe.md). One retry on failure;
-// if still failing, the caller must surface scribe_apply: "failed" — state did
-// NOT land and the dispatching command must refuse/report, never claim success.
 async function applyScribe(envelope) {
   let lastError = "scribe returned no usable result";
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -518,6 +777,8 @@ async function applyScribe(envelope) {
 
 Marker ownership: RELEASE .sdd/${envelope.feature}/.workflow-in-flight by overwriting it with EMPTY content via the Write tool (you have no Bash; an empty marker counts as released and is reaped later) — ONLY if its current content matches the envelope's run_id${envelope.run_id ? ` ("${envelope.run_id}")` : " (null — legacy envelope: release unconditionally, best-effort)"}. If the content differs, leave the marker — it belongs to another run.
 
+Append rules: append to REVIEW.md and DECISIONS.md with an Edit anchored on the file's final non-empty line — never rewrite a whole file. A state_delta key with no matching line in PROGRESS.md is APPENDED as a new line.
+
 Return the structured object {ok, error}: ok=true when the WHOLE envelope landed (your SCRIBE_OK condition), with error=null. ok=false with error="<one-line reason>" otherwise (your SCRIBE_ERROR reason).
 
 ENVELOPE:
@@ -526,6 +787,7 @@ ${JSON.stringify(envelope, null, 2)}`,
           label: attempt === 1 ? "scribe" : "scribe-retry",
           phase: "Apply",
           agentType: "build-fleet:scribe",
+          effort: "low",
           schema: SCRIBE_RESULT_SCHEMA,
         }
       );
