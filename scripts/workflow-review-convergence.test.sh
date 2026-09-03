@@ -54,6 +54,36 @@ check("id-pattern-accepts", re.test("architect-c1-3"));
 check("id-pattern-rejects-other-role", !re.test("qa-c1-3"));
 check("id-pattern-rejects-legacy", !re.test("architect-3"));
 
+// originCycle (fix round 1)
+check("origin-cycle-parses", originCycle("architect-c3-2") === 3);
+check("origin-cycle-legacy-null", originCycle("qa-1") === null);
+
+// enforceDeltaSeverity (fix round 1)
+let dsr = enforceDeltaSeverity([{ id: "qa-c1-1", severity: "major", raised_by: "qa", text: "m", refuted: false }], 1);
+check("delta-severity-cycle1-passthrough", dsr.concerns[0].severity === "major" && eq(dsr.demoted, []));
+dsr = enforceDeltaSeverity([{ id: "qa-c2-1", severity: "major", raised_by: "qa", text: "new major", refuted: false }], 2);
+check(
+  "delta-severity-demotes-new-major",
+  dsr.concerns[0].severity === "minor" &&
+    dsr.concerns[0].text === "[demoted from major: new majors are not permitted on a delta cycle] new major" &&
+    eq(dsr.demoted, ["qa-c2-1"])
+);
+dsr = enforceDeltaSeverity([{ id: "qa-c1-4", severity: "major", raised_by: "qa", text: "re-raised", refuted: false }], 2);
+check("delta-severity-keeps-reraised-major", dsr.concerns[0].severity === "major" && eq(dsr.demoted, []));
+dsr = enforceDeltaSeverity(
+  [
+    { id: "qa-c2-9", severity: "blocker", raised_by: "qa", text: "b", refuted: false },
+    { id: "qa-c2-8", severity: "minor", raised_by: "qa", text: "n", refuted: false },
+  ],
+  2
+);
+check(
+  "delta-severity-keeps-blocker-and-minor",
+  dsr.concerns[0].severity === "blocker" && dsr.concerns[1].severity === "minor" && eq(dsr.demoted, [])
+);
+dsr = enforceDeltaSeverity([{ id: "qa-c2-1", severity: "major", raised_by: "qa", text: "m", refuted: false }], undefined);
+check("delta-severity-undefined-cycle-passthrough", dsr.concerns[0].severity === "major" && eq(dsr.demoted, []));
+
 // fixtures
 const S = [
   { id: "architect-c1-1", severity: "blocker", raised_by: "architect", text: "b", refuted: false },
@@ -68,7 +98,24 @@ let cov = dispositionCoverage(S, [{ id: "architect-c1-2", action: "adr" }]);
 check("coverage-missing", eq(cov.missing, ["qa-c1-1"]) && eq(cov.extra, []));
 cov = dispositionCoverage(S, [{ id: "architect-c1-2", action: "adr" }, { id: "qa-c1-1", action: "fix" }, { id: "qa-c1-2", action: "fix" }]);
 check("coverage-extra-refuted-ignored", eq(cov.missing, []) && eq(cov.extra, ["qa-c1-2"]));
-check("coverage-empty", eq(dispositionCoverage([], []), { missing: [], extra: [] }));
+check("coverage-empty", eq(dispositionCoverage([], []), { missing: [], extra: [], duplicates: [], invalid: [] }));
+
+// dispositionCoverage: duplicates (fix round 1)
+cov = dispositionCoverage(S, [{ id: "x", action: "adr", adr_body: "b" }, { id: "x", action: "adr", adr_body: "b" }]);
+check("coverage-duplicates", eq(cov.duplicates, ["x"]));
+cov = dispositionCoverage(S, [{ id: "qa-c1-1", action: "fix" }, { id: "qa-c1-1", action: "fix" }]);
+check(
+  "coverage-duplicate-real-major-not-in-missing",
+  eq(cov.duplicates, ["qa-c1-1"]) && cov.missing.indexOf("qa-c1-1") === -1 && eq(cov.missing, ["architect-c1-2"])
+);
+
+// dispositionCoverage: invalid (fix round 1) — an "adr" whose body is empty/whitespace
+cov = dispositionCoverage(S, [{ id: "architect-c1-2", action: "adr", adr_body: "  " }]);
+check("coverage-invalid-empty-body", eq(cov.invalid, ["architect-c1-2"]));
+cov = dispositionCoverage(S, [{ id: "architect-c1-2", action: "adr", adr_body: "### Context\nreal body" }]);
+check("coverage-invalid-adr-with-body-ok", eq(cov.invalid, []));
+cov = dispositionCoverage(S, [{ id: "qa-c1-1", action: "fix" }]);
+check("coverage-invalid-fix-no-body-ok", eq(cov.invalid, []));
 
 // assignAdrIds
 const asg = assignAdrIds([{ id: "architect-c1-2", action: "adr", adr_title: "T", adr_body: "B" }, { id: "qa-c1-1", action: "fix", reason: "why" }, { id: "x", action: "adr" }], 4);

@@ -128,14 +128,57 @@ function findingIdPattern(role) {
   return "^" + role + "-c[0-9]+-[0-9]+$";
 }
 
+// v0.9 fix round 1: the cycle a stable finding id "<role>-c<n>-<k>" was FIRST raised
+// in — the integer after "-c", or null when the id doesn't carry that shape.
+function originCycle(id) {
+  const m = typeof id === "string" ? id.match(/-c([0-9]+)-[0-9]+$/) : null;
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// v0.9 fix round 1: enforce in CODE what the cycle >= 2 prompt only asks for — a
+// brand-new [major] (originCycle(id) === cycle, i.e. minted THIS cycle) cannot
+// survive as major on a delta cycle, so the open-major set never grows after cycle 1
+// even if a reviewer ignores the instruction. Demoted concerns keep their id and
+// raiser but drop to minor, with the reason visible in REVIEW.md text. Blockers,
+// minors, and majors re-raised from an earlier cycle pass through unchanged. Cycle 1
+// (or an undefined/non-delta cycle) is a full review — pass everything through.
+function enforceDeltaSeverity(concerns, cycle) {
+  if (!(typeof cycle === "number" && cycle >= 2)) return { concerns, demoted: [] };
+  const demoted = [];
+  const out = (concerns || []).map((c) => {
+    if (c.severity === "major" && originCycle(c.id) === cycle) {
+      demoted.push(c.id);
+      return {
+        ...c,
+        severity: "minor",
+        text: `[demoted from major: new majors are not permitted on a delta cycle] ${c.text}`,
+      };
+    }
+    return c;
+  });
+  return { concerns: out, demoted };
+}
+
 // v0.9: disposition coverage — every surviving (unrefuted) major must be dispositioned
-// exactly once. Returns the ids the leg missed and the ids it invented.
+// exactly once, with a real ADR body when accepted as a trade-off. Returns the ids the
+// leg missed, the ids it invented, ids it listed more than once, and `adr` entries
+// whose adr_body is empty/whitespace (an empty ADR would silently close a major).
 function dispositionCoverage(surviving, dispositions) {
   const majors = surviving.filter((c) => c.severity === "major" && !c.refuted).map((c) => c.id);
-  const given = (dispositions || []).map((d) => d.id);
+  const list = dispositions || [];
+  const given = list.map((d) => d.id);
   const missing = majors.filter((id) => given.indexOf(id) === -1);
   const extra = given.filter((id) => majors.indexOf(id) === -1);
-  return { missing, extra };
+  const seen = {};
+  const duplicates = [];
+  for (const id of given) {
+    seen[id] = (seen[id] || 0) + 1;
+    if (seen[id] === 2) duplicates.push(id);
+  }
+  const invalid = list
+    .filter((d) => d.action === "adr" && String(d.adr_body || "").trim() === "")
+    .map((d) => d.id);
+  return { missing, extra, duplicates, invalid };
 }
 
 // v0.9: assign sequential feature ADR ids to `adr` dispositions, in the order given.
@@ -379,7 +422,7 @@ const reviewerResults = await parallel(
       label: `review:${role}`,
       phase: "Fan-out review",
       agentType: "build-fleet:reviewer",
-      model: modelFor(role),
+      ...(modelFor(role) ? { model: modelFor(role) } : {}),
       schema: concernsSchemaFor(role),
     })
   )
@@ -403,7 +446,11 @@ for (const r of reviews) {
   }
 }
 
-const allConcerns = mergeConcerns(reviews);
+const enforced = enforceDeltaSeverity(mergeConcerns(reviews), cycle);
+const allConcerns = enforced.concerns;
+if (enforced.demoted.length > 0) {
+  log(`Delta-severity enforcement demoted new major(s) to minor (not permitted on a delta cycle): ${enforced.demoted.join(", ")}.`);
+}
 
 // ---------- Phase 2: cross-examination ----------
 
@@ -415,7 +462,7 @@ const xaResults = await parallel(
       label: `cross-exam:${role}`,
       phase: "Cross-examination",
       agentType: "build-fleet:reviewer",
-      model: modelFor(role),
+      ...(modelFor(role) ? { model: modelFor(role) } : {}),
       schema: REFUTATION_SCHEMA,
     })
   )
@@ -442,21 +489,36 @@ if (survivingMajors.length === 0) {
   log("No surviving majors — disposition leg skipped.");
 } else {
   const exhausting = cycle >= cycleBudget;
-  const dispo = await agent(dispositionPrompt(feature, cycle, survivingMajors, nextAdrId, exhausting), {
-    label: "disposition:architect",
-    phase: "Disposition",
-    agentType: "build-fleet:reviewer",
-    model: "opus",
-    schema: DISPOSITION_SCHEMA,
-  });
+  let dispo = null;
+  try {
+    dispo = await agent(dispositionPrompt(feature, cycle, survivingMajors, nextAdrId, exhausting), {
+      label: "disposition:architect",
+      phase: "Disposition",
+      agentType: "build-fleet:reviewer",
+      model: "opus",
+      schema: DISPOSITION_SCHEMA,
+    });
+  } catch (e) {
+    dispo = null;
+    log(`Disposition agent errored: ${e && e.message ? e.message : String(e)}`);
+  }
   const coverage = dispositionCoverage(surviving, dispo && dispo.dispositions);
-  if (!dispo || !Array.isArray(dispo.dispositions) || coverage.missing.length > 0) {
-    log(`Disposition incomplete: ${dispo ? "missing " + coverage.missing.join(", ") : "no payload"}. Cleaning up without advancing state.`);
+  const dispositionBad =
+    !dispo || !Array.isArray(dispo.dispositions) ||
+    coverage.missing.length > 0 || coverage.duplicates.length > 0 || coverage.invalid.length > 0;
+  if (dispositionBad) {
+    const parts = [];
+    if (coverage.missing.length > 0) parts.push(`missing ${coverage.missing.join(", ")}`);
+    if (coverage.duplicates.length > 0) parts.push(`duplicate ids ${coverage.duplicates.join(", ")}`);
+    if (coverage.invalid.length > 0) parts.push(`empty adr body for ${coverage.invalid.join(", ")}`);
+    log(`Disposition incomplete: ${dispo ? parts.join("; ") : "no payload"}. Cleaning up without advancing state.`);
     const scribeResult = await applyScribe(cleanupEnvelope(feature, now, runId));
     return {
       verdict: "incomplete",
       reason: "disposition-incomplete",
       missing: coverage.missing,
+      duplicates: coverage.duplicates,
+      invalid: coverage.invalid,
       feature,
       cycle,
       scribe_apply: scribeResult.ok ? "applied" : "failed",
@@ -470,11 +532,14 @@ if (survivingMajors.length === 0) {
   const kept = dispo.dispositions.filter((d) => coverage.extra.indexOf(d.id) === -1);
   const assigned = assignAdrIds(kept, nextAdrId);
   dispositionMap = assigned.map;
+  const survivingById = {};
+  for (const c of survivingMajors) survivingById[c.id] = c;
   const adrBlocks = [];
-  for (const c of survivingMajors) {
-    const d = dispositionMap[c.id];
-    if (d && d.action === "adr") {
-      adrBlocks.push(formatAdr(d.adr_id, d.adr_title, d.adr_body, cycle, now, c.id, c.raised_by));
+  for (const d of kept) {
+    const disp = dispositionMap[d.id];
+    const c = survivingById[d.id];
+    if (disp && disp.action === "adr" && c) {
+      adrBlocks.push(formatAdr(disp.adr_id, disp.adr_title, disp.adr_body, cycle, now, c.id, c.raised_by));
     }
   }
   adrsWritten = adrBlocks.length;
