@@ -45,9 +45,12 @@ For each key in the envelope's `state_delta` object (typically `PHASE`, `CYCLE`,
 
 For each string in the envelope's `review_entries` array (in order):
 
-- Append it verbatim to `.sdd/<feature>/REVIEW.md` with an **`Edit` anchored on the
-  file's final non-empty line** (old_string = that line, new_string = that line + a
-  blank line + the entry). Never rewrite the whole file with `Write` — REVIEW.md can
+- Append it verbatim to `.sdd/<feature>/REVIEW.md` with an **`Edit` whose old_string is
+  the file's FINAL BLOCK — from its last `## ` heading line through the file's final
+  non-empty line (headings carry the role + timestamp, so this text is unique) — and
+  whose new_string is that same block text followed by one blank line and the new entry.
+  If the file holds no `## ` block yet (only its header), anchor on the header's final
+  non-empty line instead. Never rewrite the whole file with `Write` — REVIEW.md can
   be large and a whole-file rewrite is the cost the v0.9 rotation exists to remove.
 - Separate entries with one blank line.
 - Create REVIEW.md (with `Write`) only if it does not exist.
@@ -76,8 +79,12 @@ this step.
 
 If the envelope has a `decisions_appendix` field with a non-empty string value:
 
-- Append it verbatim to `.sdd/<feature>/DECISIONS.md` with an `Edit` anchored on the
-  file's final non-empty line; separate from prior content with one blank line.
+- Append it verbatim to `.sdd/<feature>/DECISIONS.md` with an `Edit` whose old_string is
+  the file's FINAL BLOCK — from its last `## ADR-` heading line through the file's final
+  non-empty line (ADR ids make this text unique) — and whose new_string is that same block
+  text followed by one blank line and the new ADR. If the file holds no ADR blocks yet
+  (only the feature header), anchor on the header's final non-empty line instead. Never
+  rewrite the whole file with `Write`; create the file with `Write` only when it does not exist.
 - If DECISIONS.md does not exist, create it (`Write`) with the `adr` skill's feature
   header first:
   ```
@@ -108,7 +115,7 @@ If the envelope's `escalation_payload` is non-null:
 
   ## Surviving blockers
 
-  <render payload.surviving_blockers as a markdown list: severity, id, raised_by, text>
+  <render payload.surviving_blockers as a markdown list: severity, id, raised_by, text; write "- (none)" when the array is empty or absent>
 
   ## Open majors (disposition: fix)
 
@@ -187,7 +194,7 @@ Do not partially apply. Either the whole envelope lands or none of it does. The 
 
 - You **never** write `spec.md`, `acceptance.md`, `TEST_PLAN.md`, or production source.
 - You **may** append to `IMPL_NOTES.md` ONLY via the `impl_notes_appendix` envelope field, and to `DECISIONS.md` ONLY via the `decisions_appendix` field. You never edit prior content in either; append-only.
-- **If `impl_notes_appendix` is absent or empty, you NEVER create or touch IMPL_NOTES.md — even if coder summaries or other envelope fields hint at content.** The envelope field is the sole authorization. The same rule applies to `review_entries` (sole authorization for REVIEW.md) and `escalation_payload` (sole authorization for ESCALATION.md). If a field is absent, the corresponding file MUST be left untouched.
+- **If `impl_notes_appendix` is absent or empty, you NEVER create or touch IMPL_NOTES.md — even if coder summaries or other envelope fields hint at content.** The envelope field is the sole authorization. The same rule applies to `review_entries` (sole authorization for REVIEW.md), `decisions_appendix` (sole authorization for DECISIONS.md), and `escalation_payload` (sole authorization for ESCALATION.md). If a field is absent, the corresponding file MUST be left untouched.
 - You **never** read or modify files outside the **resolved workspace** (`.sdd/<feature>/`, or the envelope's `workspace_dir` when present); the `.workflow-in-flight` release happens inside it.
 - You do not bump `CYCLE`, `CHANGE_CYCLE`, `CYCLE_TOTAL`, or any field beyond what `state_delta` specifies — but a `state_delta` key absent from PROGRESS.md IS appended (§1).
 - You append to `REVIEW.md` — you never overwrite it.
