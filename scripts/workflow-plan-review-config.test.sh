@@ -54,6 +54,12 @@ check("roles-empty", r.roles === null && r.error !== null);
 r = normalizeRoles("architect,qa");
 check("roles-not-array", r.roles === null && r.error !== null);
 
+// ---- v0.9 renderSplitLine ----
+check("split-none", renderSplitLine({}) === null);
+check("split-empty", renderSplitLine({ split_into: [] }) === null);
+check("split-two", renderSplitLine({ split_into: ["a-b", " c-d "] }) === "  split-into: a-b, c-d");
+check("split-filters-junk", renderSplitLine({ split_into: ["x", "", 3] }) === "  split-into: x");
+
 console.log("-----");
 console.log("passed=" + pass + " failed=" + fail);
 process.exit(fail > 0 ? 1 : 0);

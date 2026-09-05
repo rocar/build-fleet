@@ -84,11 +84,19 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
    `## Plan Cycle <N> — interrogation summary` block stating the count — use it to
    cross-check, but the authoritative count is the `[blocker]` line tally.) Call this `B`.
 
+   **Split suggestions (v0.9).** In the same latest-cycle blocks collect every
+   `  split-into: a, b, …` line (each sits under the finding it belongs to; the finding
+   line carries its id in parentheses). For each proposed slug, it is **resolved** if
+   `.sdd/_product/backlog.md` has a row `- [ ] <slug>` / `- [x] <slug>`, OR
+   `.sdd/_product/DECISIONS.md` contains an ADR whose text cites that finding's id with
+   the word `refuses` (e.g. "refuses product-owner-3: the split would …"). Call the
+   count of unresolved split suggestions `S`.
+
 6. **Branch on `$ARGUMENTS`.**
 
    **a. Dry-run (empty / unrecognized args).** Emit:
    ```
-   BUILD_FLEET_PLAN_FINALIZE_DRYRUN: {"product":"<slug>","phase":"<PHASE>","open_blockers":<B>,"cycle":<N>}
+   BUILD_FLEET_PLAN_FINALIZE_DRYRUN: {"product":"<slug>","phase":"<PHASE>","open_blockers":<B>,"unresolved_splits":<S>,"cycle":<N>}
    ```
    Then print, human-readably:
    - **Normal path** (`PHASE=PLAN_REVIEW`): the open `[blocker]` and `[major]` findings
@@ -110,7 +118,17 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
    plan and re-run `/build-fleet:plan-review`) or override with
    `/build-fleet:plan-finalize ratify force`. No state changes.
 
-   **c. `ratify` with `B = 0`, OR `ratify force` (any B).** **Ratify — flip state** (step 7).
+   **b2. `ratify` (no `force`) with `S > 0`.** Refuse — a split the plan neither made
+   nor refused:
+   ```
+   BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"product":"<slug>","code":2,"reason":"split-unresolved","unresolved_splits":<S>}
+   ```
+   List each `split-into:` line with its finding id and which proposed slugs are
+   missing; tell the user to either add the rows to `backlog.md` (and re-run
+   `/build-fleet:plan-review`) or have the architect record a product ADR refusing the
+   split by finding id — or override with `ratify force`.
+
+   **c. `ratify` with `B = 0` and `S = 0`, OR `ratify force` (any B, any S).** **Ratify — flip state** (step 7).
 
 7. **Flip state (ratification).** This is the only path that writes:
    - Edit `.sdd/_product/vision.md`: set its `STATUS:` line to `FINALIZED`.
@@ -137,7 +155,7 @@ Any other argument → treat as empty (dry-run) and note the recognized tokens.
 
    Emit exactly one line:
    ```
-   BUILD_FLEET_PLAN_FINALIZE_PASS: {"product":"<slug>","phase":"DEVELOPING","ratified_with_blockers":<true|false>,"accepted_blockers":<B-if-force-else-0>,"stack_finalized":<true|false>}
+   BUILD_FLEET_PLAN_FINALIZE_PASS: {"product":"<slug>","phase":"DEVELOPING","ratified_with_blockers":<true|false>,"accepted_blockers":<B-if-force-else-0>,"accepted_splits":<S-if-force-else-0>,"stack_finalized":<true|false>}
    ```
    (`stack_finalized` is `true` when STACK.md was flipped to `FINALIZED`, `false` when it
    was left as-is because provisional/forward content is present.)

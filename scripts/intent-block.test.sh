@@ -104,6 +104,14 @@ assert "slug-mode-usable" "$BACKLOG" 'INTENT_VERDICT: usable' --slug api-client
 assert "slug-mode-too-thin" "$BACKLOG" 'INTENT_VERDICT: too-thin' --slug thin-one
 assert_rc "slug-mode-missing-slug-errors" "$BACKLOG" 1 --slug no-such-slug
 
+# --- v0.9: INTENT_BYTES (bytes of the dedented intent lines, newline-joined) ---
+assert "bytes-single-line" '- [ ] api   PENDING   depends-on: none
+      What it is — its boundary.' 'INTENT_BYTES: 28'
+assert "bytes-missing-intent-zero" '- [ ] bare   PENDING   depends-on: none' 'INTENT_BYTES: 0'
+assert "bytes-before-verdict" '- [ ] api   PENDING   depends-on: none
+      a — b.' 'INTENT_BYTES: 8
+INTENT_VERDICT: usable'
+
 echo "-----"
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]

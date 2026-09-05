@@ -27,6 +27,7 @@
 #   INTENT_SLUG: <slug>
 #   INTENT_STATE: <PENDING|DONE>
 #   <intent line(s), dedented — the canonical block; omitted when empty>
+#   INTENT_BYTES: <n>            # byte length of the dedented intent lines (newline-joined)
 #   INTENT_VERDICT: usable|too-thin
 # Exit: 0 = verdict emitted; 1 = malformed/empty input or slug not found
 #       (error on stderr, NO verdict line). bash 3.2 compatible; read-only.
@@ -48,7 +49,7 @@ if [ -z "$(printf '%s' "$input" | tr -d '[:space:]')" ]; then
   exit 1
 fi
 
-printf '%s\n' "$input" | awk -v want="$slug_filter" '
+out="$(printf '%s\n' "$input" | awk -v want="$slug_filter" '
   function is_row(l) { return l ~ /^[-*][ \t]+\[[ xX]\][ \t]+/ }
   BEGIN { found = 0; nint = 0 }
   { gsub(/\r/, "") }   # CRLF tolerance, same as next-feature.sh
@@ -105,4 +106,12 @@ printf '%s\n' "$input" | awk -v want="$slug_filter" '
     printf "INTENT_VERDICT: %s\n", (components >= 2) ? "usable" : "too-thin"
     exit 0
   }
-'
+')" || exit 1
+# INTENT_BYTES: measured in bash (bytes, never awk chars — locale-independent) over the
+# dedented intent lines, and printed just above the verdict line.
+intent_lines="$(printf '%s\n' "$out" | grep -vE '^INTENT_' || true)"
+bytes=0
+[ -n "$intent_lines" ] && bytes=$(printf '%s' "$intent_lines" | wc -c | tr -d ' ')
+printf '%s\n' "$out" | grep -vE '^INTENT_VERDICT:'
+printf 'INTENT_BYTES: %s\n' "$bytes"
+printf '%s\n' "$out" | grep -E '^INTENT_VERDICT:'

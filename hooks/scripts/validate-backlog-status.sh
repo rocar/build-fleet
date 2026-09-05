@@ -65,4 +65,24 @@ if ! grep -Eq "^##[[:space:]]+Phase[[:space:]]+[0-9]+:" "$file_path"; then
   exit 2
 fi
 
+# 4. Intent byte cap (v0.9) — ONLY when the product PROGRESS carries INTENT_MAX_BYTES
+# (absent ⇒ no cap; existing products are untouched; 0 disables). An intent is a
+# sketch: what / boundary / non-goals in 1–3 lines. The tap pilot's intents grew to
+# 2.5 KB each and seeded 500 KB specs. Measured by the shared extractor so this hook
+# and /build-fleet:new-feature can never disagree on what an intent is.
+max_bytes=$(read_product_field INTENT_MAX_BYTES)
+case "$max_bytes" in ''|*[!0-9]*|0) exit 0 ;; esac
+extractor="$DIR/../../scripts/intent-block.sh"
+[ -f "$extractor" ] || exit 0
+over=""
+for slug in $({ grep -E '^[-*][[:space:]]+\[[ xX]\][[:space:]]+[A-Za-z0-9._-]+' "$file_path" || true; } | sed -E 's/^[-*][[:space:]]+\[[ xX]\][[:space:]]+([A-Za-z0-9._-]+).*/\1/'); do
+  bytes=$({ bash "$extractor" --slug "$slug" "$file_path" 2>/dev/null || true; } | { grep -m1 '^INTENT_BYTES:' || true; } | sed -E 's/^INTENT_BYTES:[[:space:]]*//')
+  case "$bytes" in ''|*[!0-9]*) continue ;; esac
+  [ "$bytes" -gt "$max_bytes" ] && over="${over}${over:+, }${slug} (${bytes} bytes)"
+done
+if [ -n "$over" ]; then
+  echo "build-fleet: _product/backlog.md intent block(s) exceed INTENT_MAX_BYTES=${max_bytes}: ${over}. An intent is a 1–3 line sketch (what / scope boundary / non-goals) — behaviour, interfaces and criteria belong in the feature spec. Cut the intent; do not raise the cap to land the write." >&2
+  exit 2
+fi
+
 exit 0

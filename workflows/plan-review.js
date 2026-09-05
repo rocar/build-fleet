@@ -96,6 +96,17 @@ function normalizeRoles(raw) {
     return { roles: null, error: "roles: need at least 2 distinct roles so the plan is interrogated from more than one lens" };
   return { roles: seen, error: null };
 }
+
+// v0.9: a finding may propose a SPLIT of an over-scoped feature. Rendered as its own
+// indented line so /build-fleet:plan-finalize can grep it:  "  split-into: a, b, c".
+// Returns null when the finding carries no usable split_into list.
+function renderSplitLine(finding) {
+  const list = Array.isArray(finding && finding.split_into)
+    ? finding.split_into.filter((x) => typeof x === "string" && x.trim().length > 0).map((x) => x.trim())
+    : [];
+  if (list.length === 0) return null;
+  return "  split-into: " + list.join(", ");
+}
 // --- LAYER1-PURE-HELPERS END ---
 
 // Validation failures are NEVER a bare throw: a throw would strand the
@@ -153,6 +164,7 @@ const INTERROGATION_SCHEMA = {
           severity: { type: "string", enum: ["blocker", "major", "minor"] },
           text: { type: "string" },
           artifact: { type: "string" }, // optional: vision.md | backlog.md | STACK.md | DECISIONS.md
+          split_into: { type: "array", items: { type: "string" } }, // optional (v0.9): proposed sibling slugs for an over-scoped feature
         },
       },
     },
@@ -170,6 +182,9 @@ const LENS = {
 - Is the backlog genuinely PHASED — each phase a shippable increment, not a dumping ground?
 - Are depends-on edges real and acyclic? Does phase 1 stand alone?
 - Is scope honest, or is this a roadmap that gets abandoned at feature 3? Flag over-ceremony.
+- WALKING SKELETON: is Phase 1 the smallest VERTICAL slice that produces the product's
+  primary artifact end to end? If the first demonstrable output arrives later than the
+  4th feature, that is a [blocker] of kind "gap" — name the slice that should come first.
 - INTENT: is each feature's intent line a clear, single-responsibility scope, or vague/
   bloated? Do sibling intents partition the product cleanly — no overlap, no gap?`,
   "architect":
@@ -188,7 +203,10 @@ const LENS = {
 - Are there cross-feature integration risks the phasing hides?
 - INTENT: is each intent concrete enough that a tester could see *that* it's testable
   (not *what* the tests are), or so vague that "done" is undefinable? Flag intents too
-  thin to anchor a spec — but never demand acceptance criteria here (that's the spec).`,
+  thin to anchor a spec — but never demand acceptance criteria here (that's the spec).
+- OVER-SCOPE: an intent that implies more than ~15 acceptance criteria will not converge
+  in review. Flag it as a [major] of kind "gap" and NAME the split in split_into
+  (two or more sibling slugs) — a split you cannot name is not a finding yet.`,
 };
 
 // ---------- Phase 1: fan-out interrogation ----------
@@ -324,6 +342,10 @@ Return the structured object you are required to produce:
               "major" (should be resolved or consciously accepted) |
               "minor" (worth noting; not ratification-blocking)
   - artifact (optional): which file the finding is about.
+  - split_into (optional): when a feature is over-scoped, the proposed sibling slugs
+    (kebab-case, 2+). The report renders it as its own "split-into:" line, and plain
+    `ratify` refuses while a proposed slug is neither a backlog row nor refused by a
+    product ADR citing this finding's id.
   If the plan is sound from your lens, return an empty findings array — that is a
   legitimate signal (you found nothing ratification-relevant), not a failure.`;
 }
@@ -339,6 +361,7 @@ function mergeFindings(reports) {
         raised_by: r.role,
         text: f.text,
         artifact: f.artifact || null,
+        split_into: Array.isArray(f.split_into) ? f.split_into : null,
       });
     }
   }
@@ -371,7 +394,9 @@ function buildEnvelope({ product, cycle, now, reports, allFindings, counts }) {
         lines.push(`### ${KIND_LABEL[kind]}`);
         for (const f of group) {
           const where = f.artifact ? ` (${f.artifact})` : "";
-          lines.push(`- [${f.severity}] ${f.text}${where}`);
+          lines.push(`- [${f.severity}] (${f.id}) ${f.text}${where}`);
+          const split = renderSplitLine(f);
+          if (split) lines.push(split);
         }
       }
     }

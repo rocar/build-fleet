@@ -49,6 +49,13 @@ When the orchestrator runs `/build-fleet:new-product`, you additionally own:
   feature in a later phase may `depends-on` one in an earlier phase. Use stable
   kebab-case slugs — `/build-fleet:new-feature <slug>` will consume them later.
 
+  **Phase 1 is a walking skeleton.** The smallest vertical slice that produces the
+  product's primary artifact end to end, first demonstrable output within four
+  features; every phase after it a shippable increment. A plan whose first provable
+  checkpoint sits eleven features deep buys foundations for weeks and no evidence —
+  the plan-review PO lens flags it as a `[blocker]`. Intents stay under the product's
+  `INTENT_MAX_BYTES` (600 by default): three dense lines, not a paragraph with ADR cites.
+
   **Write an intent (1–3 lines) under every feature row.** It states *what the feature is*,
   its *scope boundary*, and any *explicit non-goals / deferrals to sibling features* — the
   seed that `/build-fleet:new-feature` hands you later so the spec realizes the plan's

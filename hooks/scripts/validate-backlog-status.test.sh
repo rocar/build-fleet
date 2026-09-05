@@ -102,6 +102,18 @@ rc=0; ( cd "$p/sub" && printf '{"tool_input":{"file_path":".sdd/_product/backlog
 if [ "$rc" -eq 2 ]; then pass=$((pass+1)); printf 'ok   %-40s rc=2\n' "drifted-cwd-still-validates"
 else fail=$((fail+1)); printf 'FAIL %-40s want=2 got=%s\n' "drifted-cwd-still-validates" "$rc"; fi
 
+# --- v0.9: intent byte cap, only when the product PROGRESS carries INTENT_MAX_BYTES ---
+big=$(head -c 700 /dev/zero | tr '\0' 'y')
+capped_body() { printf 'PRODUCT: demo\nSTATUS: DRAFT\n\n## Phase 1: f — STATUS: pending\n- [ ] small   PENDING   depends-on: none\n      A tiny intent — with a boundary.\n- [ ] huge   PENDING   depends-on: none\n      %s\n' "$big"; }
+p=$(new_proj cap0); capped_body > "$p/.sdd/_product/backlog.md"
+check "intent-cap-absent-field-allows" "$p" ".sdd/_product/backlog.md" 0
+p=$(new_proj cap1); capped_body > "$p/.sdd/_product/backlog.md"; printf 'SDD_SCHEMA: 1\nPRODUCT: demo\nINTENT_MAX_BYTES: 600\n' > "$p/.sdd/_product/PROGRESS.md"
+check_err "intent-cap-over-blocks-names-slug" "$p" ".sdd/_product/backlog.md" 2 "huge"
+p=$(new_proj cap2); capped_body > "$p/.sdd/_product/backlog.md"; printf 'INTENT_MAX_BYTES: 0\n' > "$p/.sdd/_product/PROGRESS.md"
+check "intent-cap-zero-disables" "$p" ".sdd/_product/backlog.md" 0
+p=$(new_proj cap3); body DRAFT > "$p/.sdd/_product/backlog.md"; printf 'INTENT_MAX_BYTES: 600\n' > "$p/.sdd/_product/PROGRESS.md"
+check "intent-cap-under-allows" "$p" ".sdd/_product/backlog.md" 0
+
 echo "-----"
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]

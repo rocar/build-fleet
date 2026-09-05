@@ -98,6 +98,7 @@ abandoned — bias small.
      SIZE: <small | standard | large>
      PHASE: PLAN
      CYCLE: 0
+     INTENT_MAX_BYTES: 600
      UPDATED: <iso8601>
      ```
      `PHASE` seeds the outer PLAN state machine:
@@ -108,6 +109,9 @@ abandoned — bias small.
      `CYCLE: 0` is the plan-review cycle counter (mirrors the feature-tier `CYCLE`);
      `workflows/plan-review.js` bumps it and the scribe writes it back. Both fields
      must be present so the product-scope scribe can replace them in place.
+     `INTENT_MAX_BYTES` caps each backlog intent block (the `validate-backlog-status`
+     hook refuses a write over it; absent = no cap, so products scaffolded before
+     v0.9 are untouched). 600 bytes is three dense lines — a sketch, not a spec.
    - `.sdd/PRODUCT` — a one-line marker file containing the product slug, written
      at the `.sdd/` root (mirrors `.sdd/ACTIVE` for features). `resolve_product()`
      reads it; its presence flags the product tier as engaged.
@@ -126,8 +130,16 @@ abandoned — bias small.
 2. **Delegate vision + backlog to product-owner.** Spawn `build-fleet:product-owner`
    via the Task tool. Tell it: it owns `.sdd/_product/vision.md` and
    `.sdd/_product/backlog.md`; draft the vision from the description (size-gated
-   sections per above) and a **phased** feature backlog. Each backlog feature row
-   is `- [ ] <slug>   PENDING   depends-on: <none | other-slug>`, **followed by an
+   sections per above) and a **phased** feature backlog.
+
+   **Phase 1 is a walking skeleton (v0.9):** the smallest VERTICAL slice that produces
+   the product's primary artifact end to end — the thing a user would recognise as
+   "it works" — with the first demonstrable output within **four features**. Every later
+   phase is a shippable increment. Horizontal foundations (schema, auth, deploy) that
+   ship no artifact do not qualify as Phase 1; `/build-fleet:plan-review` flags a later
+   first output as a `[blocker]`. Keep each intent under `INTENT_MAX_BYTES` (600).
+
+   Each backlog feature row is `- [ ] <slug>   PENDING   depends-on: <none | other-slug>`, **followed by an
    indented 1-3 line intent** — what the feature is, its scope boundary,
    and explicit non-goals/deferrals to sibling features; a sketch the feature's spec
    later elaborates, **not** acceptance criteria/interfaces/behavior. This intent is
