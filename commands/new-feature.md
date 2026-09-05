@@ -1,7 +1,7 @@
 ---
 description: Scaffold a feature workspace and draft its spec
 argument-hint: "<feature-slug> [feature details]"
-allowed-tools: Read, Write, Edit, Task, AskUserQuestion, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*)
+allowed-tools: Read, Write, Edit, Task, AskUserQuestion, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/adr-index.sh":*), Bash(date:*)
 ---
 
 # /build-fleet:new-feature
@@ -29,7 +29,8 @@ spec STATUS contract.
 
 1. **Acquire the in-flight lock (atomic).** Run the shared acquirer — never
    check-then-write `.sdd/ACTIVE` by hand (the read-modify-write race is what
-   the script exists to close). Use the same iso8601 `now` you will stamp into
+   the script exists to close). Use the same iso8601 `now` (computed with
+   `date -u +%Y-%m-%dT%H:%M:%SZ` — never guessed) you will stamp into
    `UPDATED:` in step 3:
    ```bash
    bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh" acquire "<slug>" --owner "build-fleet:new-feature" --now "<iso8601 now>"
@@ -56,7 +57,7 @@ spec STATUS contract.
    - `IMPL_NOTES.md` — empty, header `# Implementation Notes — <slug>`.
    - `REVIEW.md` — empty, header `# Review Log — <slug>\n\nAppend-only.`
 
-3. **Initialize `PROGRESS.md`** with the schema from `sdd-protocol` (the classifier fills TIER + BUILD_MODE in step 7):
+3. **Initialize `PROGRESS.md`** with the schema from `sdd-protocol` (the classifier fills TIER + BUILD_MODE in step 7; stamp `UPDATED:` with `date -u +%Y-%m-%dT%H:%M:%SZ`):
 
    ```
    SDD_SCHEMA: 1
@@ -70,6 +71,8 @@ spec STATUS contract.
    REVIEW_ROLES: architect, qa, coder
    REVIEW_CYCLE_BUDGET: 3
    BUILD_CYCLE_BUDGET: 3
+   CYCLE_TOTAL: 0
+   CYCLE_TOTAL_MAX: 6
    UPDATED: <iso8601>
    ```
 
@@ -79,6 +82,10 @@ spec STATUS contract.
    `BUILD_CYCLE_BUDGET` (escalation budgets, 1–3, clamped to the 3-cycle ceiling). A
    command flag overrides these per run; the workflow validates them and falls back to
    these defaults if absent. Leaving them as-is reproduces the historical behavior.
+   `CYCLE_TOTAL` is the cumulative spec-review cycle count — written by the review
+   workflow's scribe and **never reset** by resolve-escalation or park;
+   `/build-fleet:review` refuses to dispatch at `CYCLE_TOTAL_MAX` (0 disables). Raising
+   the max is a deliberate, auditable edit.
 
 4. **Scaffold `.sdd/.gitignore`, if absent.** (`.sdd/ACTIVE` was already
    written by step 1's acquire — do not write it again.) If `.sdd/.gitignore`
@@ -156,9 +163,16 @@ spec STATUS contract.
 
 5b. **Inherit the product stack, if a product tier exists.** Check for
    `.sdd/_product/STACK.md`. If it exists:
-   - Read `.sdd/_product/STACK.md` and `.sdd/_product/DECISIONS.md`.
-   - Pass both verbatim into the classifier prompt (step 6) and the product-owner
-     delegation (step 8) as **inherited, read-only product context**.
+   - Read `.sdd/_product/STACK.md`. Build the **ADR index** (id + title + status, one
+     line per ADR — never the ADR bodies) with the shared script:
+     ```bash
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/adr-index.sh" .sdd/_product/DECISIONS.md
+     ```
+   - Pass the **binding stack verbatim** and the **ADR index** into the classifier
+     prompt (step 6) and the product-owner delegation (step 8) as **inherited,
+     read-only product context**. The PO `Read`s only the product ADRs its spec cites,
+     by id. (The tap pilot's product ADR log reached 203 KB; a PO handed all of it wrote
+     a 554 KB first draft.)
    - Instruct product-owner (and, if it raises a stack concern in review, the
      architect): the feature **inherits the *binding* product stack** — the
      `## Baseline (current)` section on a brownfield product, or the ratified
@@ -226,7 +240,13 @@ spec STATUS contract.
 7. **Write classifier verdict to PROGRESS.md.** Edit PROGRESS.md:
    - `TIER:` ← classifier's `tier` (`trivial`, `standard`, or `large`)
    - `BUILD_MODE:` ← classifier's `build_mode` (`standard` for trivial/standard, `deep-build` for large)
-   - `UPDATED:` ← current iso8601
+   - `UPDATED:` ← current iso8601 (`date -u +%Y-%m-%dT%H:%M:%SZ`)
+   - **Size budget (v0.9).** Add two lines by tier — `standard`: `SPEC_MAX_KB: 24` and
+     `AC_MAX: 15`; `large`: `SPEC_MAX_KB: 48` and `AC_MAX: 30`; `trivial`: neither.
+     The `cap-spec-size` (PreToolUse) and `validate-acceptance-count` (PostToolUse)
+     hooks enforce them; an absent field is no cap (grandfathering). Over budget the
+     rule is SPLIT the feature into backlog rows, never compress — raising a field is
+     a deliberate, auditable edit.
 
 7b. **Persist the skill manifest, if any.** The `skill-routing` skill is
    the convention. If the classifier's `skill_manifest` is **non-null and has at
@@ -257,10 +277,18 @@ spec STATUS contract.
    - **For `tier=standard` or `tier=large`:** ask for a complete first-pass `spec.md` (STATUS=DRAFT) and `acceptance.md`
      following the `sdd-spec-template` skill, with PO's self-review checklist.
 
+   **Size budget (both non-trivial tiers).** Tell the PO its budget from PROGRESS.md —
+   `SPEC_MAX_KB` for `spec.md` and `AC_MAX` distinct criteria for `acceptance.md` — that
+   hooks refuse writes over it, and that a feature which cannot fit is a SPLIT signal:
+   name the proposed sibling rows in `## Self-review notes` and draft the smaller feature.
+   Never compress rationale to fit. Draft to the budget from the first line: the first
+   draft sets the review surface.
+
    **Inherited product stack (both tiers — from step 5b).** If
-   `.sdd/_product/STACK.md` exists, **prepend to the PO prompt**, verbatim and
-   labeled "inherited, read-only product context": the **binding** stack and the
-   product `DECISIONS.md`. The binding stack is everything in STACK.md NOT marked
+   `.sdd/_product/STACK.md` exists, **prepend to the PO prompt**, labeled
+   "inherited, read-only product context": the **binding** stack verbatim and the
+   **ADR index** (ids + titles only; instruct the PO to `Read` a product ADR only
+   when the spec cites it). The binding stack is everything in STACK.md NOT marked
    provisional (a `## Forward direction (PROVISIONAL — unreviewed)` section, or
    per-line `PROVISIONAL` tags); if nothing is marked provisional, the whole file
    binds (greenfield, or a fully-adopted brownfield). Instruct PO to draft the spec
