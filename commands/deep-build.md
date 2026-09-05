@@ -1,7 +1,7 @@
 ---
 description: Fan out parallel coders over a planned file partition
 argument-hint: "[max_partitions] [--cycle-budget <1-3>]"
-allowed-tools: Read, Write, Edit, Workflow
+allowed-tools: Read, Write, Edit, Workflow, Bash(date:*)
 ---
 
 # /build-fleet:deep-build
@@ -66,7 +66,7 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
    - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/deep-build.js`
    - `args`: `{ "feature": "<slug>", "cycle": <new_cycle>, "max_partitions": <N>, "now": "<iso8601>", "run_id": "<run id from step 9>" }` — **plus** `"cycle_budget": <resolved int>` ONLY when resolved from a flag or `BUILD_CYCLE_BUDGET` in step 6. **Omit it when unset** so the workflow uses its default (omitting it reproduces the historical behavior exactly).
 
-   Supply `now` yourself (the script cannot call `Date`); the workflow refuses to run without `feature`, `cycle`, or `now`.
+   Compute `now` as `date -u +%Y-%m-%dT%H:%M:%SZ` (the script cannot call `Date`; never guess a timestamp — the pilot's guessed stamps were hours off); the workflow refuses to run without `feature`, `cycle`, or `now`.
 
 12. **Emit the launch line.** Once the Workflow tool returns:
 

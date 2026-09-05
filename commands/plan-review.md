@@ -1,7 +1,7 @@
 ---
 description: Interrogate the product plan from each role's lens
 argument-hint: "[--roles <r1,r2,...>]"
-allowed-tools: Read, Write, Edit, Workflow
+allowed-tools: Read, Write, Edit, Workflow, Bash(date:*)
 ---
 
 # /build-fleet:plan-review
@@ -107,7 +107,7 @@ workflows — there is no non-workflow fallback.
     - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/plan-review.js`
     - `args`: `{ "product": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step 8>" }` — **plus** `"roles": [<resolved roster>]` ONLY when resolved from a flag or `PLAN_REVIEW_ROLES` in step 7b. **Omit `roles` entirely when unset** so the workflow uses its default (omitting it reproduces the historical behavior exactly).
 
-    Supply `now` yourself (the script cannot call `Date`); the workflow refuses to
+    Compute `now` as `date -u +%Y-%m-%dT%H:%M:%SZ` (the script cannot call `Date`; never guess a timestamp — the pilot's guessed stamps were hours off); the workflow refuses to
     run without it. The tool is async-launched.
 
 11. **Emit the launch line (headless contract).** Once the tool returns:

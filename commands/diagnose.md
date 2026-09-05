@@ -1,7 +1,7 @@
 ---
 description: Adversarially confirm the bug's root-cause hypothesis
 argument-hint: "[--cycle-budget <1-3>]"
-allowed-tools: Read, Write, Edit, Workflow
+allowed-tools: Read, Write, Edit, Workflow, Bash(date:*)
 ---
 
 # /build-fleet:diagnose
@@ -80,7 +80,7 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
 8. **Pick the new cycle.** `new_cycle = CYCLE + 1`.
 
 9. **Compose the run id and drop the workflow-in-flight marker.** Compose a run id:
-   `diagnose-<slug>-c<new_cycle>-<iso8601 now>` (the same `now` you pass in step 11). Write
+   `diagnose-<slug>-c<new_cycle>-<iso8601 now>` (the same `now` you pass in step 11). Compute `now` as `date -u +%Y-%m-%dT%H:%M:%SZ` (the script cannot call `Date`; never guess a timestamp — the pilot's guessed stamps were hours off). Write
    `.sdd/<slug>/.workflow-in-flight` containing exactly that run id as its single line. The
    marker is **owned by this run**: the scribe releases it (empties it) in the workflow's final
    phase only if its content still matches the envelope's `run_id`. **Cleanup obligation:** if
