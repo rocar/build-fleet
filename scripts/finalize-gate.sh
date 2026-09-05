@@ -7,11 +7,12 @@
 # Rule, over the CURRENT cycle's blocks (the LAST block per roster role whose heading
 # is "## Cycle <CYCLE> — <role> —"):
 #   - every roster role has a block                        else missing-<role>
-#   - zero "- [blocker]" lines                             else open-blockers
+#   - zero UNREFUTED "- [blocker]" lines                    else open-blockers
 #   - every "- [major]" line's next line is one of
 #       "  refuted-by: …"            (closed by the survival vote)
 #       "  disposition: adr ADR-N"   (closed — ADR-N must exist in DECISIONS.md, else majors-without-adr)
 #       "  disposition: fix" / none  (OPEN                              → majors-open)
+#   A "  refuted-by: …" continuation closes a blocker or a major.
 #   `status:` lines are NOT evaluated (informational since v0.9).
 #
 # Usage: finalize-gate.sh <slug> [--roster a,b,c]
@@ -24,7 +25,7 @@ set -uo pipefail
 
 slug="${1:-}"
 [ -n "$slug" ] || { echo "usage: finalize-gate.sh <slug> [--roster a,b,c]" >&2; exit 1; }
-case "$slug" in */*|..|.) echo "finalize-gate.sh: bad slug '$slug'" >&2; exit 1 ;; esac
+case "$slug" in */*|..|.|-*) echo "finalize-gate.sh: bad slug '$slug'" >&2; exit 1 ;; esac
 shift
 roster_arg=""
 if [ "${1:-}" = "--roster" ]; then roster_arg="${2:-}"; fi
@@ -57,20 +58,22 @@ for role in $roles; do
   if [ -n "$next" ]; then end=$((start+next-1)); else end=$(wc -l < "$review" | tr -d ' '); fi
   block=$(sed -n "${start},${end}p" "$review")
 
-  # blockers
-  while IFS= read -r l; do
-    [ -n "$l" ] && add open_blockers "$l"
-  done <<< "$(printf '%s\n' "$block" | grep -E '^-[[:space:]]+\[blocker\]' || true)"
-
-  # majors: examine each major line + its following line
+  # blockers + majors: examine each line + its following line (a "refuted-by:"
+  # continuation closes either; a major's "disposition: adr ADR-N" closes it too)
   n=$(printf '%s\n' "$block" | wc -l | tr -d ' ')
   k=1
   while [ $k -le $n ]; do
     line=$(printf '%s\n' "$block" | sed -n "${k}p")
-    if printf '%s' "$line" | grep -qE '^-[[:space:]]+\[major\]'; then
+    nextl=$(printf '%s\n' "$block" | sed -n "$((k+1))p")
+    if printf '%s' "$line" | grep -qE '^-[[:space:]]+\[blocker\]'; then
+      if printf '%s' "$nextl" | grep -qE '^[[:space:]]+refuted-by:'; then
+        :
+      else
+        add open_blockers "$line"
+      fi
+    elif printf '%s' "$line" | grep -qE '^-[[:space:]]+\[major\]'; then
       id=$(printf '%s' "$line" | sed -nE 's/^-[[:space:]]+\[major\][[:space:]]+\(([^)]+)\).*/\1/p')
       [ -n "$id" ] || id="$line"
-      nextl=$(printf '%s\n' "$block" | sed -n "$((k+1))p")
       if printf '%s' "$nextl" | grep -qE '^[[:space:]]+refuted-by:'; then
         :
       elif printf '%s' "$nextl" | grep -qE '^[[:space:]]+disposition:[[:space:]]+adr[[:space:]]+ADR-0*[0-9]+'; then
@@ -90,6 +93,7 @@ done
 
 tojson() { if [ -z "$1" ]; then printf '[]'; else printf '%s\n' "$1" | jq -R . | jq -sc .; fi; }
 pass=true; [ -z "$reasons" ] || pass=false
-printf 'BUILD_FLEET_FINALIZE_GATE: {"feature":"%s","cycle":%s,"pass":%s,"reasons":%s,"open_blockers":%s,"open_majors":%s,"majors_without_adr":%s}\n' \
-  "$slug" "$cycle" "$pass" "$(tojson "$reasons")" "$(tojson "$open_blockers")" "$(tojson "$open_majors")" "$(tojson "$without_adr")"
+slug_json=$(jq -n --arg s "$slug" '$s')
+printf 'BUILD_FLEET_FINALIZE_GATE: {"feature":%s,"cycle":%s,"pass":%s,"reasons":%s,"open_blockers":%s,"open_majors":%s,"majors_without_adr":%s}\n' \
+  "$slug_json" "$cycle" "$pass" "$(tojson "$reasons")" "$(tojson "$open_blockers")" "$(tojson "$open_majors")" "$(tojson "$without_adr")"
 [ "$pass" = true ] && exit 0 || exit 2

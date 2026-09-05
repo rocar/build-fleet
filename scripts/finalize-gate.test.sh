@@ -60,6 +60,13 @@ p=$(new_proj blk 2); block "$p" 2 architect '- [blocker] (architect-c2-1) b'; bl
 run "$p"
 assert "blocker-refuses" "[ $rc -eq 2 ] && printf '%s' \"\$out\" | grep -q open-blockers"
 
+# --- pass: a refuted blocker is closed (agrees with review.js finalize_ready) ---
+p=$(new_proj refblk 2)
+block "$p" 2 architect '- [blocker] (architect-c2-1) refuted' '  refuted-by: coder — reason: long enough reason here for sure (cites spec.md § A)'
+block "$p" 2 qa; block "$p" 2 coder
+run "$p"
+assert "refuted-blocker-passes" "[ $rc -eq 0 ] && printf '%s' \"\$out\" | grep -q '\"open_blockers\":\\[\\]'"
+
 # --- refuse: a roster role has no current-cycle block (stale cycle only) ---
 p=$(new_proj miss 2); block "$p" 1 architect; block "$p" 2 qa; block "$p" 2 coder
 run "$p"
@@ -84,5 +91,9 @@ assert "roster-flag-two-roles-pass" "[ $rc -eq 0 ]"
 p="$work/noprog"; mkdir -p "$p/.sdd/feat"
 out=$( cd "$p" && CLAUDE_PROJECT_DIR="$p" bash "$GATE" feat 2>/dev/null ); rc=$?
 assert "no-progress-exit-1" "[ $rc -eq 1 ]"
+
+# --- bad input: slug shifted away, first arg looks like a flag → exit 1 ---
+out=$( bash "$GATE" --roster architect,qa 2>/dev/null ); rc=$?
+assert "dash-slug-exit-1" "[ $rc -eq 1 ]"
 
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]
