@@ -20,13 +20,13 @@ It never edits `.sdd/` itself; the product-owner writes `spec.md` / `acceptance.
 
 2. **Check phase.** Read `.sdd/<slug>/PROGRESS.md`. `PHASE` must be `REVIEW`; else refuse
    `{"command":"revise","code":2,"reason":"wrong-phase","phase":"<PHASE>"}`. If
-   `.sdd/<slug>/ESCALATION.md` exists, refuse `{"code":2,"reason":"escalation-present"}`
+   `.sdd/<slug>/ESCALATION.md` exists, refuse `{"command":"revise","code":2,"reason":"escalation-present"}`
    — a human resolves it first.
 
 3. **Extract the open items.** Read `CYCLE` and `REVIEW_ROLES` (default
    `architect, qa, coder`). In `.sdd/<slug>/REVIEW.md`, take the **last** block per
    roster role headed `## Cycle <CYCLE> — <role> —`. From those blocks collect:
-   - every `- [blocker] (<id>) <text>` line;
+   - every `- [blocker] (<id>) <text>` line whose next line is NOT an indented `refuted-by:` continuation (a refuted blocker is closed);
    - every `- [major] (<id>) <text>` line whose next line is `  disposition: fix`, or
      which has no `disposition:` / `refuted-by:` continuation line at all.
    Ignore `[minor]` lines, refuted items, and `disposition: adr ADR-N` majors — those
