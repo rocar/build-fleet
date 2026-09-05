@@ -32,4 +32,45 @@ check "product-tier-exempt" "$p" "$(payload Write .sdd/_product/spec.md "$big")"
 check "traversal-ignored" "$p" "$(payload Write .sdd/feat/../feat/spec.md "$big")" 0
 rc=0; ( cd "$p" && printf 'not json' | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" >/dev/null 2>&1 ); rc=$?
 if [ "$rc" -eq 2 ]; then pass=$((pass+1)); echo "ok   malformed-json-fails-closed"; else fail=$((fail+1)); echo "FAIL malformed-json-fails-closed got=$rc"; fi
+
+# Defect fix tests: leading-zero octal, multiline replace_all, NotebookEdit
+p=$(new_proj l1 010)
+check "leading-zero-cap-decimal-over" "$p" "$(payload Write .sdd/feat/spec.md "$(head -c 10500 /dev/zero | tr '\0' 'x')")" 2
+check "leading-zero-cap-decimal-under" "$p" "$(payload Write .sdd/feat/spec.md "$(head -c 9000 /dev/zero | tr '\0' 'x')")" 0
+p=$(new_proj l2 008)
+check "leading-zero-cap-008-no-crash" "$p" "$(payload Write .sdd/feat/spec.md "$(head -c 9000 /dev/zero | tr '\0' 'x')")" 2
+
+# Multiline replace_all: file is 1000 bytes with exactly 2 "foo\nbar" occurrences.
+# old="foo\nbar" (7 bytes), new="foo\nbar"+15x's (22 bytes), delta=15 bytes.
+# With 2 occurrences (correct count): 1000 + 15*2 = 1030 > 1024 → rc 2
+# With 1 occurrence (wrong count): 1000 + 15*1 = 1015 ≤ 1024 → rc 0
+# This test must fail before the fix (grep miscounts multiline) and pass after.
+p=$(new_proj m1 1)
+oldpat="foo
+bar"
+newpat="foo
+bar$(printf 'x%.0s' {1..15})"
+# Create file: 2 occurrences of "foo\nbar" + padding to reach 1000 bytes total
+# Each "foo\nbar" is 7 bytes, so 2 * 7 = 14 bytes; padding = 1000 - 14 = 986 bytes
+padding=$(head -c 986 /dev/zero | tr '\0' 'p')
+printf '%s\n%s\n%s' "$oldpat" "$oldpat" "$padding" > "$p/.sdd/feat/spec.md"
+# Adjust to exact 1000 bytes
+actual=$(wc -c < "$p/.sdd/feat/spec.md" | tr -d ' ')
+if [ "$actual" -ne 1000 ]; then
+  printf '%s' "$(cat "$p/.sdd/feat/spec.md"; head -c $((1000 - actual)) /dev/zero | tr '\0' 'p')" > "$p/.sdd/feat/spec.md"
+fi
+payload_multiline=$(jq -cn --arg p ".sdd/feat/spec.md" --arg o "$oldpat" --arg n "$newpat" --argjson ra true '{tool_name:"Edit",tool_input:{file_path:$p,old_string:$o,new_string:$n,replace_all:$ra}}')
+check "edit-replace-all-multiline-counts-once-per-occurrence" "$p" "$payload_multiline" 2
+
+# NotebookEdit on spec with cap present → rc 2
+p=$(new_proj nb1 1)
+payload_nb=$(jq -cn --arg p ".sdd/feat/spec.md" '{tool_name:"NotebookEdit",tool_input:{notebook_path:$p}}')
+check "notebookedit-on-spec-refuses" "$p" "$payload_nb" 2
+
+# NotebookEdit on non-spec file → rc 0
+p=$(new_proj nb2 1)
+mkdir -p "$p/notes"
+payload_nb_other=$(jq -cn --arg p "notes/x.ipynb" '{tool_name:"NotebookEdit",tool_input:{notebook_path:$p}}')
+check "notebookedit-elsewhere-ignored" "$p" "$payload_nb_other" 0
+
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]
