@@ -1,5 +1,5 @@
 {
-  "description": "build-fleet SDD gates: block ALL non-.sdd writes until the spec is FINALIZED (or, in the bug lane, all non-.sdd/non-tests writes until diagnosis.md is CONFIRMED + a reproducing test exists), guard the Bash escape hatch against write-to-source commands while source is locked, confine reviewers to .sdd/ during non-workflow REVIEW/CHANGE_REVIEW (workflow paths skip via .workflow-in-flight marker), validate spec STATUS + required sections, validate product backlog STATUS + structure, validate bug-lane diagnosis.md STATUS + required sections, require reviewer REVIEW.md entries on non-workflow paths, refuse Stop on failing tests while a feature is active (bounded: escalates to ESCALATION.md after 3 consecutive red stops), reap orphaned .workflow-in-flight markers on Stop.",
+  "description": "build-fleet SDD gates: block ALL non-.sdd writes until the spec is FINALIZED (or, in the bug lane, all non-.sdd/non-tests writes until diagnosis.md is CONFIRMED + a reproducing test exists), guard the Bash escape hatch against write-to-source commands while source is locked, confine reviewers to .sdd/ during non-workflow REVIEW/CHANGE_REVIEW (workflow paths skip via .workflow-in-flight marker), validate spec STATUS + required sections, validate product backlog STATUS + structure, validate bug-lane diagnosis.md STATUS + required sections, require reviewer REVIEW.md entries on non-workflow paths, refuse Stop on failing tests while a feature is active (bounded: escalates to ESCALATION.md after 3 consecutive red stops), reap orphaned .workflow-in-flight markers on Stop, cap spec.md/acceptance.md bytes at SPEC_MAX_KB and distinct acceptance criteria at AC_MAX (absent field = no cap; over budget means split the feature)",
   "hooks": {
     "PreToolUse": [
       {
@@ -16,6 +16,10 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/require-reproducing-test.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/cap-spec-size.sh\""
           }
         ]
       },
@@ -44,6 +48,10 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-diagnosis-status.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-acceptance-count.sh\""
           }
         ]
       }
