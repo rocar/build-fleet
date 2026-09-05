@@ -130,6 +130,14 @@ Minor UX wart: a user sees "clean → finalize" then finalize refuses on the
 majors. Acceptable for v0.2; candidate for a verdict-includes-majors refinement
 in a later pass.
 
+**2026-09-05 — v0.9 resolves the "verdict vs. majors" observation:**
+`finalize_ready` is computed in-workflow (zero open blockers AND zero
+`fix`-dispositioned majors) and `scripts/finalize-gate.sh` enforces the same rule
+deterministically at `/build-fleet:finalize` — a `clean` verdict with
+`finalize_ready: false` now routes to `/build-fleet:revise`, not straight to
+`/build-fleet:finalize`, so the "clean → finalize" recommendation the gate then
+refused cannot happen anymore.
+
 ### Phase 6 deep-build workflow — LOGIC validated; scribe-apply is harness-dependent
 
 Ran `workflows/deep-build.js` against a live `smoke-build` feature (STATUS=FINALIZED,
@@ -501,6 +509,7 @@ Every workflow's *final phase* produces this envelope and passes it to the scrib
   "phase": "REVIEW",                  // string — PROGRESS.md PHASE value at run-start
   "cycle": 2,                         // int — CYCLE value AFTER this run's increment
   "verdict": "clean|revise|escalate", // string — terminal outcome of survival vote
+  "finalize_ready": false,             // bool — v0.9. zero open blockers AND zero fix-dispositioned majors (the finalize gate's rule)
   "surviving_concerns": [             // array — concerns that survived cross-examination
     {
       "id": "arch-1",                 // string — stable within-run ID
@@ -515,17 +524,20 @@ Every workflow's *final phase* produces this envelope and passes it to the scrib
   "review_entries": [                 // array — verbatim REVIEW.md blocks scribe appends
     "## Cycle 2 — architect — 2026-05-30T...\n- [blocker] ...\nstatus: concerns-raised"
   ],
+  "decisions_appendix": null,         // string | null — v0.9. ADR blocks the scribe appends verbatim to the workspace DECISIONS.md (mirrors impl_notes_appendix)
   "state_delta": {                    // object — fields scribe writes to PROGRESS.md
     "PHASE": "REVIEW",
     "CYCLE": 2,
+    "CYCLE_TOTAL": 3,
+    "LAST_REVIEW_OUTPUT_TOKENS": 41200,
     "UPDATED": "2026-05-30T..."
   },
   "next_legal_commands": ["/build-fleet:finalize"],  // string[] — caller UX hint
-  "estimated_cost_actual": {          // object — actual vs declared ceiling
+  "estimated_cost_actual": {          // object — actual vs declared ceiling; input_tokens may be null (runtime exposes output only)
     "input_tokens": 118432,
     "output_tokens": 27991
   },
-  "escalation_payload": null          // object | null — populated only if verdict=escalate
+  "escalation_payload": null          // object | null — populated only if verdict=escalate; carries open_majors alongside the unresolved blockers
 }
 ```
 
@@ -566,7 +578,9 @@ plan-review) returns:
 ```jsonc
 {
   "verdict": "clean|revise|escalate|needs-iteration|confirmed|refuted|interrogated|incomplete|invalid-args",
-                                      // "incomplete"  — a transient agent fault (missing/unusable payload):
+                                      // "incomplete"  — a transient agent fault (missing/unusable payload,
+                                      //                 or v0.9 "disposition-incomplete": an adr disposition
+                                      //                 with an empty body, a duplicate id, or a missing id):
                                       //                 PHASE/CYCLE untouched, marker cleaned via a minimal
                                       //                 cleanup envelope, re-run is safe. NOT an escalation.
                                       // "invalid-args" — the dispatch args were malformed; nothing ran
@@ -574,6 +588,15 @@ plan-review) returns:
   "cycles_remaining": 1,              // int — present on bounded workflows (e.g. deep-build
                                       //       needs-iteration) so headless orchestrators cannot
                                       //       loop a workflow past its 3-cycle budget.
+  "finalize_ready": false,            // bool — v0.9 (review workflow). Zero open blockers AND zero
+                                      //        fix-dispositioned majors — mirrors the finalize gate's rule.
+  "open_majors": [],                  // string[] — v0.9 (review workflow). Ids of surviving majors still
+                                      //            dispositioned `fix` (open) after the disposition leg.
+  "adrs_written": 0,                  // int — v0.9 (review workflow). Count of `adr`-dispositioned majors
+                                      //       appended to DECISIONS.md this run.
+  "output_tokens": 27991,             // int | null — v0.9. Actual output tokens for this run (the runtime
+                                      //              exposes output only); feeds LAST_REVIEW_OUTPUT_TOKENS.
+  "cycle_total": 3,                   // int — v0.9 (review workflow). CYCLE_TOTAL value AFTER this run.
   "scribe_apply": "applied|failed",   // "failed" = the scribe could not write state even after one
                                       //            retry: REVIEW.md/IMPL_NOTES.md/PROGRESS.md did NOT
                                       //            land and the marker may remain. The reader MUST

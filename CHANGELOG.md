@@ -14,6 +14,45 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.9.0] — 2026-09-05
+
+The **convergent review** release. The REVIEW loop is now bounded and monotone: a
+rubric-only finalize gate, delta review from cycle 2, in-workflow ADR disposition of
+majors, read-only reviewers, bounded review inputs, spec/criteria/cumulative-cycle caps,
+a real clock in the dispatching commands, and walking-skeleton planning. Design:
+`docs/history/2026-09-02-convergent-review.md` (grounded in the tap pilot, where a
+test-fixture feature took ~7 review cycles and one cycle cost ~866k tokens).
+
+### Added
+- **`agents/reviewer.md`** — the read-only reviewer every `review.js` leg runs as (Read/Grep/Glob; lens injected by the workflow). Ends double-written REVIEW.md blocks, fabricated timestamps and ungated writes.
+- **Disposition leg** in `workflows/review.js` — surviving majors become `disposition: adr ADR-N` (ADR drafted, scribe-written via the new envelope field `decisions_appendix`) or `disposition: fix`. Finding ids are stable (`<role>-c<cycle>-<n>`). Enforced in code, not only asked for in the prompt: on a delta cycle (≥ 2) any major whose id originates at cycle ≥ 2 is demoted to minor with a prefixed explanatory text; a disposition with an empty ADR body, a duplicate id, or a missing id fails the run as `incomplete` (`disposition-incomplete`) with nothing written.
+- **`finalize_ready`** in the review envelope/return, and **`scripts/finalize-gate.sh`** — the deterministic gate `/build-fleet:finalize` now calls (harness: `finalize-gate.test.sh`).
+- **`/build-fleet:revise`** — dispatches the PO with exactly the current cycle's blockers + `fix` majors and the size budget.
+- **`scripts/review-rotate.sh`** — positional rotation of REVIEW.md into `REVIEW-archive.md` at dispatch; **`scripts/adr-index.sh`** — ADR id/title index and `--next`.
+- **Hooks `cap-spec-size` (PreToolUse) and `validate-acceptance-count` (PostToolUse)** — `SPEC_MAX_KB` / `AC_MAX`, scaffolded by tier (standard 24 KB / 15, large 48 KB / 30); absent = no cap; refusal says split.
+- **`CYCLE_TOTAL` / `CYCLE_TOTAL_MAX`** — cumulative, never reset; `/build-fleet:review` refuses `cycle-total-exhausted` before dispatch when `CYCLE_TOTAL_MAX` is not `0` and `CYCLE_TOTAL >= CYCLE_TOTAL_MAX`. **`LAST_REVIEW_OUTPUT_TOKENS`** recorded from the runtime budget; `cost-runaway` refusal (override with `--override-cost`).
+- **Planning:** walking-skeleton rule for Phase 1; plan-review lenses flag a late first output (`[blocker]`) and over-scoped intents with a named `split_into`; `plan-finalize ratify` refuses `split-unresolved`; `INTENT_MAX_BYTES` (600) intent cap via `validate-backlog-status`; `intent-block.sh` emits `INTENT_BYTES`.
+- Tests: `workflow-review-convergence.test.sh`, `lens-drift.test.sh`, `review-rotate.test.sh`, `adr-index.test.sh`, `finalize-gate.test.sh`, `cap-spec-size.test.sh`, `validate-acceptance-count.test.sh`; new cases in the stop-tests, intent-block, backlog-status and plan-review-config harnesses.
+
+### Changed
+- **Finalize gate is rubric-only:** zero open blockers AND every major fixed-or-ADR'd. The "every block `status: approved`" requirement is gone; `status:` is informational. `not-approved` is no longer emitted (kept in the grammar). A `refuted-by:` continuation (the survival vote) closes a blocker or a major — refuted findings never gate; absent that, a blocker is closed only when a later cycle does not re-raise it.
+- **Delta review:** from cycle 2 reviewers verify closure by id and may raise new findings at blocker severity only. Escalation fires on the exhausting cycle when blockers **or** `fix` majors remain (ESCALATION.md lists both).
+- **Product-owner context diet:** `new-feature` passes the binding stack + the ADR index, not the whole product DECISIONS.md, and states the size budget.
+- Dispatching commands compute `now` with `date -u` (`Bash(date:*)`); the scribe appends with anchored Edits and appends absent `state_delta` keys.
+- Role agents' `## Review lens` sections are mirrored in `review.js` (`lens-drift.test.sh`); their REVIEW.md append instructions are scoped to non-workflow paths; descriptions refreshed.
+
+### Fixed
+- Workflow reviewers were never tool-restricted (the runtime's `agent()` has no `tools` option), contrary to the protocol text — resolved by the reviewer agent.
+- Guessed timestamps in `.sdd/` (commands had no clock).
+- The `clean → finalize` recommendation that the gate then refused.
+- `scripts/workflow-determinism-lint.sh` — the meta check piped a large stripped source into `grep -q`; under `pipefail` printf died of SIGPIPE and a valid workflow read as `missing-meta` ~7% of runs; now reads to EOF (harness case: a ~400 KB valid workflow linted 25×).
+- `cap-spec-size` hardening: leading-zero caps parsed as decimal, newline-safe `replace_all` occurrence counting, and `NotebookEdit` on a spec/acceptance file refuses (fails closed).
+- The finalize gate and `/build-fleet:revise` treat a refuted blocker as closed.
+- The scribe anchors appends on the final BLOCK (headings are unique), not the final line.
+- Ride-along fixes since 0.8.0 (unreleased on `main`): distinct `## Change-Cycle N` heading; bug-lane source unlock at `STATUS=FIXED`; plan-review `LENS` TDZ; stop-tests prefers the project `.venv`; stop-tests stands down in the BUILD tests-first window (now with a harness case).
+
+**Compatibility.** `SDD_SCHEMA` stays `1`. Additive PROGRESS fields (`CYCLE_TOTAL`, `CYCLE_TOTAL_MAX`, `SPEC_MAX_KB`, `AC_MAX`, `LAST_REVIEW_OUTPUT_TOKENS`; product `INTENT_MAX_BYTES`) — all read-with-default; a new optional workspace file `REVIEW-archive.md`; envelope fields `finalize_ready` and `decisions_appendix`; REVIEW.md lines gain `(id)` and `disposition:` (old blocks still parse — an undispositioned legacy major reads as open). Signal grammar: new `BUILD_FLEET_REVIEW_ROTATED`, `BUILD_FLEET_FINALIZE_GATE`, `BUILD_FLEET_REVISE_DISPATCHED`; new refusal reasons `cycle-total-exhausted`, `cost-runaway`, `majors-open`, `nothing-to-revise`, `split-unresolved`; `not-approved` no longer emitted. In-flight 0.8.0 features continue: their next `/build-fleet:review` rotates, dispositions and stamps `CYCLE_TOTAL` from `CYCLE`.
+
 ## [0.8.0] — 2026-06-20
 
 `/build-fleet:new-feature` gains a richer feature-detail intake: an optional inline detail

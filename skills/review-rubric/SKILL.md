@@ -10,15 +10,11 @@ coder in `.sdd/<feature>/REVIEW.md`. The `/build-fleet:finalize` and
 `/build-fleet:handoff` gates parse the severity tags to decide whether a
 phase may advance.
 
-The same table appears verbatim in `architect.md` and `qa.md` prompt bodies —
-a deliberate duplication. In workflow REVIEW the workflow preloads this skill
-into reviewer subagents via `AgentDefinition.skills: ["review-rubric"]`, so this
-skill is the load-bearing source and the in-body copies are belt-and-suspenders.
-On non-workflow paths (CHANGE_REVIEW, direct invocation of a role agent, and
-agent-team mode — where per-agent frontmatter `skills` are ignored) the in-body
-copies are the load-bearing ones. **Precedence:** if the copies ever disagree,
-this skill's table is canonical; `scripts/rubric-drift.test.sh` fails the suite
-on any drift.
+The same table appears verbatim in `architect.md`, `qa.md` and `reviewer.md` prompt
+bodies — a deliberate duplication. Nothing preloads a skill into a workflow agent
+(the runtime's `agent()` has no skills option), so the in-body copies are the
+load-bearing ones on every path; this skill is canonical and
+`scripts/rubric-drift.test.sh` fails the suite on any drift.
 
 ## The vocabulary
 
@@ -36,9 +32,10 @@ literal substring search.
 
 ```markdown
 ## Cycle <N> — <role> — <iso8601>
-- [blocker] <one-line concern; expand below if needed>
-- [major]   <concern>
-- [minor]   <concern>
+- [blocker] (<role>-c<N>-1) <one-line concern; expand below if needed>
+- [major] (<role>-c<M>-2) <concern>
+  disposition: fix | adr ADR-<K>
+- [minor] (<role>-c<N>-3) <concern>
 status: concerns-raised | approved
 ```
 
@@ -75,6 +72,29 @@ don't. Pick from the three above. Three is enough.
 A `[major]` that gets quietly dropped between cycles without a fix or an
 ADR is a finding the next reviewer should re-raise — same content,
 elevated to `[blocker]` for lack of audit trail.
+
+## Delta review and disposition (v0.9)
+
+- **Ids are stable.** `<role>-c<cycle>-<n>`; a re-raised finding keeps its original id.
+- **Cycle 1 is the only full review.** From cycle 2 a reviewer verifies closure of its
+  own prior `fix` findings and blockers, and may raise new findings at `[blocker]`
+  severity only (plus advisory minors). A new `[major]` on a delta cycle is not allowed:
+  the open-major set only shrinks. This is enforced in code, not only asked for in the
+  prompt — the workflow demotes any surviving major whose id originates at cycle ≥ 2 to
+  `[minor]` (with a prefixed explanatory text) before the survival vote runs.
+- **Every surviving major is dispositioned once**, in the workflow, by the architect:
+  `disposition: adr ADR-N` (a design trade-off — accepted, closed, ADR written by the
+  scribe) or `disposition: fix` (a gap the PO must close in the spec). Rule of thumb: if
+  closing it would make the spec longer without making the system more correct, it is
+  an `adr`; if a test could fail because of it, it is a `fix`. A disposition with an
+  empty ADR body, a duplicate id, or a missing id makes the whole run `incomplete`
+  (`disposition-incomplete`) — nothing is written, and the run must be retried.
+- **An accepted trade-off is contested only as a `[blocker]` against the ADR by id.**
+- **A `refuted-by:` continuation closes a blocker or a major** — the survival vote
+  refutes any severity; a blocker with no such continuation stays open only until a
+  later cycle simply does not re-raise it.
+- **`status:` is informational.** The finalize gate reads `[blocker]` lines and
+  `disposition:` / `refuted-by:` lines (`scripts/finalize-gate.sh`).
 
 ## Hard rules
 

@@ -141,7 +141,7 @@ its workflows are the same as greenfield.
 
 ## What you get
 
-**Seven role subagents.** The **main session is the orchestrator** — it routes,
+**Eight role subagents.** The **main session is the orchestrator** — it routes,
 gates, and writes `.sdd/` state, but never writes source itself.
 
 | Role | Subagent | Writes | Model |
@@ -152,13 +152,16 @@ gates, and writes `.sdd/` state, but never writes source itself.
 | QA | `build-fleet:qa` | `tests/`, `TEST_PLAN.md` | sonnet |
 | DevOps | `build-fleet:devops` | CI/CD, release notes | sonnet |
 | Classifier | `build-fleet:classifier` | *(read-only — emits a routing verdict + skill manifest)* | sonnet |
+| Reviewer | `build-fleet:reviewer` | *(read-only — the workflow-only reviewer for `/build-fleet:review`'s fan-out, cross-examination and disposition legs; Read/Grep/Glob, lens injected per role)* | sonnet |
 | Scribe | `build-fleet:scribe` | applies workflow state deltas to `.sdd/` (feature or product scope) | sonnet |
 
 The **classifier** and **scribe** are infrastructure agents. The classifier sizes
 incoming work and routes domain skills; the scribe is the canonical writer for
 state mutations produced by dynamic workflows (workflow scripts cannot touch the
 filesystem, so they hand a structured envelope to the scribe — which now targets
-either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field).
+either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field). The
+**reviewer** is likewise workflow-only infrastructure — dispatched exclusively by
+`workflows/review.js`, never directly.
 
 **Four dynamic workflows** under `workflows/`: `review.js` (feature REVIEW),
 `plan-review.js` (product PLAN_REVIEW), `deep-build.js` (fan-out BUILD), and
@@ -167,7 +170,7 @@ Plus deterministic shared scripts under `scripts/` (the backlog resolver, the
 intent-block extractor, the product-memory splice, the status snapshot, the
 atomic ACTIVE-lock acquirer, plus the workflow determinism-lint and pinner that
 govern the generate-then-pin lane — each with its own test harness), seven craft
-skills, ten gate-enforcing hooks, and the shared memory layer under `.sdd/`.
+skills, twelve gate-enforcing hooks, and the shared memory layer under `.sdd/`.
 
 ---
 
@@ -205,7 +208,7 @@ marketplace.
 /plugin install build-fleet
 ```
 
-Then verify the fleet loaded — `/agents` should list all seven `build-fleet:*`
+Then verify the fleet loaded — `/agents` should list all eight `build-fleet:*`
 agents.
 
 **Transport note.** The `owner/repo` shorthand (`/plugin marketplace add
@@ -427,11 +430,12 @@ advisory; it never changes the tier or build mode.
 Four phases run as Claude Code **dynamic workflows** (JS scripts under
 `workflows/` executed by the Workflow runtime), not direct Task fan-outs:
 
-- **`/build-fleet:review` → `workflows/review.js`.** Fan-out reviewers
-  (architect/qa/coder) → adversarial **cross-examination** → **survival vote** →
-  scribe applies the verdict. A concern survives only if it is *not* refuted by a
-  different-role reviewer citing a specific `spec.md`/`acceptance.md` section. This
-  kills plausible-but-unfounded concerns before they block finalize.
+- **`/build-fleet:review` → `workflows/review.js`.** Fan-out read-only reviewers
+  (architect/qa/coder lenses; cycle ≥ 2 is a delta review) → adversarial
+  **cross-examination** → **survival vote** → architect **disposition** of surviving
+  majors (`adr` or `fix`) → scribe applies the verdict, `finalize_ready` and the
+  ADRs. Between cycles `/build-fleet:revise` hands the PO exactly the open items;
+  REVIEW.md is rotated to the previous cycle at dispatch.
 - **`/build-fleet:plan-review` → `workflows/plan-review.js`.** The product
   counterpart — product-owner/architect/qa **interrogate** the plan. **Forked, not
   parameterized:** no cross-examination, no survival vote, no auto-escalation. It
@@ -544,6 +548,7 @@ execution.
 | `/build-fleet:new-feature <slug> [details]` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` + `acceptance.md`. Takes the feature description from an optional inline `[details]` arg (wins), else the conversation, else a backlog intent; asks in a structured clarify loop if none is usable. Inherits the product stack if present. |
 | `/build-fleet:dispatch` | — | Re-classifies the active feature (query-only). |
 | `/build-fleet:review` | REVIEW | Runs the adversarial review workflow. (Skipped for trivial.) Accepts `--roles` / `--cycle-budget` (else `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET`). |
+| `/build-fleet:revise` | REVIEW | Hand the product-owner exactly the open review items to close. |
 | `/build-fleet:finalize` | FINALIZE → BUILD | Gate only: refuses on open blockers; on pass flips the spec to FINALIZED. Idempotent — re-running is a safe no-op. |
 | `/build-fleet:build` | BUILD | Orchestrates BUILD: qa drafts the failing suite first, then coder implements (routes to the deep-build workflow when `BUILD_MODE=deep-build`). |
 | `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by `/build-fleet:build`); also the iteration entry point. Accepts `--cycle-budget` (else `BUILD_CYCLE_BUDGET`). |
@@ -674,6 +679,7 @@ directory — never inside the plugin:
     TEST_PLAN.md         # qa
     IMPL_NOTES.md        # coder
     REVIEW.md            # append-only review log (every cycle)
+    REVIEW-archive.md    # scripts/review-rotate.sh — cycles older than the previous one
     PROGRESS.md          # orchestrator — phase, TIER, BUILD_MODE, handoff state
     ESCALATION.md        # only if review cycles exhausted
     .workflow-in-flight  # transient marker while a workflow runs

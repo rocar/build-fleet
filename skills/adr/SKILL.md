@@ -30,6 +30,10 @@ original.
   recorded.
 - Any load-bearing stack choice made at `/build-fleet:new-product` or a
   product-tier revision (product scope — the *why* behind a STACK.md entry).
+- A review `[major]` dispositioned `adr` by the review workflow's architect leg —
+  the scribe appends the drafted ADR to the **feature** DECISIONS.md
+  (`decisions_appendix`); the REVIEW.md line cites it as `disposition: adr ADR-N`.
+  Disposition ADRs are always feature-scoped.
 
 If a decision was made silently, it isn't a decision yet — it's a future
 `[blocker]` waiting to be found.
@@ -47,6 +51,7 @@ per-product. When a feature document cites a product ADR, qualify it
 - **Date:** <iso8601 date>
 - **Status:** accepted | PROVISIONAL | superseded by ADR-NNN | deprecated
 - **Cycle:** <CYCLE or CHANGE_CYCLE in which the decision was made — feature scope only; omit for product ADRs>
+- **Dispositions:** <finding id> (raised by <role>) — accepted as a trade-off at review cycle <N>   ← feature scope, review-workflow ADRs only
 
 ### Context
 What forced the decision. What review concern surfaced it, or what

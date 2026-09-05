@@ -15,14 +15,14 @@ fleet runs; this file only covers how to work on the plugin itself.
 
 ```
 .claude-plugin/plugin.json    # manifest (+ marketplace.json)
-agents/                       # 7 role subagents: product-owner, architect, coder,
-                              #   qa, devops, classifier, scribe
-commands/                     # 22 slash commands (/build-fleet:*)
+agents/                       # 8 role subagents: product-owner, architect, coder,
+                              #   qa, devops, classifier, reviewer, scribe
+commands/                     # 23 slash commands (/build-fleet:*)
 skills/                       # 7 skills: sdd-protocol (+references/), adr,
                               #   review-rubric, sdd-spec-template,
                               #   sdd-diagnosis-template, test-plan, skill-routing
 hooks/hooks.json              # hook registration (the ONLY registration point)
-hooks/scripts/                # 10 gate scripts + their *.test.sh harnesses
+hooks/scripts/                # 12 gate scripts + their *.test.sh harnesses
 workflows/                    # 4 dynamic workflows: review.js, deep-build.js,
                               #   diagnose.js, plan-review.js
 scripts/                      # deterministic helpers (next-feature, intent-block,
@@ -68,14 +68,16 @@ bash scripts/run-tests.sh        # every hook + script suite, then the smoke tes
   version).
 - **A lane that touches an agent's body must touch its description.** The
   description is the delegation surface; a stale one misroutes work.
-- **Severity rubric is triple-maintained on purpose.** The blocker/major/minor
+- **Severity rubric is quadruple-maintained on purpose.** The blocker/major/minor
   table lives canonically in `skills/review-rubric/SKILL.md` and is mirrored
-  verbatim in `agents/architect.md` and `agents/qa.md`. The mirrors are
-  load-bearing: when a role runs as an agent-team teammate, its frontmatter
-  `skills:` are **ignored** (loaded from project/user settings instead), so
-  review rules that must survive team mode live in the prompt body, not only in
-  a skill. Never "deduplicate" the copies; `scripts/rubric-drift.test.sh` fails
-  the suite if they drift. Run it after any `agents/` edit.
+  verbatim in `agents/architect.md`, `agents/qa.md`, and `agents/reviewer.md`. The
+  mirrors are load-bearing: when a role runs as an agent-team teammate, its
+  frontmatter `skills:` are **ignored** (loaded from project/user settings
+  instead), and nothing preloads a skill into a workflow agent either (the
+  runtime's `agent()` has no skills option) — so review rules that must survive
+  team mode AND workflow mode live in the prompt body, not only in a skill. Never
+  "deduplicate" the copies; `scripts/rubric-drift.test.sh` fails the suite if they
+  drift. Run it after any `agents/` edit.
 - **Hooks fail closed.** Gate scripts anchor at `CLAUDE_PROJECT_DIR`, reject
   `..` traversal, require jq while an item is active, and trap unexpected errors
   to exit 2. Deliberate allows are explicit `exit 0`. Keep it that way.

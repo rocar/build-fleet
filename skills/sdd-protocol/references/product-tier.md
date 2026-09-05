@@ -14,7 +14,7 @@ product tier is **purely additive**; its absence changes nothing.
     backlog.md           # product-owner. Phased feature list + completion markers + per-row intents.
     STACK.md             # architect. The stack-of-record — inherited READ-ONLY by every feature.
     DECISIONS.md         # architect. Append-only product ADR log (the *why* behind STACK.md).
-    PROGRESS.md          # orchestrator. PRODUCT / SIZE / PHASE / CYCLE / UPDATED.
+    PROGRESS.md          # orchestrator. PRODUCT / SIZE / PHASE / CYCLE / UPDATED / optional INTENT_MAX_BYTES.
     REVIEW.md            # scribe (append-only). Interrogation reports from plan-review.
     ESCALATION.md        # human-written only. Halts the plan until resolved.
   PRODUCT                # one-line product slug marker (mirrors ACTIVE). resolve_product() reads it.
@@ -86,6 +86,12 @@ writing* (re-run), and the only thing that writes `_product/ESCALATION.md` is a 
 Self-interrogation by the artifact's author (PO interrogating its own vision) is
 fine — the act surfaces risk, it does not vote.
 
+Findings may carry `split_into` (proposed sibling slugs) rendered as a
+`  split-into:` line; the PO lens flags a Phase 1 that is not a walking skeleton
+(first demonstrable output later than the 4th feature) as a `[blocker]`, the qa
+lens flags an intent implying more than ~15 criteria as an over-scope `[major]`
+that must name its split.
+
 ### PLAN_FINALIZE (`/build-fleet:plan-finalize`) — the ratification gate
 
 A product plan is **ratified, never auto-decided**, so this gate **never auto-passes —
@@ -97,6 +103,9 @@ even with zero findings**:
   `disable-model-invocation: true`, so the model cannot ratify on its own.
 - `ratify` flips state **iff** zero open blocker-severity findings; open blockers → refuse.
 - `ratify force` flips over open blockers, recording them as consciously accepted.
+- `ratify` also refuses (`split-unresolved`) while a latest-cycle `split-into:` slug
+  is neither a backlog row nor refused by a product ADR citing the finding id;
+  `ratify force` overrides and records it.
 - Small fast-path: `SIZE=small` + `PHASE=PLAN` + `CYCLE=0` may ratify without a prior
   plan-review (mirrors the trivial-feature fast-path; treats open-blocker count as 0).
 
@@ -225,6 +234,10 @@ line intent**:
   `/build-fleet:new-feature` and `/build-fleet:next-feature` so they can never
   disagree. The command files deliberately carry only a short summary + a pointer to
   this paragraph — keep it the floor's single prose home.
+- **Byte cap.** `intent-block.sh` emits `INTENT_BYTES`; when `_product/PROGRESS.md`
+  carries `INTENT_MAX_BYTES` (scaffolded at 600 for new products),
+  `validate-backlog-status` refuses a backlog write with a longer intent. An intent
+  is a sketch.
 
 ## The DEVELOPING loop
 
