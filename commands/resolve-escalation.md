@@ -1,7 +1,7 @@
 ---
 description: Resolve an escalation with an explicit human decision
 argument-hint: "[<slug>] <decision>"
-allowed-tools: Read, Write, Edit, Bash(rm:*)
+allowed-tools: Read, Write, Edit, Bash(rm:*), Bash(date:*)
 disable-model-invocation: true
 ---
 
@@ -69,6 +69,8 @@ without a recorded choice:
    resolution: counter <name> reset, phase restored to <phase>
    ```
 
+   `<iso8601 now>` is computed with `date -u +%Y-%m-%dT%H:%M:%SZ` — never guess it.
+
    Append only — never modify existing REVIEW.md entries. (For a bug that has
    no REVIEW.md yet, create it with the standard append-only header first.)
 
@@ -77,6 +79,9 @@ without a recorded choice:
      re-opens the budget).
    - Set `PHASE:` back to the pre-escalation phase from step 4.
    - Refresh `UPDATED:`.
+   - **Never touch `CYCLE_TOTAL`** — the cumulative counter survives every reset
+     by design; `/build-fleet:review` refuses at `CYCLE_TOTAL_MAX`, and raising
+     that max is the human's recorded decision, not a side effect of resolving.
 
 7. **Delete `.sdd/<slug>/ESCALATION.md`.** The gates key off this file's
    existence; it must go for work to resume. Its content is preserved verbatim

@@ -1,7 +1,7 @@
 ---
 description: Run the adversarial spec-review workflow
-argument-hint: "[--roles <r1,r2,...>] [--cycle-budget <1-3>]"
-allowed-tools: Read, Write, Workflow
+argument-hint: "[--roles <r1,r2,...>] [--cycle-budget <1-3>] [--override-cost]"
+allowed-tools: Read, Write, Workflow, Bash(date:*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-rotate.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/adr-index.sh":*)
 ---
 
 # /build-fleet:review
@@ -40,9 +40,45 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
 
    **Cycle-budget precondition.** The workflow escalates **on** the cycle that exhausts `effective_budget`: if blockers still survive the survival vote at `CYCLE == effective_budget`, that run writes ESCALATION.md and sets `PHASE: ESCALATED` (there is no separate "next cycle" — the exhausting cycle with surviving blockers *is* the escalation). This refusal is a belt-and-suspenders guard for the edge where `CYCLE` is already `>= effective_budget` without a recorded escalation: if `CYCLE >= effective_budget` AND the most recent REVIEW.md cycle still has open `[blocker]` items, refuse — a further run can only escalate, and the workflow owns that write. Refuse with: `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cycle-budget-exhausted","cycle":<n>,"cycle_budget":<effective_budget>}` — resolve blockers in spec.md or accept the escalation.
 
+   **Cumulative-cycle precondition (v0.9).** Read `CYCLE_TOTAL` (absent ⇒ use `CYCLE`)
+   and `CYCLE_TOTAL_MAX` (absent ⇒ `6`; `0` disables). `CYCLE_TOTAL` never resets —
+   not on resolve-escalation, not on park — so it is the bound the per-escalation
+   budget is not. If `CYCLE_TOTAL >= CYCLE_TOTAL_MAX`, refuse **before dispatch**:
+   `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cycle-total-exhausted","cycle_total":<n>,"max":<m>}`
+   and lay out the three options: cut the feature's scope so the open findings stop
+   mattering; finalize what exists and file the remainder as a follow-up feature; or
+   raise `CYCLE_TOTAL_MAX` in PROGRESS.md deliberately (a recorded decision). This
+   refusal is placed at dispatch on purpose — the pilot's post-hoc guard fired only
+   after a cycle had already cost ~866k tokens.
+
+   **Cost-runaway precondition (v0.9).** Read `LAST_REVIEW_OUTPUT_TOKENS` (absent ⇒
+   skip). Parse the `@cost-ceiling` header's `output_tokens` (step 8). If the last
+   value exceeds 3× that ceiling and `--override-cost` is not in `$ARGUMENTS`, refuse:
+   `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cost-runaway","last_output_tokens":<n>,"ceiling":<c>}`
+   and say the spec/inputs should shrink (split, or cut) before another cycle; pass
+   `--override-cost` to run anyway (recorded by the config line).
+
 6. **Pick the new cycle number.** New cycle = `CYCLE + 1`. Pass to the workflow.
 
-7. **Compose the run id and drop the workflow-in-flight marker.** Compose a run id: `review-<slug>-c<new_cycle>-<iso8601 now>` (the same `now` you pass to the workflow in step 9). Write `.sdd/<slug>/.workflow-in-flight` containing exactly that run id as its single line. The hooks `check-review-written` and `restrict-reviewer-writes` skip their gates while this marker exists. The marker is **owned by this run**: the workflow's scribe releases it only if its content still matches the envelope's `run_id`, so a stale or retried run can never release a newer dispatch's marker. Cleanup obligation: if you create this marker and the Workflow tool subsequently fails to launch, release the marker yourself — verify its content still matches your run id, then overwrite it with empty content (an empty marker counts as released; the Stop-hook reaper deletes it) — before exiting.
+6b. **Rotate REVIEW.md (v0.9).** If `CYCLE >= 1`, bound the reviewers' input to the
+   previous cycle by running the deterministic rotation — never do this by hand:
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-rotate.sh" "<slug>"
+   ```
+   (add `--roster <N>` when a `--roles` flag changed the roster size). It moves every
+   block older than the last roster-sized run of `## Cycle` blocks into
+   `.sdd/<slug>/REVIEW-archive.md` (append-only) and prints one
+   `BUILD_FLEET_REVIEW_ROTATED: {...}` line — relay it. Idempotent; no-op on cycle 0.
+
+6c. **Compute `next_adr_id` and `cycle_total`.**
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/adr-index.sh" ".sdd/<slug>/DECISIONS.md" --next
+   ```
+   prints the next free feature ADR integer (1 for an empty/absent log); the workflow's
+   disposition leg numbers its ADRs from it. `cycle_total` is the `CYCLE_TOTAL` value
+   read in step 5 (or `CYCLE` when absent) — the count BEFORE this run.
+
+7. **Compose the run id and drop the workflow-in-flight marker.** Compute `now` as `date -u +%Y-%m-%dT%H:%M:%SZ` — never guess it — and compose the run id `review-<slug>-c<new_cycle>-<now>` (the same `now` you pass to the workflow in step 9). Write `.sdd/<slug>/.workflow-in-flight` containing exactly that run id as its single line. The hooks `check-review-written` and `restrict-reviewer-writes` skip their gates while this marker exists. The marker is **owned by this run**: the workflow's scribe releases it only if its content still matches the envelope's `run_id`, so a stale or retried run can never release a newer dispatch's marker. Cleanup obligation: if you create this marker and the Workflow tool subsequently fails to launch, release the marker yourself — verify its content still matches your run id, then overwrite it with empty content (an empty marker counts as released; the Stop-hook reaper deletes it) — before exiting.
 
 8. **Emit the cost preview (headless mode contract).** Parse the `@cost-ceiling` header comment at the top of `${CLAUDE_PLUGIN_ROOT}/workflows/review.js`. Write exactly one stdout line — JSON payload for parsability:
 
@@ -55,14 +91,14 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
    Then emit exactly one **review-config** line recording the effective roster + budget and where each came from — this is what makes a flag override (which is not persisted) auditable in the run log:
 
    ```
-   BUILD_FLEET_REVIEW_CONFIG: {"feature":"<slug>","cycle":<N>,"roles":<["..."] | "default">,"cycle_budget":<n | "default">,"roles_source":"flag"|"progress"|"default","budget_source":"flag"|"progress"|"default"}
+   BUILD_FLEET_REVIEW_CONFIG: {"feature":"<slug>","cycle":<N>,"roles":<["..."] | "default">,"cycle_budget":<n | "default">,"roles_source":"flag"|"progress"|"default","budget_source":"flag"|"progress"|"default","cycle_total":<n>,"next_adr_id":<n>,"override_cost":<true|false>}
    ```
 
 9. **Invoke the Workflow tool.** Call `Workflow` with:
    - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/review.js`
-   - `args`: `{ "feature": "<slug>", "cycle": <new_cycle>, "now": "<iso8601>", "run_id": "<run id from step 7>" }` — **plus** `"roles": [<resolved roster>]` and/or `"cycle_budget": <resolved int>` ONLY when they were resolved from a flag or a `REVIEW_*` PROGRESS.md field in step 5. **Omit a key entirely when unset** so the workflow applies its own default (omitting both reproduces the historical behavior exactly).
+   - `args`: `{ "feature": "<slug>", "cycle": <new_cycle>, "now": "<now>", "run_id": "<run id from step 7>", "cycle_total": <cycle_total from 6c>, "next_adr_id": <next_adr_id from 6c> }` — **plus** `"roles": [<resolved roster>]` and/or `"cycle_budget": <resolved int>` ONLY when they were resolved from a flag or a `REVIEW_*` PROGRESS.md field in step 5. **Omit those two keys entirely when unset** so the workflow applies its own default.
 
-   Supply `now` yourself (the script cannot call `Date`); the workflow refuses to run without it. The Workflow tool is async-launched: it returns immediately with a `runId`, `taskId`, and `transcriptDir`.
+   The `now` is the one you computed with `date -u` in step 7 (the script cannot call `Date`); the workflow refuses to run without it. The Workflow tool is async-launched: it returns immediately with a `runId`, `taskId`, and `transcriptDir`.
 
 10. **Emit the launch line (headless mode contract).** Once the Workflow tool returns, write exactly one stdout line:
 
@@ -79,11 +115,20 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
     - The effective reviewer roster and cycle budget for this run — and note if a `--roles`/`--cycle-budget` flag overrode the PROGRESS.md default (the override applies to this run only and is not persisted).
     - `/workflows` shows progress (in interactive mode).
     - Once it completes, `/build-fleet:status` will show the verdict.
-    - Next legal command depends on the workflow's verdict:
-      - `clean` → `/build-fleet:finalize` (the gate), then `/build-fleet:build`
-      - `revise` → `/build-fleet:review` again after PO revises spec.md
-      - `escalate` → human action on the ESCALATION.md the workflow writes (the budget is 3 cycles; the workflow escalates on the exhausting cycle)
-      - `incomplete` / `invalid-args` → a transient agent fault or bad dispatch args; PHASE/CYCLE are unchanged and nothing was written — re-run `/build-fleet:review` (or fix the dispatch args).
+    - The run's return object carries `finalize_ready`, `open_majors`, `adrs_written`,
+      `cycle_total` and `output_tokens`. Next legal command:
+      - `finalize_ready: true` (zero blockers, every major accepted via ADR) →
+        `/build-fleet:finalize` (the gate), then `/build-fleet:build`.
+      - `finalize_ready: false` with `verdict` `clean` or `revise` → `/build-fleet:revise`
+        (hands the PO exactly the open blockers + `fix` majors), then `/build-fleet:review`.
+      - `escalate` → human action on the ESCALATION.md the workflow wrote (it lists both
+        surviving blockers and open `fix` majors; the exhausting cycle escalates either).
+      - `incomplete` / `invalid-args` → a transient agent fault or bad dispatch args;
+        PHASE/CYCLE are unchanged and nothing was written — re-run `/build-fleet:review`
+        (or fix the dispatch args). `incomplete` with `reason: disposition-incomplete` means
+        the architect leg missed a major — re-run.
+      Note `verdict: clean` means zero surviving BLOCKERS and is NOT finalize-readiness;
+      `finalize_ready` is.
     - **Scribe-apply failure is a hard failure.** If the completed run's return object carries `scribe_apply: "failed"`, the scribe could not write state even after a retry: REVIEW.md/PROGRESS.md did **not** land and the marker may remain (release it if its content matches your run id). Whoever reads that result (you, `/build-fleet:status`, or an orchestrator) must report the run as failed with its `scribe_error` — never treat the verdict as applied or advance to the next command.
 
 ## What this command does NOT do
@@ -93,6 +138,7 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
 - Does not write ESCALATION.md. The workflow detects budget-exhaustion and writes via the envelope.
 - Does not release `.workflow-in-flight` on success. The scribe does that as the final phase (it empties the marker; the reaper deletes the empty file).
 - Does not persist `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET`. The durable per-feature default lives in PROGRESS.md (set out-of-band — e.g. a human edit; the scribe preserves unknown fields across its state writes). A `--roles`/`--cycle-budget` flag overrides that default for the current run only.
+- Does not evaluate or edit REVIEW.md beyond the deterministic rotation script (which moves whole blocks verbatim into REVIEW-archive.md and never edits a block).
 
 ## Refusal contract (machine-readable)
 
