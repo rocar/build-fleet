@@ -40,27 +40,19 @@ check "leading-zero-cap-decimal-under" "$p" "$(payload Write .sdd/feat/spec.md "
 p=$(new_proj l2 008)
 check "leading-zero-cap-008-no-crash" "$p" "$(payload Write .sdd/feat/spec.md "$(head -c 9000 /dev/zero | tr '\0' 'x')")" 2
 
-# Multiline replace_all: file is 1000 bytes with exactly 2 "foo\nbar" occurrences.
-# old="foo\nbar" (7 bytes), new="foo\nbar"+15x's (22 bytes), delta=15 bytes.
-# With 2 occurrences (correct count): 1000 + 15*2 = 1030 > 1024 → rc 2
-# With 1 occurrence (wrong count): 1000 + 15*1 = 1015 ≤ 1024 → rc 0
-# This test must fail before the fix (grep miscounts multiline) and pass after.
+# Multiline replace_all with discriminating arithmetic:
+# File: 1020 bytes = 2×"foo\nbar\n" (16 bytes) + padding (1004 bytes)
+# old_string="foo\nbar" (7 bytes), new_string="foo\nbarXX" (9 bytes), delta=+2
+# Correct count (2 occurrences): 1020 + 2×2 = 1024 ≤ budget 1024 → rc 0
+# Old grep miscounts "foo"/"bar" as 4 lines: 1020 + 2×4 = 1028 > budget → rc 2
+# Test FAILS on pre-fix (rc 2), PASSES on fixed (rc 0).
 p=$(new_proj m1 1)
-oldpat="foo
-bar"
-newpat="foo
-bar$(printf 'x%.0s' {1..15})"
-# Create file: 2 occurrences of "foo\nbar" + padding to reach 1000 bytes total
-# Each "foo\nbar" is 7 bytes, so 2 * 7 = 14 bytes; padding = 1000 - 14 = 986 bytes
-padding=$(head -c 986 /dev/zero | tr '\0' 'p')
-printf '%s\n%s\n%s' "$oldpat" "$oldpat" "$padding" > "$p/.sdd/feat/spec.md"
-# Adjust to exact 1000 bytes
-actual=$(wc -c < "$p/.sdd/feat/spec.md" | tr -d ' ')
-if [ "$actual" -ne 1000 ]; then
-  printf '%s' "$(cat "$p/.sdd/feat/spec.md"; head -c $((1000 - actual)) /dev/zero | tr '\0' 'p')" > "$p/.sdd/feat/spec.md"
-fi
-payload_multiline=$(jq -cn --arg p ".sdd/feat/spec.md" --arg o "$oldpat" --arg n "$newpat" --argjson ra true '{tool_name:"Edit",tool_input:{file_path:$p,old_string:$o,new_string:$n,replace_all:$ra}}')
-check "edit-replace-all-multiline-counts-once-per-occurrence" "$p" "$payload_multiline" 2
+{ printf 'foo\nbar\nfoo\nbar\n'; head -c 1004 /dev/zero | tr '\0' p; } > "$p/.sdd/feat/acceptance.md"
+# Verify fixture is exactly 1020 bytes
+fixture_size=$(wc -c < "$p/.sdd/feat/acceptance.md" | tr -d ' ')
+if [ "$fixture_size" -eq 1020 ]; then pass=$((pass+1)); printf 'ok   %-40s bytes=%s\n' "multiline-fixture-is-1020-bytes" "$fixture_size"; else fail=$((fail+1)); printf 'FAIL %-40s want=1020 got=%s\n' "multiline-fixture-is-1020-bytes" "$fixture_size"; fi
+payload_multiline=$(jq -cn --arg p ".sdd/feat/acceptance.md" --arg o $'foo\nbar' --arg n $'foo\nbarXX' --argjson ra true '{tool_name:"Edit",tool_input:{file_path:$p,old_string:$o,new_string:$n,replace_all:$ra}}')
+check "edit-replace-all-multiline-counts-once-per-occurrence" "$p" "$payload_multiline" 0
 
 # NotebookEdit on spec with cap present → rc 2
 p=$(new_proj nb1 1)
