@@ -43,7 +43,7 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
    **Cumulative-cycle precondition (v0.9).** Read `CYCLE_TOTAL` (absent ⇒ use `CYCLE`)
    and `CYCLE_TOTAL_MAX` (absent ⇒ `6`; `0` disables). `CYCLE_TOTAL` never resets —
    not on resolve-escalation, not on park — so it is the bound the per-escalation
-   budget is not. If `CYCLE_TOTAL >= CYCLE_TOTAL_MAX`, refuse **before dispatch**:
+   budget is not. If `CYCLE_TOTAL_MAX` is not `0` and `CYCLE_TOTAL >= CYCLE_TOTAL_MAX`, refuse **before dispatch**:
    `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cycle-total-exhausted","cycle_total":<n>,"max":<m>}`
    and lay out the three options: cut the feature's scope so the open findings stop
    mattering; finalize what exists and file the remainder as a follow-up feature; or
