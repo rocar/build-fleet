@@ -148,33 +148,41 @@ hooks that stand down while the run is live.
 orchestrator  /build-fleet:review        workflows/review.js         subagents          scribe
      │
      │ 1. preconditions: ACTIVE set? PHASE∈{SPEC,REVIEW}?
-     │    ESCALATION.md absent? cycle budget not exhausted?
+     │    ESCALATION.md absent? per-escalation budget not exhausted?
+     │    CYCLE_TOTAL_MAX not hit? last output within 3× the cost ceiling?
      │ 2. new_cycle = CYCLE + 1
-     │ 3. write .workflow-in-flight = run_id ──┐  (restrict-reviewer-writes +
-     │ 4. emit COST_PREVIEW + REVIEW_CONFIG    │   check-review-written stand down
-     │ 5. Workflow(scriptPath, args) ──────────┼──▶ Phase 1  Fan-out       while marker is live)
-     │ 6. ◀── runId (async, returns at once)   │      parallel() ──▶ architect ┐ Read-only,
-     │ 7. emit WORKFLOW_LAUNCHED               │                     qa        │ schema-validated
-     │ 8. TaskGet once — run alive?            │                     coder     ┘ {role,status,concerns}
+     │ 3. rotate REVIEW.md → REVIEW-archive.md (review-rotate.sh);
+     │    compute next_adr_id + cycle_total (adr-index.sh --next)
+     │ 4. write .workflow-in-flight = run_id ──┐  (restrict-reviewer-writes +
+     │ 5. emit COST_PREVIEW + REVIEW_CONFIG    │   check-review-written stand down
+     │ 6. Workflow(scriptPath, args) ──────────┼──▶ Phase 1  Fan-out       while marker is live)
+     │ 7. ◀── runId (async, returns at once)   │      parallel() ──▶ reviewer(architect) ┐ Read-only,
+     │ 8. emit WORKFLOW_LAUNCHED               │                     reviewer(qa)        │ schema-validated
+     │ 9. TaskGet once — run alive?            │                     reviewer(coder)     ┘ {role,status,concerns}
      │                                         │    Phase 2  Cross-examination
      │                                         │      parallel() ──▶ refute/affirm PEER concerns
-     │                                         │    Phase 3  Survival vote (pure JS) → verdict
-     │                                         │    Phase 4  buildEnvelope() ─────────────▶ apply:
+     │                                         │    Phase 3  Survival vote (pure JS) → refuted vs. surviving
+     │                                         │    Phase 4  Disposition (architect) → adr | fix per major
+     │                                         │    Phase 5  buildEnvelope() ─────────────▶ apply:
      │                                         │                                            • state_delta → PROGRESS.md
+     │                                         │                                              (+CYCLE_TOTAL, LAST_REVIEW_OUTPUT_TOKENS)
      │                                         │                                            • review_entries → REVIEW.md
+     │                                         │                                            • decisions_appendix → DECISIONS.md
      │                                         │                                            • escalation_payload? → ESCALATION.md
      │                                         │                                            • release marker (if content==run_id)
-     │ 9. ◀──────── return {verdict, scribe_apply, next} ◀──────────────────────────────────┘
-     │ 10. report verdict + next legal command
+     │ 10. ◀─ return {verdict, finalize_ready, scribe_apply, next} ◀──────────────────────┘
+     │ 11. report verdict + next legal command (finalize | revise)
 ```
 
-**Execution boundary.** Steps 1–10 are **static core** — the orchestrator running the
-`commands/review.md` scaffold (Read/Write plus the `Workflow` launch). Phases 1–4 are
-the **dynamic workflow** `review.js` in the isolated Workflow runtime: fan-out and
-cross-examination are `parallel()` batches of `agent()` subagent calls, the survival
-vote (Phase 3) is deterministic JS with **no** model call, and the scribe apply
-(Phase 4) is itself a final `agent()` call *from inside the script*. The script never
-touches the filesystem — every state write is the scribe's.
+**Execution boundary.** Steps 1–11 are **static core** — the orchestrator running the
+`commands/review.md` scaffold (Read/Write plus the `Workflow` launch, and the two
+deterministic scripts in step 3). Phases 1–5 are the **dynamic workflow** `review.js`
+in the isolated Workflow runtime: fan-out and cross-examination are `parallel()`
+batches of `agent()` subagent calls, the survival vote (Phase 3) is deterministic JS
+with **no** model call, disposition (Phase 4) is a single further `agent()` call that
+only runs when a major survives, and the scribe apply (Phase 5) is itself a final
+`agent()` call *from inside the script*. The script never touches the filesystem —
+every state write is the scribe's.
 
 ### Step by step
 
@@ -197,23 +205,36 @@ order:
    *workflow* is the authoritative validator; the command passes values straight
    through. Belt-and-suspenders: if `CYCLE ≥ effective_budget` and open blockers
    remain, refuse `cycle-budget-exhausted` (a further run could only escalate).
+   **v0.9 adds two more checks, before any cost is spent:** the cumulative
+   `CYCLE_TOTAL` bound — refuse `cycle-total-exhausted` when `CYCLE_TOTAL_MAX` is
+   not `0` and `CYCLE_TOTAL ≥ CYCLE_TOTAL_MAX` (`CYCLE_TOTAL` is scribe-written and
+   never resets, not even across escalations or parks); and `cost-runaway` —
+   refuse when `LAST_REVIEW_OUTPUT_TOKENS` exceeds 3× the `@cost-ceiling` header's
+   `output_tokens` (override with `--override-cost`).
 6. **Pick the new cycle**: `new_cycle = CYCLE + 1`.
-7. **Drop the marker.** Compose `run_id = review-<slug>-c<new_cycle>-<now>` and write
+7. **Rotate REVIEW.md and index the ADRs (v0.9).** `scripts/review-rotate.sh` moves
+   every block older than the previous cycle's roster-sized run into
+   `.sdd/<slug>/REVIEW-archive.md` (append-only) — bounding what the next fan-out
+   has to read; idempotent, a no-op on cycle 0. `scripts/adr-index.sh --next`
+   computes `next_adr_id` for the disposition leg's ADR numbering. `cycle_total` is
+   read here too (`CYCLE_TOTAL`, or `CYCLE` when absent) — the count *before* this
+   run.
+8. **Drop the marker.** Compose `run_id = review-<slug>-c<new_cycle>-<now>` and write
    it as the single line of `.sdd/<slug>/.workflow-in-flight`. **This is the bypass
    token:** the `check-review-written` and `restrict-reviewer-writes` hooks stand
    down while the marker is live, because the workflow enforces those invariants
    structurally instead (Read-only reviewer tool allowlists + an envelope
    post-condition). The marker is *owned by this run* — only a scribe holding a
    matching `run_id` may release it.
-8. **Emit the headless contract lines:** `BUILD_FLEET_COST_PREVIEW` (parsed from the
+9. **Emit the headless contract lines:** `BUILD_FLEET_COST_PREVIEW` (parsed from the
    `@cost-ceiling` header of `review.js`) and `BUILD_FLEET_REVIEW_CONFIG` (records
    the effective roster/budget and where each came from — a flag override isn't
    persisted, so this line is what makes it auditable).
-9. **Invoke `Workflow`** with `args = {feature, cycle:new_cycle, now, run_id}` (+
-   `roles`/`cycle_budget` only when non-default). `now` is supplied by the command
-   because the workflow runtime has no `Date`. The call is **async** — it returns a
-   `runId`/`taskId` immediately.
-10. **Emit `BUILD_FLEET_WORKFLOW_LAUNCHED`** and poll `TaskGet` once. If the run died
+10. **Invoke `Workflow`** with `args = {feature, cycle:new_cycle, now, run_id,
+    cycle_total, next_adr_id}` (+ `roles`/`cycle_budget` only when non-default).
+    `now` is supplied by the command because the workflow runtime has no `Date`.
+    The call is **async** — it returns a `runId`/`taskId` immediately.
+11. **Emit `BUILD_FLEET_WORKFLOW_LAUNCHED`** and poll `TaskGet` once. If the run died
     before any scribe wrote, the command releases the marker itself (only if the
     content still matches its `run_id`).
 
@@ -236,42 +257,72 @@ disposition → apply), and the gate's rule going forward is `finalize_ready` (z
 open blockers AND zero `fix`-dispositioned majors) rather than a bare `clean`
 verdict.
 
-**Phase 2 — Cross-examination (`review.js:260`).** Every concern is merged into one
-pool; each reviewer is handed **only its peers'** concerns and must `refute` or
-`affirm` each. A refutation only counts if it is *substantive*: **≥40 characters** of
-reasoning **and** a structured `{file, locator}` citation (e.g.
-`{acceptance.md, "line 14"}`). Affirm is the safe default and needs no citation.
-Self-refutation is impossible — the pool excludes your own concerns, and the vote
-filters same-role refutations anyway.
+**Phase 2 — Cross-examination.** Every concern is merged into one pool; each
+reviewer is handed **only its peers'** concerns and must `refute` or `affirm` each.
+A refutation only counts if it is *substantive*: **≥40 characters** of reasoning
+**and** a structured `{file, locator}` citation against `spec.md`, `acceptance.md`
+or `DECISIONS.md` (e.g. `{acceptance.md, "line 14"}` or `{DECISIONS.md, "ADR-7"}`
+— citing an ADR by id is itself a substantive refutation). Affirm is the safe
+default and needs no citation. Self-refutation is impossible — the pool excludes
+your own concerns, and the vote filters same-role refutations anyway.
 
-**Phase 3 — Survival vote (`review.js:277`, pure JS — no model).** A concern survives
-unless it is refuted by a **different-role** reviewer with `verdict:"refute"`, ≥40
-chars of reason, and a valid citation (`applySurvivalVote`, `review.js:400`). Then:
+**Phase 3 — Survival vote (pure JS — no model).** A concern survives unless it is
+refuted by a **different-role** reviewer with `verdict:"refute"`, ≥40 chars of
+reason, and a valid citation (`applySurvivalVote`). A refutation renders as a
+`  refuted-by:` continuation line under the finding in REVIEW.md and closes it
+**regardless of severity** — a refuted blocker is exactly as closed as a refuted
+major.
+
+**Phase 4 — Disposition (architect, read-only reviewer).** Runs only when at least
+one `[major]` survives the vote unrefuted. One architect leg classifies each
+surviving major **exactly once**: `adr` (a design trade-off — an ADR title + body
+is drafted, numbered from `next_adr_id`) or `fix` (a gap the PO must close in the
+spec). Coverage is checked before anything is written — a missing id, a duplicate
+id, or an `adr` disposition with an empty body fails the **whole run** as
+`incomplete` (`disposition-incomplete`): nothing is written, re-run. The leg's
+output becomes the envelope's `decisions_appendix` (the ADR blocks, verbatim), and
+each dispositioned major's REVIEW.md line gets a `  disposition: adr ADR-N` or
+`  disposition: fix` continuation.
+
+Once every surviving major is dispositioned (or skipped, if none survived), the
+gate's rule is computed:
 
 ```
-survivingBlockers = surviving.filter(severity==="blocker" && !refuted)
-verdict = survivingBlockers.length > 0
-            ? (cycle >= cycleBudget ? "escalate" : "revise")
-            : "clean"
+openBlockers   = surviving.filter(severity==="blocker" && !refuted)
+openMajors     = surviving.filter(severity==="major" && !refuted && disposition !== "adr")
+finalize_ready = openBlockers.length === 0 && openMajors.length === 0
+verdict = (cycle >= cycleBudget && (openBlockers.length > 0 || openMajors.length > 0))
+            ? "escalate"
+            : openBlockers.length > 0 ? "revise" : "clean"
 ```
 
-Severity governs the gate: **only surviving `blocker`s decide the verdict.** `major`
-items are recorded (must be fixed or ADR-accepted before FINALIZE); `minor`s are
-advisory and never block.
+**`finalize_ready`, not the bare `verdict`, is what `/build-fleet:finalize`'s gate
+script (`scripts/finalize-gate.sh`) actually enforces.** A `clean` verdict with
+`finalize_ready:false` (zero blockers, but an open `fix` major) routes to
+`/build-fleet:revise`, not straight to finalize — the pre-v0.9 "clean → finalize
+gate then refuses" trap can't happen anymore. Escalation now fires on the
+exhausting cycle when **either** open blockers or open `fix` majors remain, not
+blockers alone. `minor`s stay advisory and never block.
 
-**Phase 4 — Apply via the scribe (`review.js:290`, `agents/scribe.md`).**
-`buildEnvelope()` produces the one canonical envelope (schema:
-`docs/v0.2/CONTRACT.md §6`); the scribe — the **only** state writer, holding
-`Read/Write/Edit` and **no Bash** — applies it verbatim and atomically:
+**Phase 5 — Apply via the scribe (`agents/scribe.md`).** `buildEnvelope()` produces
+the one canonical envelope (schema: `docs/v0.2/CONTRACT.md §6`); the scribe — the
+**only** state writer, holding `Read/Write/Edit` and **no Bash** — applies it
+verbatim and atomically:
 
 - **`state_delta` → `PROGRESS.md`**, in place, preserving field order:
-  `PHASE = (escalate ? "ESCALATED" : "REVIEW")`, `CYCLE = cycle`, `UPDATED = now`.
-  Note a `clean` verdict writes `PHASE: REVIEW`, **not** `FINALIZE` — the separate
-  `/build-fleet:finalize` gate flips `STATUS=FINALIZED, PHASE=BUILD` later.
+  `PHASE = (escalate ? "ESCALATED" : "REVIEW")`, `CYCLE = cycle`,
+  `CYCLE_TOTAL = cycle_total + 1` (cumulative, never reset), `LAST_REVIEW_OUTPUT_TOKENS`,
+  `UPDATED = now`. A `clean` verdict still writes `PHASE: REVIEW`, **not**
+  `FINALIZE` — the separate `/build-fleet:finalize` gate (or `/build-fleet:revise`
+  when `finalize_ready` is false) advances the phase later.
 - **`review_entries` → `REVIEW.md`**, appended verbatim, one block per role,
-  **append-only** (a resolved concern is a new approving entry in a later cycle,
-  never an edit).
-- **`escalation_payload` → `ESCALATION.md`** only when non-null (i.e. `escalate`).
+  **append-only** (a resolved concern is a new approving/refuting entry in a later
+  cycle, never an edit) — ids are shaped `<role>-c<cycle>-<n>` and a re-raised
+  finding keeps its original id across cycles.
+- **`decisions_appendix` → `DECISIONS.md`** (v0.9) — the `adr`-dispositioned ADR
+  blocks from Phase 4, appended verbatim, only when non-null.
+- **`escalation_payload` → `ESCALATION.md`** only when non-null (i.e. `escalate`) —
+  now lists both the open blockers **and** the open `fix` majors.
 - **Release the marker**: overwrite `.workflow-in-flight` with empty content **iff**
   its content equals the envelope's `run_id`. An empty marker reads as absent, so the
   stood-down hooks re-engage immediately; the `reap-stale-workflow-markers` Stop hook
@@ -283,50 +334,74 @@ the run as **failed** (state did not land, marker may remain) — never advance.
 
 ### Verdict → what happens next
 
-| Verdict | PROGRESS after | Files written | Next legal command |
-|---|---|---|---|
-| `clean` | `PHASE:REVIEW`, `CYCLE:n` | `REVIEW.md` (+approving entries) | `/build-fleet:finalize` → `/build-fleet:build` |
-| `revise` | `PHASE:REVIEW`, `CYCLE:n` | `REVIEW.md` (surviving blockers) | `/build-fleet:review` again after PO revises `spec.md` |
-| `escalate` | `PHASE:ESCALATED`, `CYCLE:n` | `REVIEW.md` + `ESCALATION.md` | human: `/build-fleet:resolve-escalation` or `/build-fleet:park` |
-| `incomplete` / `invalid-args` | **unchanged** | none (marker released) | re-run `/build-fleet:review` (transient fault / bad args) |
+| Verdict | `finalize_ready` | PROGRESS after | Files written | Next legal command |
+|---|---|---|---|---|
+| `clean` | `true` | `PHASE:REVIEW`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` (+approving/refuted entries), `DECISIONS.md` (any `adr` dispositions) | `/build-fleet:finalize` → `/build-fleet:build` |
+| `clean` | `false` | `PHASE:REVIEW`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` (open `fix` major(s)), `DECISIONS.md` (any `adr` dispositions) | `/build-fleet:revise` (hands the PO exactly the open items) → `/build-fleet:review` |
+| `revise` | `false` | `PHASE:REVIEW`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` (surviving blockers) | `/build-fleet:revise` → `/build-fleet:review` |
+| `escalate` | `false` | `PHASE:ESCALATED`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` + `ESCALATION.md` (blockers **and** open majors) | human: `/build-fleet:resolve-escalation` or `/build-fleet:park` |
+| `incomplete` / `invalid-args` | — | **unchanged** | none (marker released) | re-run `/build-fleet:review` (transient fault, bad args, or `disposition-incomplete`) |
 
-Cycle accounting: **one workflow run = one cycle.** The internal fan-out /
-cross-exam / vote rounds do **not** bump the counter (`SKILL.md:34`). The cycle that
-*exhausts* the budget with surviving blockers **is** the escalation — there is no
-separate 4th cycle.
+Cycle accounting: **one workflow run = one cycle**, against the per-escalation
+`REVIEW_CYCLE_BUDGET` (default `3`). The internal fan-out / cross-exam /
+disposition rounds do **not** bump that counter (`SKILL.md`, Operating principles).
+The cycle that *exhausts* the budget with surviving blockers or open `fix` majors
+**is** the escalation — there is no separate 4th cycle. **v0.9 adds a second,
+cumulative counter**, `CYCLE_TOTAL`: every review cycle this feature has ever run,
+never reset — not by `/build-fleet:resolve-escalation`, not by `/build-fleet:park`.
+`/build-fleet:review` refuses to dispatch, before spending anything, when
+`CYCLE_TOTAL_MAX` is not `0` and `CYCLE_TOTAL ≥ CYCLE_TOTAL_MAX`
+(`cycle-total-exhausted`) — a backstop above the per-escalation budget, aimed at a
+feature that keeps escalating, getting reset, and never converging.
 
 ### Worked example — cycle 1 of feature `api-client`, roster `[architect, qa, coder]`
 
 **Phase 1 (fan-out)** produces three concerns:
 
-- `architect-1` **[blocker]** — "spec mandates retry-with-backoff but sets no
+- `architect-c1-1` **[blocker]** — "spec mandates retry-with-backoff but sets no
   max-retry bound; an outage triggers an unbounded retry storm."
-- `qa-1` **[major]** — "acceptance criterion AC-3 has no corresponding negative-path
-  test."
-- `coder-1` **[minor]** — "naming: `fetchData` vs the spec's `fetch_data`."
+- `qa-c1-2` **[major]** — "acceptance criterion AC-3 has no corresponding
+  negative-path test."
+- `coder-c1-3` **[minor]** — "naming: `fetchData` vs the spec's `fetch_data`."
 
 **Phase 2 (cross-examination):**
 
-- The **coder** refutes `qa-1`: *"acceptance.md already enumerates the 429/timeout
-  negative path as a required case"* + citation `{acceptance.md, "line 14"}`
-  (≥40 chars ✓, citation ✓, coder ≠ qa ✓).
-- No one substantively refutes `architect-1` (qa affirms it).
-- `coder-1` is a minor — irrelevant to the gate regardless.
+- The **coder** refutes `qa-c1-2`: *"acceptance.md already enumerates the
+  429/timeout negative path as a required case"* + citation
+  `{acceptance.md, "line 14"}` (≥40 chars ✓, citation ✓, coder ≠ qa ✓).
+- No one substantively refutes `architect-c1-1` (qa affirms it).
+- `coder-c1-3` is a minor — irrelevant to the gate regardless.
 
-**Phase 3 (survival vote):** `qa-1` is killed (valid different-role refutation).
-`architect-1` survives → `survivingBlockers = 1`. `1 > 0` and `cycle(1) <
-budget(3)` → **verdict = `revise`**.
+**Phase 3 (survival vote):** `qa-c1-2` is killed — rendered as a
+`refuted-by: coder — reason … (cites acceptance.md line 14)` continuation.
+`architect-c1-1` survives unrefuted; no major is left standing.
 
-**Phase 4 (scribe):** `PROGRESS.md` → `PHASE:REVIEW, CYCLE:1`; `REVIEW.md` gets the
-cycle-1 block (architect's surviving blocker with no refutation line; qa's major with
-a `refuted-by: coder — reason … (cites acceptance.md line 14)` line; coder's minor);
-no `ESCALATION.md`; marker released. **Next:** the PO adds a max-retry bound to
-`spec.md`, then `/build-fleet:review` runs cycle 2.
+**Phase 4 (disposition):** skipped — zero surviving majors, so the architect leg
+never runs.
 
-Had `architect-1` also been refuted with a valid citation, zero blockers would
-survive → **`clean`**, and the feature would move to `/build-fleet:finalize`. Had it
-survived on **cycle 3** instead of cycle 1, the same survival would yield
-**`escalate`** — `ESCALATION.md` written, `PHASE:ESCALATED`, halt for a human.
+**Phase 5 (scribe):** `openBlockers = [architect-c1-1]`, `openMajors = []` →
+`finalize_ready = false`. `cycle(1) < budget(3)` and a blocker is open →
+**verdict = `revise`**. `PROGRESS.md` → `PHASE:REVIEW, CYCLE:1, CYCLE_TOTAL:1`;
+`REVIEW.md` gets the cycle-1 block (architect's surviving blocker with no
+continuation line; qa's major with the `refuted-by:` line above; coder's minor);
+no `DECISIONS.md` appendix (disposition never ran); no `ESCALATION.md`; marker
+released. **Next:** `/build-fleet:revise` hands the PO exactly `architect-c1-1` (a
+max-retry bound to add to `spec.md`); then `/build-fleet:review` runs cycle 2 as a
+**delta review** — the PO's fix is verified by id, and the roster may raise new
+findings at `[blocker]` severity only (a new `[major]` would be demoted to
+`[minor]` in code before the vote).
+
+Had `architect-c1-1` also been refuted with a valid citation, zero blockers and
+zero majors would survive → `finalize_ready = true`, **verdict = `clean`**, and
+`/build-fleet:finalize` would be the next legal command. Had a `[major]` survived
+instead of (or alongside) the blocker, Phase 4 would run: an `adr` disposition
+drafts an ADR and closes that major (`openMajors` excludes it); a `fix`
+disposition leaves it open (`finalize_ready:false`, next: `/build-fleet:revise`
+regardless of the blocker's fate). Had `architect-c1-1` survived on **cycle 3**
+instead of cycle 1 (the `REVIEW_CYCLE_BUDGET`), the same survival would yield
+**`escalate`** — `ESCALATION.md` written (listing the open blocker and any open
+majors), `PHASE:ESCALATED`, halt for a human — regardless of how large
+`CYCLE_TOTAL` has grown by then.
 
 ---
 
