@@ -39,8 +39,10 @@ literal substring search.
 status: concerns-raised | approved
 ```
 
-The `status:` line is mandatory. In workflow REVIEW the reviewer subagents
-return structured concerns payloads which the workflow merges into the
+The `status:` line is mandatory (its presence is required by the block shape;
+since v0.9 its value is informational — the finalize gate reads dispositions and
+blockers, see "Delta review and disposition (v0.9)" below). In workflow REVIEW
+the reviewer subagents return structured concerns payloads which the workflow merges into the
 canonical block shape above; the scribe appends them. On non-workflow paths
 (CHANGE_REVIEW, direct invocation) the `check-review-written` SubagentStop hook
 rejects a reviewer that stops without writing a block of this shape attributed
@@ -60,6 +62,10 @@ If you're tempted to add a fourth category ("critical", "important"),
 don't. Pick from the three above. Three is enough.
 
 ## How a major becomes an ADR
+
+This describes the non-workflow paths (CHANGE_REVIEW and direct invocation). In
+workflow REVIEW the architect disposition leg records the ADR — see "Delta review
+and disposition (v0.9)" below.
 
 `[major]` items have two resolution paths:
 

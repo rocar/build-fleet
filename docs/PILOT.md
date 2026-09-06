@@ -2,8 +2,8 @@
 
 **What it is.** A spec-driven multi-agent software house, packaged as a Claude Code
 plugin. A high-level spec goes in; a change comes out that is *verified against that
-spec* — with the whole audit trail on disk. Seven role subagents (product-owner,
-architect, coder, qa, devops, classifier, scribe) drive every change through
+spec* — with the whole audit trail on disk. Eight role subagents (product-owner,
+architect, coder, qa, devops, classifier, scribe, reviewer) drive every change through
 **SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF**, with the phases
 enforced by hooks rather than by prompting.
 
@@ -31,7 +31,7 @@ Check these first — the first one is the usual blocker.
 ```
 
 Use the **HTTPS URL** — the `owner/repo` shorthand resolves to SSH and fails without
-a configured key. Verify with `/agents`: all seven `build-fleet:*` agents should be
+a configured key. Verify with `/agents`: all eight `build-fleet:*` agents should be
 listed.
 
 Work on a **feature branch**. Everything the fleet produces lands in `.sdd/` in your

@@ -217,14 +217,24 @@ order:
     before any scribe wrote, the command releases the marker itself (only if the
     content still matches its `run_id`).
 
-**Phase 1 — Fan-out (`review.js:220`) — *dynamic workflow*.** `parallel()` dispatches every roster role at
-once, each as `agentType: build-fleet:<role>` whose `AgentDefinition.tools` **omit
-Write/Edit** and whose `skills` preload `review-rubric`. Each reviewer reads
-`spec.md` + `acceptance.md` + prior `REVIEW.md` itself and returns a
-schema-validated `{role, status, concerns:[{id, severity, text}]}` — stable IDs like
-`architect-1`. A `null` return (agent error / schema failure) is a **transient
-fault, not a review outcome**: the workflow cleans up the marker and returns
-`incomplete` without advancing state (`review.js:238-254`).
+**Phase 1 — Fan-out — *dynamic workflow* (v0.9).** `parallel()` dispatches every
+roster role at once, each as the read-only `build-fleet:reviewer` agent
+(`Read`/`Grep`/`Glob` by its own agent definition, not a per-call tool/skill
+override — the runtime's `agent()` has no `tools`/`skills` options; the severity
+rubric is mirrored in the agent's prompt body) with that role's lens injected.
+Cycle 1 is a full review; **cycle ≥ 2 is a delta review** — verify closure of prior
+`fix` findings and blockers by id, new findings at blocker severity only, enforced
+in code (a post-cycle-1 major is demoted to minor), not only asked for in the
+prompt. Each reviewer reads `spec.md` + `acceptance.md` + prior `REVIEW.md` itself
+and returns a schema-validated `{role, status, concerns:[{id, severity, text}]}` —
+stable IDs shaped `<role>-c<cycle>-<n>` that persist across re-raises. A `null`
+return (agent error / schema failure) is a **transient fault, not a review
+outcome**: the workflow cleans up the marker and returns `incomplete` without
+advancing state. v0.9 also inserts a fifth phase, **Disposition**, between the
+survival vote and apply (fan-out → cross-examination → survival vote →
+disposition → apply), and the gate's rule going forward is `finalize_ready` (zero
+open blockers AND zero `fix`-dispositioned majors) rather than a bare `clean`
+verdict.
 
 **Phase 2 — Cross-examination (`review.js:260`).** Every concern is merged into one
 pool; each reviewer is handed **only its peers'** concerns and must `refute` or

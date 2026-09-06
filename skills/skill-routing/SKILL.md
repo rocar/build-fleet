@@ -34,10 +34,12 @@ coder / qa (BUILD)        ── read + apply ─►  the per-role skills listed
 - **coder / qa** read `.sdd/<feature>/SKILL_MANIFEST.md` at BUILD and load+apply
   the skills listed under their role. **Loading mechanism, precisely:** the agent
   invokes each listed skill by name via the **Skill tool** in its own reasoning
-  (not frontmatter `skills:`); where a role is dispatched inside a workflow, the
-  workflow may additionally preload skills via **`AgentDefinition.skills`**. The
-  Skill-tool path is what makes routing work in every execution mode — including
-  agent-team mode, which ignores per-agent frontmatter skills.
+  (not frontmatter `skills:`). No workflow-side preload exists — the runtime's
+  `agent()` call has no `skills` option — so a workflow-dispatched role loads only
+  what its own agent body and the dispatch prompt name; the manifest stays
+  advisory, loaded by the role at BUILD via its own instructions. The Skill-tool
+  path is what makes routing work in every execution mode — including agent-team
+  mode, which ignores per-agent frontmatter skills.
 
 ## SKILL_MANIFEST.md format
 
@@ -144,8 +146,10 @@ At BUILD, before implementing/testing:
    normally (no routing).
 2. For your role's `skills`, load and apply each **if it is available** in this
    environment. Applying a skill = invoke it by name with the **Skill tool** so
-   its guidance is in context (workflow-dispatched roles may also receive it via
-   `AgentDefinition.skills` preload).
+   its guidance is in context. (No workflow-side preload exists — the runtime's
+   `agent()` has no `skills` option — so a workflow-dispatched role loads only what
+   its own agent body and the dispatch prompt name; the manifest stays advisory,
+   loaded by the role at BUILD via its own instructions, on every path.)
 3. If a listed skill is **not available**, do not fail and do not block — proceed
    with your normal craft and record one line in `IMPL_NOTES.md` (coder) /
    `TEST_PLAN.md` (qa): `skill-unavailable: <name> (manifest-recommended)`. This
