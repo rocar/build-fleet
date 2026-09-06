@@ -42,7 +42,8 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    `PHASE: ESCALATED`, stop.
 
 6. **Bump the change-cycle.** Increment `CHANGE_CYCLE` in PROGRESS.md. Set
-   `PHASE: CHANGE_REVIEW`. Refresh `UPDATED:`.
+   `PHASE: CHANGE_REVIEW`. Refresh `UPDATED:` (computed with
+   `date -u +%Y-%m-%dT%H:%M:%SZ`, never guessed).
 
 7. **Fan out CHANGE_REVIEW reviewers.** Use the Task tool to launch
    `build-fleet:architect`, `build-fleet:product-owner`, and

@@ -71,8 +71,7 @@ cycle.
    bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh" "<slug>"
    ```
 
-   (add `--roster <r1,r2,...>` only if a `--roles` flag was given; by default the script
-   reads `REVIEW_ROLES` from PROGRESS.md). It prints exactly one line:
+   The script reads `REVIEW_ROLES` from PROGRESS.md. It prints exactly one line:
 
    ```
    BUILD_FLEET_FINALIZE_GATE: {"feature":"<slug>","cycle":<N>,"pass":true|false,"reasons":[...],"open_blockers":[...],"open_majors":[...],"majors_without_adr":[...]}

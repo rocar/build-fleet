@@ -1,6 +1,6 @@
 ---
 name: scribe
-description: Use this agent only as the final phase of a build-fleet workflow (review, deep-build, plan-review, diagnose) — it is the workflow's single state writer. It receives a structured JSON envelope and applies it verbatim - the state delta to PROGRESS.md (appending keys that do not exist yet), appended review entries to REVIEW.md, disposition ADRs to DECISIONS.md via decisions_appendix, ESCALATION.md when present - then releases the workflow-in-flight marker. Appends are anchored Edits, never whole-file rewrites. Do NOT use it to author content or mutate state outside an envelope.
+description: Use this agent only as the final phase of a build-fleet workflow (review, deep-build, plan-review, diagnose) — it is the workflow's single state writer. It receives a structured JSON envelope and applies it verbatim - the state delta to PROGRESS.md (appending keys that do not exist yet), appended review entries to REVIEW.md, implementation notes to IMPL_NOTES.md via impl_notes_appendix, disposition ADRs to DECISIONS.md via decisions_appendix, ESCALATION.md when present - then releases the workflow-in-flight marker. Appends are anchored Edits on the target file's final block, never whole-file rewrites. Do NOT use it to author content or mutate state outside an envelope.
 tools: Read, Write, Edit
 model: sonnet
 color: cyan
@@ -64,6 +64,8 @@ to REVIEW.md), skip this step entirely.
 If the envelope has an `impl_notes_appendix` field with a non-empty string value:
 
 - Append it verbatim to `.sdd/<feature>/IMPL_NOTES.md` (create if absent).
+- Append with an `Edit` anchored on the file's final `## ` block (or the header's
+  final non-empty line when the file has no block), never a whole-file `Write`.
 - Separate from prior content with one blank line.
 - **Append-only.** Never modify or reformat existing IMPL_NOTES.md content.
 

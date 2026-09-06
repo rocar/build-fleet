@@ -2,10 +2,11 @@
 # Severity-rubric drift test (audit §4, agents minor). The blocker/major/minor
 # table is defined in skills/review-rubric/SKILL.md and duplicated verbatim in
 # agents/architect.md, agents/qa.md and agents/reviewer.md as belt-and-suspenders
-# for non-workflow paths. This test extracts the table from all three and fails if they drift.
+# for non-workflow paths. This test extracts the table from the skill and its three
+# mirrors and fails if they drift.
 # Whitespace is normalized before diffing (column padding may differ; words and
 # pipes may not). bash 3.2 compatible.
-# Run: bash scripts/rubric-drift.test.sh   (exit 0 = all three agree)
+# Run: bash scripts/rubric-drift.test.sh   (exit 0 = all four agree)
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

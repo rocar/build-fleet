@@ -67,8 +67,9 @@ Snapshot (`build-fleet/status-snapshot@1`):
    - `status:` line value.
    - Count of `[blocker]`, `[major]`, `[minor]` items — and for each `[major]`, its
      `disposition:` (`fix` = open, `adr ADR-N` = accepted; none = open, legacy block).
-   - `finalize_ready`: yes iff zero `[blocker]` lines and zero open majors across the
-     current cycle's blocks (this is the finalize gate's rule).
+   - `finalize_ready`: yes iff zero UNREFUTED `[blocker]` lines (a `refuted-by:`
+     continuation closes one) and zero open majors across the current cycle's blocks
+     (this is the finalize gate's rule).
    - Verbatim text of every `[blocker]` item (so the user sees what's
      actually open).
 

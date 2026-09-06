@@ -33,7 +33,8 @@ It never edits `.sdd/` itself; the product-owner writes `spec.md` / `acceptance.
    are **closed** and must not be handed to the PO.
    If the list is empty, refuse
    `BUILD_FLEET_REFUSE: {"command":"revise","code":2,"reason":"nothing-to-revise","cycle":<CYCLE>}`
-   and tell the user the cycle is finalize-ready: run `/build-fleet:finalize`.
+   and tell the user no blocker or `fix` major is open; run `/build-fleet:finalize`
+   (the gate still checks that every `adr` disposition cites an existing ADR).
 
 4. **Read the size budget.** From PROGRESS.md: `SPEC_MAX_KB` and `AC_MAX` (either may be
    absent — then say "no cap" for that one).

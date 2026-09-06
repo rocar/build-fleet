@@ -38,7 +38,7 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
 
    The **workflow is the authoritative validator**: pass the resolved values straight through (step 9) and let `review.js` reject a malformed roster/budget via its `invalid-args` path — do **not** re-implement the allowed-role list or bounds here (that would drift). Do **not** write these into PROGRESS.md; a flag override applies to this run only and is recorded by the config signal line in step 8.
 
-   **Cycle-budget precondition.** The workflow escalates **on** the cycle that exhausts `effective_budget`: if blockers still survive the survival vote at `CYCLE == effective_budget`, that run writes ESCALATION.md and sets `PHASE: ESCALATED` (there is no separate "next cycle" — the exhausting cycle with surviving blockers *is* the escalation). This refusal is a belt-and-suspenders guard for the edge where `CYCLE` is already `>= effective_budget` without a recorded escalation: if `CYCLE >= effective_budget` AND the most recent REVIEW.md cycle still has open `[blocker]` items, refuse — a further run can only escalate, and the workflow owns that write. Refuse with: `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cycle-budget-exhausted","cycle":<n>,"cycle_budget":<effective_budget>}` — resolve blockers in spec.md or accept the escalation.
+   **Cycle-budget precondition.** The workflow escalates **on** the cycle that exhausts `effective_budget`: if open blockers or `fix`-dispositioned majors remain at `CYCLE == effective_budget`, that run writes ESCALATION.md and sets `PHASE: ESCALATED` (there is no separate "next cycle" — the exhausting cycle with surviving blockers *is* the escalation). This refusal is a belt-and-suspenders guard for the edge where `CYCLE` is already `>= effective_budget` without a recorded escalation: if `CYCLE >= effective_budget` AND the most recent REVIEW.md cycle still has open `[blocker]` items or `disposition: fix` majors, refuse — a further run can only escalate, and the workflow owns that write. Refuse with: `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cycle-budget-exhausted","cycle":<n>,"cycle_budget":<effective_budget>}` — resolve blockers in spec.md or accept the escalation.
 
    **Cumulative-cycle precondition (v0.9).** Read `CYCLE_TOTAL` (absent ⇒ use `CYCLE`)
    and `CYCLE_TOTAL_MAX` (absent ⇒ `6`; `0` disables). `CYCLE_TOTAL` never resets —
@@ -60,15 +60,17 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
 
 6. **Pick the new cycle number.** New cycle = `CYCLE + 1`. Pass to the workflow.
 
-6b. **Rotate REVIEW.md (v0.9).** If `CYCLE >= 1`, bound the reviewers' input to the
-   previous cycle by running the deterministic rotation — never do this by hand:
+6b. **Rotate REVIEW.md (v0.9).** Bound the reviewers' input to the previous cycle by
+   ALWAYS running the deterministic rotation — never do this by hand:
    ```bash
    bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-rotate.sh" "<slug>"
    ```
    (add `--roster <N>` when a `--roles` flag changed the roster size). It moves every
    block older than the last roster-sized run of `## Cycle` blocks into
    `.sdd/<slug>/REVIEW-archive.md` (append-only) and prints one
-   `BUILD_FLEET_REVIEW_ROTATED: {...}` line — relay it. Idempotent; no-op on cycle 0.
+   `BUILD_FLEET_REVIEW_ROTATED: {...}` line — relay it. Idempotent; a no-op when there
+   is nothing older than the kept run (e.g. cycle 0, or the first cycle after a reset
+   once the old log was already rotated).
 
 6c. **Compute `next_adr_id` and `cycle_total`.**
    ```bash

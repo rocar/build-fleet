@@ -33,9 +33,10 @@ Two deeper references live alongside this file:
 - **Escalate, don't loop forever.** Each review gate is bounded at **3 cycles**.
   One workflow run (or one `/build-fleet:handoff` change-review pass) = one cycle;
   cross-examination rounds inside a single workflow run do NOT bump the counter.
-  The run that exhausts the budget — cycle 3 with blockers still surviving — writes
-  `ESCALATION.md`, sets `PHASE: ESCALATED`, and halts that phase for a human. There
-  is no separate "4th cycle".
+  The run that exhausts the budget — the exhausting cycle with open blockers or
+  open `fix` majors still surviving — writes `ESCALATION.md`, sets
+  `PHASE: ESCALATED`, and halts that phase for a human. There is no separate
+  "4th cycle".
 - **Converge, don't re-litigate.** Cycle 1 is the only full review. After it,
   reviewers verify closure and may add blockers only; majors are dispositioned once
   (`fix` or `adr`) and an accepted trade-off is contested only as a blocker against
@@ -267,6 +268,14 @@ phases:
    asked for in the prompt: any surviving `[major]` whose id originates at cycle ≥ 2
    is demoted to `[minor]` (with a prefixed "not permitted on a delta cycle" text)
    before the survival vote.
+
+   **Migration for an in-flight 0.8.0 feature** (one whose REVIEW.md blocks carry no
+   `(id)` / `disposition:` lines): before its first 0.9 review, edit PROGRESS.md to
+   `CYCLE: 0` and add `CYCLE_TOTAL: <the old CYCLE value>` so the next run is a full
+   cycle 1 with fresh ids — legacy findings cannot be re-raised by id and would
+   otherwise be dropped or demoted by the delta rules. The run then rotates the old
+   log to REVIEW-archive.md, dispositions every surviving major and stamps
+   `CYCLE_TOTAL`.
 2. **Cross-examination** — refute or affirm peers' concerns, citing spec.md,
    acceptance.md or DECISIONS.md (an ADR is a substantive refutation).
 3. **Survival vote** — pure script; a concern survives unless refuted by a

@@ -111,7 +111,7 @@ Four design decisions distinguish these from "the model just keeps going":
 1. **Every loop is bounded with an explicit stopping condition.** The governing
    principle is *"Escalate, don't loop forever"* (`SKILL.md:33`). Cycle budgets are
    clamped to a hard ceiling of 3, **configurable downward only**
-   (`review.js:117`, `MAX_CYCLE_BUDGET`). The run that exhausts the budget writes
+   (`MAX_CYCLE_BUDGET` in `workflows/review.js`). The run that exhausts the budget writes
    `ESCALATION.md`, sets `PHASE: ESCALATED`, and halts for a human. Escalation is a
    first-class outcome, not a failure.
 
