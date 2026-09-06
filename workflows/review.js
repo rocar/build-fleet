@@ -224,11 +224,22 @@ function decideVerdict(openBlockerCount, openMajorCount, cycle, cycleBudget) {
   return "clean";
 }
 
+// v0.9 fix round 3 (C1): text that renders into a SINGLE REVIEW.md/DECISIONS.md
+// line — finalize-gate.sh (and any hand-written legacy block) reads "the line
+// after a [blocker]/[major] line" as its continuation (refuted-by / disposition),
+// and an ADR heading must be one line. An embedded "\n" in agent-authored text
+// (a finding's own text, a refutation reason, or an ADR title) would otherwise
+// split that line and either be misread as its own continuation or break the
+// "## ADR-N: title" heading grammar.
+function flattenText(t) {
+  return String(t == null ? "" : t).replace(/\s*\n\s*/g, " ").trim();
+}
+
 // v0.9: render one ADR block per the `adr` skill's entry format (feature scope).
 // `nowIso` is the run's args.now; the date is its first 10 characters (no Date API).
 function formatAdr(adrId, title, body, cycle, nowIso, findingId, raisedBy) {
   const date = String(nowIso || "").slice(0, 10);
-  const cleanTitle = String(title || "").trim() || `accept review finding ${findingId}`;
+  const cleanTitle = flattenText(title) || `accept review finding ${findingId}`;
   const cleanBody = String(body || "").trim();
   return [
     `## ADR-${adrId}: ${cleanTitle}`,
@@ -242,22 +253,13 @@ function formatAdr(adrId, title, body, cycle, nowIso, findingId, raisedBy) {
   ].join("\n");
 }
 
-// v0.9 fix round 3 (C1): a finding's own text must render as exactly ONE line —
-// finalize-gate.sh (and any hand-written legacy block) reads "the line after a
-// [blocker]/[major] line" as its continuation (refuted-by / disposition). An
-// embedded "\n" in agent-authored text would otherwise split the finding across
-// multiple lines and be misread as its own continuation.
-function flattenText(t) {
-  return String(t == null ? "" : t).replace(/\s*\n\s*/g, " ").trim();
-}
-
 // v0.9: REVIEW.md line grammar — "- [sev] (id) text", then optional indented
 // continuation lines: refuted-by (survival vote) and disposition (majors only).
 function formatFindingLines(c, dispositionMap) {
   const lines = [`- [${c.severity}] (${c.id}) ${flattenText(c.text)}`];
   if (c.refuted) {
     const cite = c.refutation_citation ? ` (cites ${c.refutation_citation.file} ${c.refutation_citation.locator})` : "";
-    lines.push(`  refuted-by: ${c.refuted_by} — reason: ${c.refutation_reason}${cite}`);
+    lines.push(`  refuted-by: ${c.refuted_by} — reason: ${flattenText(c.refutation_reason)}${cite}`);
   } else if (c.severity === "major") {
     const d = dispositionMap[c.id];
     lines.push(d && d.action === "adr" ? `  disposition: adr ADR-${d.adr_id}` : "  disposition: fix");

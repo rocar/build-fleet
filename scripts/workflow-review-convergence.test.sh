@@ -197,6 +197,28 @@ check(
 );
 check("multiline-finding-text-flattened", flattenedLines[0] === "- [major] (architect-c1-2) line one line two");
 
+// flattenText applied to refutation_reason and ADR title (micro-fix after C1): both
+// render into a single REVIEW.md/DECISIONS.md line just like a finding's own text.
+const multilineRefuted = {
+  id: "qa-c1-2",
+  severity: "major",
+  raised_by: "qa",
+  text: "m3-refuted",
+  refuted: true,
+  refuted_by: "coder",
+  refutation_reason: "line one of the reason\nline two of the reason, still long enough",
+  refutation_citation: { file: "spec.md", locator: "§ X" },
+};
+const refutedLines = formatFindingLines(multilineRefuted, {});
+check("multiline-refutation-reason-renders-as-two-lines", refutedLines.length === 2 && refutedLines[1].indexOf("\n") === -1);
+check(
+  "multiline-refutation-reason-flattened",
+  refutedLines[1] === "  refuted-by: coder — reason: line one of the reason line two of the reason, still long enough (cites spec.md § X)"
+);
+
+const multilineTitleAdr = formatAdr(4, "use\ntoken bucket", "body", 2, "2026-09-03T10:12:41Z", "qa-c1-1", "qa");
+check("adr-multiline-title-flattened-heading", multilineTitleAdr.startsWith("## ADR-4: use token bucket\n"));
+
 console.log("-----"); console.log("passed=" + pass + " failed=" + fail); process.exit(fail > 0 ? 1 : 0);
 EOF
 
