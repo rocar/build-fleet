@@ -1,7 +1,7 @@
 {
   "name": "build-fleet",
-  "version": "0.8.0",
-  "description": "Spec-driven multi-agent software house: product-owner, architect, coder, qa, devops, scribe, and classifier subagents executing a hook-gated SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF state machine, with a human-ratified product planning tier and a reproducing-test-gated bug lane. Deterministic gates, bounded review cycles, first-class human escalation, configurable per-item review rosters and cycle budgets, a governed generate-then-pin lane for authoring novel workflows, and headless orchestrator support.",
+  "version": "0.9.0",
+  "description": "Spec-driven multi-agent software house: product-owner, architect, coder, qa, devops, scribe, classifier, and read-only reviewer subagents executing a hook-gated SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF state machine, with a human-ratified product planning tier and a reproducing-test-gated bug lane. Deterministic gates, bounded review cycles, first-class human escalation, configurable per-item review rosters and cycle budgets, a governed generate-then-pin lane for authoring novel workflows, headless orchestrator support, and a convergent bounded review loop (delta review, in-workflow ADR disposition, rubric-only finalize gate, spec/criteria/cycle caps).",
   "author": {
     "name": "Ray Car",
     "email": "raycar@gmail.com"

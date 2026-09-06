@@ -14,7 +14,7 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
-## [0.9.0] — 2026-09-05
+## [0.9.0] — 2026-09-06
 
 The **convergent review** release. The REVIEW loop is now bounded and monotone: a
 rubric-only finalize gate, delta review from cycle 2, in-workflow ADR disposition of
