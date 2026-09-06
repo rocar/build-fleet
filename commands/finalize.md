@@ -71,7 +71,10 @@ cycle.
    bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh" "<slug>"
    ```
 
-   The script reads `REVIEW_ROLES` from PROGRESS.md. It prints exactly one line:
+   The script reads `REVIEW_ROLES` from PROGRESS.md. If the last review ran with a
+   `--roles` override (recorded on that run's `BUILD_FLEET_REVIEW_CONFIG` line;
+   overrides are never persisted), pass the same roster: `--roster <r1,r2,...>`.
+   It prints exactly one line:
 
    ```
    BUILD_FLEET_FINALIZE_GATE: {"feature":"<slug>","cycle":<N>,"pass":true|false,"reasons":[...],"open_blockers":[...],"open_majors":[...],"majors_without_adr":[...]}

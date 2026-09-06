@@ -473,8 +473,9 @@ markers.
 
 > CYCLE counts **workflow runs**, not command invocations — cross-examination
 > rounds inside a single run do not bump it. Feature review cycles are bounded
-> (default 3); the run that exhausts the budget — cycle 3 with blockers still
-> surviving — writes `ESCALATION.md` and halts for a human. PLAN_REVIEW does not
+> (default 3); the run that exhausts the budget — the exhausting cycle with open
+> blockers or `fix` majors still surviving — writes `ESCALATION.md` and halts for
+> a human. PLAN_REVIEW does not
 > auto-escalate — only a human halts a plan.
 
 ---

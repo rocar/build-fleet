@@ -219,6 +219,31 @@ check(
 const multilineTitleAdr = formatAdr(4, "use\ntoken bucket", "body", 2, "2026-09-03T10:12:41Z", "qa-c1-1", "qa");
 check("adr-multiline-title-flattened-heading", multilineTitleAdr.startsWith("## ADR-4: use token bucket\n"));
 
+// flattenText applied to refutation_citation.file/locator (pre-release polish): a
+// citation locator spanning multiple lines must not split the refuted-by line —
+// the refuted-by continuation must stay a single indented line, since an embedded
+// "\n" would otherwise start a second line that finalize-gate.sh's forward scan
+// could misread as its own continuation.
+const multilineCitation = {
+  id: "qa-c1-3",
+  severity: "major",
+  raised_by: "qa",
+  text: "cited finding",
+  refuted: true,
+  refuted_by: "coder",
+  refutation_reason: "reason text",
+  refutation_citation: { file: "spec.md", locator: "§ X\nline two of locator" },
+};
+const citationLines = formatFindingLines(multilineCitation, {});
+check(
+  "multiline-citation-locator-renders-as-one-refuted-by-line",
+  citationLines.length === 2 && citationLines[1].indexOf("\n") === -1
+);
+check(
+  "multiline-citation-locator-flattened",
+  citationLines[1] === "  refuted-by: coder — reason: reason text (cites spec.md § X line two of locator)"
+);
+
 console.log("-----"); console.log("passed=" + pass + " failed=" + fail); process.exit(fail > 0 ? 1 : 0);
 EOF
 

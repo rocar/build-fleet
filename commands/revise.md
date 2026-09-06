@@ -26,9 +26,12 @@ It never edits `.sdd/` itself; the product-owner writes `spec.md` / `acceptance.
 3. **Extract the open items.** Read `CYCLE` and `REVIEW_ROLES` (default
    `architect, qa, coder`). In `.sdd/<slug>/REVIEW.md`, take the **last** block per
    roster role headed `## Cycle <CYCLE> — <role> —`. From those blocks collect:
-   - every `- [blocker] (<id>) <text>` line whose next line is NOT an indented `refuted-by:` continuation (a refuted blocker is closed);
-   - every `- [major] (<id>) <text>` line whose next line is `  disposition: fix`, or
-     which has no `disposition:` / `refuted-by:` continuation line at all.
+   - every `- [blocker] (<id>) <text>` line that is open: a `[blocker]` line is open
+     unless a `refuted-by:` continuation follows it (any indented continuation lines
+     up to the next finding, `status:` or heading);
+   - every `- [major] (<id>) <text>` line that is open: a `[major]` line is open when
+     its continuation lines carry `disposition: fix` or no `disposition:`/`refuted-by:`
+     at all.
    Ignore `[minor]` lines, refuted items, and `disposition: adr ADR-N` majors — those
    are **closed** and must not be handed to the PO.
    If the list is empty, refuse

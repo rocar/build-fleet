@@ -59,10 +59,12 @@ Snapshot (`build-fleet/status-snapshot@1`):
 
 3. **Read `.sdd/<active>/spec.md` first line.** Print the STATUS value.
 
-4. **Summarize the most recent REVIEW.md cycle.** Find every block tagged
-   with the current `CYCLE` (if PHASE is in spec-review territory) or
-   `CHANGE_CYCLE` (if PHASE is in change-review territory). For each
-   reviewer block, print:
+4. **Summarize the most recent REVIEW.md cycle.** If PHASE is in spec-review
+   territory, find the LAST block per roster role tagged with the current
+   `CYCLE` (a same-numbered earlier block — e.g. after the 0.8→0.9 migration
+   reset — is superseded); if PHASE is in change-review territory, find every
+   block tagged with the current `CHANGE_CYCLE`. For each reviewer block,
+   print:
    - Reviewer name.
    - `status:` line value.
    - Count of `[blocker]`, `[major]`, `[minor]` items — and for each `[major]`, its

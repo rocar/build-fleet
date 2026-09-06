@@ -218,7 +218,8 @@ order:
 7. **Rotate REVIEW.md and index the ADRs (v0.9).** `scripts/review-rotate.sh` moves
    every block older than the previous cycle's roster-sized run into
    `.sdd/<slug>/REVIEW-archive.md` (append-only) — bounding what the next fan-out
-   has to read; idempotent, a no-op on cycle 0. `scripts/adr-index.sh --next`
+   has to read; idempotent; a no-op when nothing older than the kept run exists.
+   `scripts/adr-index.sh --next`
    computes `next_adr_id` for the disposition leg's ADR numbering. `cycle_total` is
    read here too (`CYCLE_TOTAL`, or `CYCLE` when absent) — the count *before* this
    run.

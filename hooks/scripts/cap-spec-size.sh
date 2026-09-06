@@ -8,11 +8,12 @@
 # text says SPLIT, not compress: a spec that cannot fit its budget is a feature that
 # should be two backlog rows.
 #
-# ABSENT FIELD ⇒ NO CAP. Every workspace scaffolded before v0.9 is grandfathered;
-# /build-fleet:new-feature scaffolds the field from tier defaults. The product tier
-# (.sdd/_product/) is exempt. Ported from the tap pilot's local guard. `0` disables
-# the cap; a PRESENT value that is not all digits (e.g. "24KB") is malformed input,
-# not an absent field — it REFUSES (exit 2) rather than silently running uncapped.
+# SPEC_MAX_KB semantics, precisely: absent OR EMPTY value = no cap; `0` = disabled;
+# a non-empty value that is not all digits (e.g. "24KB") = refused (exit 2) rather
+# than silently running uncapped. Every workspace scaffolded before v0.9 is
+# grandfathered (absent field, no cap); /build-fleet:new-feature scaffolds the field
+# from tier defaults. The product tier (.sdd/_product/) is exempt. Ported from the
+# tap pilot's local guard.
 #
 # Handles: leading-zero values (010 → decimal 10, not octal 8); newline-safe
 # replace_all occurrence counting; NotebookEdit refuses closed (cannot project bytes).

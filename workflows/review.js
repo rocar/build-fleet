@@ -258,7 +258,7 @@ function formatAdr(adrId, title, body, cycle, nowIso, findingId, raisedBy) {
 function formatFindingLines(c, dispositionMap) {
   const lines = [`- [${c.severity}] (${c.id}) ${flattenText(c.text)}`];
   if (c.refuted) {
-    const cite = c.refutation_citation ? ` (cites ${c.refutation_citation.file} ${c.refutation_citation.locator})` : "";
+    const cite = c.refutation_citation ? ` (cites ${flattenText(c.refutation_citation.file)} ${flattenText(c.refutation_citation.locator)})` : "";
     lines.push(`  refuted-by: ${c.refuted_by} — reason: ${flattenText(c.refutation_reason)}${cite}`);
   } else if (c.severity === "major") {
     const d = dispositionMap[c.id];

@@ -7,8 +7,8 @@
 # reviewers can find under-specified. The tap pilot's features carried 56–99 criteria
 # and never converged. Over the cap the answer is SPLIT the feature, never renumber.
 #
-# ABSENT FIELD ⇒ NO CAP (grandfathering); 0 disables. A PRESENT AC_MAX that is not
-# all digits (e.g. "15x") is malformed input, not an absent field — it REFUSES
+# AC_MAX semantics, precisely: absent OR EMPTY value = no cap (grandfathering);
+# `0` = disabled; a non-empty value that is not all digits (e.g. "15x") = refused
 # (exit 2) rather than silently running uncapped. The product tier has no
 # acceptance.md. PostToolUse cannot undo the write — exit 2 blocks the model's
 # continuation until the file is brought under budget, same as validate-spec-status.
