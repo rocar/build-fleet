@@ -754,7 +754,7 @@ session per working tree; parallel clones are not serialized against each other.
 | `require-reproducing-test` | Blocks a bug's fix source until `diagnosis.md` is CONFIRMED **and** a reproducing test exists under `tests/` — holds even for sev0. |
 | `check-review-written` | Rejects a reviewer that stops without logging to `REVIEW.md`. |
 | `stop-tests` | During BUILD / CHANGE_REVIEW / HANDOFF, blocks stop on a failing suite (tolerates "no tests collected" pre-suite). Bounded: after 3 consecutive red blocks it writes `ESCALATION.md` and lets the stop through instead of wedging the session; `.sdd/<slug>/.skip-stop-tests` is the operator override. |
-| `reap-stale-workflow-markers` | Removes released (empty) `.workflow-in-flight` markers immediately and orphaned ones past the staleness threshold (15 min). |
+| `reap-stale-workflow-markers` | Removes released (empty) `.workflow-in-flight` markers immediately and orphaned ones past the staleness threshold (2 hours). |
 
 Hooks block with exit code 2 and return actionable feedback. They are the
 deterministic backbone — agents can't talk their way past a gate, and the gates

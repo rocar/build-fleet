@@ -334,7 +334,7 @@ export const meta = {
     "Apply state delta via scribe (1 subagent)",
   ],
 };
-// @cost-ceiling { "inputTokens": 120000, "outputTokens": 30000 }
+// @cost-ceiling { "inputTokens": 600000, "outputTokens": 120000 }
 // (cost lives in this header comment, NOT in meta — see §7)
 ```
 
@@ -618,7 +618,7 @@ ceiling lives in a `// @cost-ceiling {...}` JS header comment at the top of each
 workflow script, parsed by the command layer before dispatch:
 
 ```js
-// @cost-ceiling { "inputTokens": 120000, "outputTokens": 30000 }
+// @cost-ceiling { "inputTokens": 600000, "outputTokens": 120000 }
 ```
 
 ### Surfacing path
@@ -626,7 +626,7 @@ workflow script, parsed by the command layer before dispatch:
 - **Interactive mode**: the platform's launch prompt already shows token caution. The `phases` array names + subagent counts (in phase strings) give human reviewers the picture. The `@cost-ceiling` comment is supplementary.
 - **Headless mode**: the command body parses the `@cost-ceiling` header comment from the script file *before* invoking the Workflow tool and writes a one-line summary to stdout:
   ```
-  BUILD_FLEET_COST_PREVIEW: workflow=review feature=<slug> input_ceiling=120000 output_ceiling=30000
+  BUILD_FLEET_COST_PREVIEW: workflow=review feature=<slug> input_ceiling=600000 output_ceiling=120000
   ```
   Orchestrator (Hermes) parses this line and surfaces on Discord before the workflow dispatches.
 

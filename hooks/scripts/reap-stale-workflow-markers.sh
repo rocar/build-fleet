@@ -13,15 +13,19 @@
 # threshold — a workflow that failed to launch (or crashed) leaves an orphan
 # that would silently weaken the per-reviewer hooks for the affected feature.
 #
-# Threshold: 15 minutes (lowered from 1 hour in the 2026-06 audit remediation,
-# §3.14 — markers now carry the dispatching run's id, the scribe deletes only
-# its own marker, and dispatch commands clean up dead runs themselves, so the
-# reaper is a last-resort backstop and can be aggressive). A false positive
-# only re-enables hooks — no data loss; a live run that outlasts the threshold
-# is protected by the run-id ownership check everywhere except this backstop.
+# Threshold: 2 hours (raised from 15 minutes on 2026-09-06, live-run
+# recalibration — a real v0.9 review cycle measured 26.6 minutes end-to-end,
+# and the Stop hook fires whenever the orchestrator ends a turn while waiting
+# on the workflow, so the 900s threshold reaped the LIVE marker mid-run: a
+# false reap re-enables check-review-written / restrict-reviewer-writes before
+# the scribe applies, and can block the recording write after the whole run's
+# cost was spent. This reaper exists to catch CRASHED runs — a live run's
+# marker is released by the scribe itself the moment it finishes — so a
+# 2-hour grace costs nothing but a delayed hook re-engagement after a crash,
+# while comfortably covering runs several times longer than the one measured.
 set -euo pipefail
 
-STALE_AFTER_SECONDS=900
+STALE_AFTER_SECONDS=7200
 
 # Operate from cwd (the target project where .sdd/ lives).
 [ -d .sdd ] || exit 0

@@ -14,10 +14,15 @@
 //
 // CONTRACT: docs/v0.2/CONTRACT.md §6.
 //
-// @cost-ceiling {"input_tokens":120000,"output_tokens":30000}
+// @cost-ceiling {"input_tokens":600000,"output_tokens":120000}
 // (Cost ceiling lives in this header comment, NOT meta — meta must be a pure
 // literal and the runtime ignores unknown meta fields. commands/review.md parses
-// this line to emit BUILD_FLEET_COST_PREVIEW and to judge cost-runaway.)
+// this line to emit BUILD_FLEET_COST_PREVIEW and to judge cost-runaway.
+// Recalibrated 2026-09-06 from the live pilot run: full cycle 1 on a 49 KB
+// spec ran 8 agents and spent 274,075 output tokens (733,827 subagent tokens
+// total), so the v0.2-guess 30,000-output ceiling had commands/review.md's
+// 3× cost-runaway trip at 90,000 — below the measured cost of a normal run.
+// The new ceiling puts the runaway trip at 360,000.)
 //
 // API NOTES (confirmed against the Workflow tool description):
 //   - agent(prompt, opts) → final text (string), or a validated object when

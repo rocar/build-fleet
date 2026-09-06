@@ -15,6 +15,7 @@ The `Workflow` tool must be available. This requires:
 - Claude Code v2.1.154 or later
 - Workflows enabled in `/config` (Pro plans) — or available by default on Max/Team/Enterprise
 - `Workflow` in the session's `allowedTools` (e.g., for headless callers: `claude -p --allowedTools "Workflow,Read,Edit,Write,Bash,Agent" '/build-fleet:review'`)
+- Headless callers: pass `--add-dir <plugin dir>` so the Workflow tool accepts the plugin's script path, and set `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` so `claude -p` waits for the run (it otherwise terminates background work after 10 minutes) — validated live on the pilot 2026-09-06 (a full cycle ran 26.6 minutes).
 
 There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse with the `workflow-runtime-unavailable` signal below and tell the user how to enable workflows.
 

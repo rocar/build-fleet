@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Tests for hooks/scripts/reap-stale-workflow-markers.sh (audit §3.8).
 # Stop hook: removes .sdd/<slug>/.workflow-in-flight markers older than the
-# staleness threshold (900s); fresh markers and anything outside the
-# .sdd/<slug>/ layer are left alone. The hook operates from cwd, so each case
+# staleness threshold (7200s / 2h — recalibrated 2026-09-06 from a live 26.6-min
+# review run, see the hook's header comment); fresh markers and anything outside
+# the .sdd/<slug>/ layer are left alone. The hook operates from cwd, so each case
 # runs inside its own mktemp fixture repo.
 # Run: bash hooks/scripts/reap-stale-workflow-markers.test.sh   (exit 0 = all pass)
 set -uo pipefail
@@ -18,8 +19,15 @@ ok()  { pass=$((pass+1)); printf 'ok   %-42s %s\n' "$1" "$2"; }
 bad() { fail=$((fail+1)); printf 'FAIL %-42s %s\n' "$1" "$2"; }
 
 new_proj() { local p="$work/$1"; mkdir -p "$p/.sdd"; printf '%s' "$p"; }
-# make_stale <file>: push mtime well past the 900s threshold (bash-3.2/BSD-safe)
+# make_stale <file>: push mtime well past any reasonable staleness threshold
 make_stale() { touch -t 202601010000 "$1"; }
+# touch_ago <file> <minutes>: set mtime to <minutes> minutes before "now"
+# (bash-3.2/BSD-safe: try the BSD `date -v` form first, fall back to GNU `date -d`)
+touch_ago() {
+  local file="$1" mins="$2" ts
+  ts=$(date -v-"${mins}M" +%Y%m%d%H%M.%S 2>/dev/null) || ts=$(date -d "-${mins} min" +%Y%m%d%H%M.%S)
+  touch -t "$ts" "$file"
+}
 # run_hook <proj>: invoke from the fixture, like a real Stop hook firing there
 run_hook() { ( cd "$1" && printf '{}' | bash "$HOOK" >/dev/null 2>&1 ); }
 
@@ -36,6 +44,25 @@ err=$( cd "$p" && printf '{}' | bash "$HOOK" 2>&1 >/dev/null ); rc=$?
 if [ "$rc" -eq 0 ] && [ ! -f "$p/.sdd/feat/.workflow-in-flight" ] && printf '%s' "$err" | grep -q "reaping stale workflow marker.*'feat'"; then
   ok "stale-marker-reaped" "rc=$rc"
 else bad "stale-marker-reaped" "rc=$rc err=$err"; fi
+
+# --- LIVE marker 30 minutes old must survive a Stop: past the OLD 900s/15-min
+#     threshold but comfortably under the NEW 7200s/2h threshold (a real review
+#     run measured 26.6 min end-to-end; see the hook's header comment) ---
+p=$(new_proj live30); mkdir -p "$p/.sdd/feat"; printf 'review-feat-c1' > "$p/.sdd/feat/.workflow-in-flight"
+touch_ago "$p/.sdd/feat/.workflow-in-flight" 30
+run_hook "$p"; rc=$?
+if [ "$rc" -eq 0 ] && [ -f "$p/.sdd/feat/.workflow-in-flight" ]; then
+  ok "live-marker-30-min-old-not-reaped" "rc=$rc"
+else bad "live-marker-30-min-old-not-reaped" "rc=$rc marker_exists=$([ -f "$p/.sdd/feat/.workflow-in-flight" ] && echo y || echo n)"; fi
+
+# --- ABANDONED marker 3 hours old is past the NEW 7200s/2h threshold and is
+#     reaped (a crashed run's orphan — the backstop this hook exists for) ---
+p=$(new_proj abandoned3h); mkdir -p "$p/.sdd/feat"; printf 'review-feat-c1' > "$p/.sdd/feat/.workflow-in-flight"
+touch_ago "$p/.sdd/feat/.workflow-in-flight" 180
+err=$( cd "$p" && printf '{}' | bash "$HOOK" 2>&1 >/dev/null ); rc=$?
+if [ "$rc" -eq 0 ] && [ ! -f "$p/.sdd/feat/.workflow-in-flight" ] && printf '%s' "$err" | grep -q "reaping stale workflow marker.*'feat'"; then
+  ok "abandoned-marker-3h-old-reaped" "rc=$rc"
+else bad "abandoned-marker-3h-old-reaped" "rc=$rc err=$err"; fi
 
 # --- RELEASED marker (empty — the scribe emptied it at envelope-apply time) is
 #     reaped immediately, fresh or not, with the released notice ---
