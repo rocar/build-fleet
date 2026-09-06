@@ -18,8 +18,8 @@ stopping conditions.
 
 | Loop | Shape (named pattern) | Iteration unit | Stopping condition | Where |
 |---|---|---|---|---|
-| **REVIEW** (spec ⇄ review) | evaluator-optimizer + parallelization-with-voting | one `/build-fleet:review` run | zero surviving blockers → `clean`; else `revise` until **≤3 cycles**, then `escalate` | `workflows/review.js`, `SKILL.md` §REVIEW |
-| **REVIEW internal** | 3-stage micro-loop | fan-out → cross-examination → survival vote → scribe apply | pure-JS survival vote | `workflows/review.js:220-293` |
+| **REVIEW** (spec ⇄ review) | evaluator-optimizer + parallelization-with-voting | one `/build-fleet:review` run (REVIEW.md rotated to the previous cycle at each dispatch; cycle ≥2 is a delta review) | zero blockers & zero `fix` majors (`finalize_ready`) → `clean`; else `revise`/`escalate` at **≤3 cycles**, escalating on blockers **or** `fix` majors — plus a cumulative `CYCLE_TOTAL` bound across escalations | `workflows/review.js`, `SKILL.md` §REVIEW |
+| **REVIEW internal** | 5-stage micro-loop | fan-out → cross-examination → survival vote → disposition → apply | pure-JS survival vote | `workflows/review.js` |
 | **BUILD** (TDD) | generator/evaluator | coder iterates against qa's pre-written failing tests | every qa test passes | `SKILL.md:260-267` |
 | **deep-build** | orchestrator-workers | architect partitions files → N coders fan out → adversarial review | `clean` / `needs-iteration` / `escalate`, bounded by `BUILD_CYCLE ≤3` | `workflows/deep-build.js`, `SKILL.md:283-287` |
 | **CHANGE_REVIEW** | evaluator-optimizer | one `/build-fleet:handoff` pass | 3 approvals; fail → back to BUILD, `≤3 CHANGE_CYCLE` then `escalate` | `SKILL.md:289-300` |
@@ -116,10 +116,13 @@ Four design decisions distinguish these from "the model just keeps going":
    first-class outcome, not a failure.
 
 2. **Generator and evaluator are separated by construction.** The builder never
-   grades its own work: reviewer subagents run in fresh context with **no
-   Write/Edit** (`review.js:222`), and a concern only survives if a
-   **different-role** reviewer fails to refute it (`review.js:407` — self-refutation
-   is filtered).
+   grades its own work: fan-out runs every roster role as the read-only
+   `build-fleet:reviewer` agent — Read/Grep/Glob by its own agent definition, no
+   Write/Edit to grade with — and a concern only survives if a **different-role**
+   reviewer fails to refute it (self-refutation is filtered). A surviving
+   `[major]` then goes through a fifth, separate leg — **disposition**, run by the
+   architect — before the gate's rule (`finalize_ready`) is computed, so the same
+   role that classifies a trade-off as `adr`/`fix` never also voted it a pass.
 
 3. **Two opposite loop temperaments, on purpose.** Feature REVIEW is built to
    **converge** (the survival vote kills concerns refuted with a citation). The
