@@ -7,7 +7,9 @@
 # reviewers can find under-specified. The tap pilot's features carried 56–99 criteria
 # and never converged. Over the cap the answer is SPLIT the feature, never renumber.
 #
-# ABSENT FIELD ⇒ NO CAP (grandfathering); 0 disables. The product tier has no
+# ABSENT FIELD ⇒ NO CAP (grandfathering); 0 disables. A PRESENT AC_MAX that is not
+# all digits (e.g. "15x") is malformed input, not an absent field — it REFUSES
+# (exit 2) rather than silently running uncapped. The product tier has no
 # acceptance.md. PostToolUse cannot undo the write — exit 2 blocks the model's
 # continuation until the file is brought under budget, same as validate-spec-status.
 set -euo pipefail
@@ -35,7 +37,12 @@ progress=".sdd/${slug}/PROGRESS.md"
 
 cap=$(read_progress_field "$slug" AC_MAX)
 [ -n "$cap" ] || exit 0
-case "$cap" in ''|*[!0-9]*) exit 0 ;; esac
+case "$cap" in
+  *[!0-9]*)
+    echo "build-fleet: validate-acceptance-count refused — AC_MAX is not an integer ('${cap}') — fix PROGRESS.md" >&2
+    exit 2
+    ;;
+esac
 [ "$cap" -gt 0 ] || exit 0
 
 count=$({ grep -oE 'AC-[0-9]+[a-z]?' "$file_path" || true; } | sort -u | grep -c . || true)

@@ -24,6 +24,11 @@ p=$(new_proj g 3); printf 'PHASE: SPEC\n' > "$p/.sdd/feat/PROGRESS.md"; printf '
 check "no-field-grandfathered" "$p" ".sdd/feat/acceptance.md" 0
 p=$(new_proj z 0); printf 'AC-1\nAC-2\nAC-3\nAC-4\n' > "$p/.sdd/feat/acceptance.md"
 check "zero-disables" "$p" ".sdd/feat/acceptance.md" 0
+# I4: a present-but-not-all-digits AC_MAX (e.g. "15x") must REFUSE (fail closed),
+# not silently disable the cap like the absent-field/zero cases.
+p=$(new_proj bad 15x); printf 'AC-1\nAC-2\n' > "$p/.sdd/feat/acceptance.md"
+check "malformed-ac-max-refuses" "$p" ".sdd/feat/acceptance.md" 2
+check_err "malformed-ac-max-refuses-message" "$p" ".sdd/feat/acceptance.md" "AC_MAX is not an integer"
 p=$(new_proj t 1); mkdir -p "$p/docs"; printf 'AC-1\nAC-2\n' > "$p/docs/acceptance.md"
 check "outside-sdd-ignored" "$p" "docs/acceptance.md" 0
 rc=0; ( cd "$p" && printf 'not json' | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" >/dev/null 2>&1 ); rc=$?

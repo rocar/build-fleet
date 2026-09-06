@@ -184,6 +184,19 @@ check("line-major-adr", eq(formatFindingLines(S[1], { "architect-c1-2": { action
 check("line-refuted", formatFindingLines(S[3], {})[1].startsWith("  refuted-by: coder — reason: ") && formatFindingLines(S[3], {})[1].endsWith("(cites spec.md § X)"));
 check("line-minor-no-disposition", eq(formatFindingLines(S[4], {}), ["- [minor] (coder-c1-1) n"]));
 
+// flattenText (C1) — a multi-line finding text renders as ONE continuous line so it
+// never breaks the "- [sev] (id) text" / continuation-line contract finalize-gate.sh reads.
+check("flatten-text-collapses-newlines", flattenText("a\n  b\nc") === "a b c");
+check("flatten-text-null-is-empty", flattenText(null) === "");
+check("flatten-text-undefined-is-empty", flattenText(undefined) === "");
+const multilineFinding = { id: "architect-c1-2", severity: "major", raised_by: "architect", text: "line one\nline two", refuted: false };
+const flattenedLines = formatFindingLines(multilineFinding, {});
+check(
+  "multiline-finding-renders-as-two-lines",
+  flattenedLines.length === 2 && flattenedLines[0].indexOf("\n") === -1 && flattenedLines[1] === "  disposition: fix"
+);
+check("multiline-finding-text-flattened", flattenedLines[0] === "- [major] (architect-c1-2) line one line two");
+
 console.log("-----"); console.log("passed=" + pass + " failed=" + fail); process.exit(fail > 0 ? 1 : 0);
 EOF
 

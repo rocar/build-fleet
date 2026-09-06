@@ -10,7 +10,9 @@
 #
 # ABSENT FIELD ⇒ NO CAP. Every workspace scaffolded before v0.9 is grandfathered;
 # /build-fleet:new-feature scaffolds the field from tier defaults. The product tier
-# (.sdd/_product/) is exempt. Ported from the tap pilot's local guard.
+# (.sdd/_product/) is exempt. Ported from the tap pilot's local guard. `0` disables
+# the cap; a PRESENT value that is not all digits (e.g. "24KB") is malformed input,
+# not an absent field — it REFUSES (exit 2) rather than silently running uncapped.
 #
 # Handles: leading-zero values (010 → decimal 10, not octal 8); newline-safe
 # replace_all occurrence counting; NotebookEdit refuses closed (cannot project bytes).
@@ -50,7 +52,12 @@ progress=".sdd/${slug}/PROGRESS.md"
 
 cap_kb=$(read_progress_field "$slug" SPEC_MAX_KB)
 [ -n "$cap_kb" ] || exit 0                          # grandfathering: no field, no cap
-case "$cap_kb" in ''|*[!0-9]*) exit 0 ;; esac       # malformed ⇒ treat as absent
+case "$cap_kb" in
+  *[!0-9]*)
+    echo "build-fleet: cap-spec-size refused — SPEC_MAX_KB is not an integer ('${cap_kb}') — fix PROGRESS.md" >&2
+    exit 2
+    ;;
+esac
 cap_kb=$((10#$cap_kb))                              # normalize (leading zeros: 010 → 10, not octal)
 [ "$cap_kb" -gt 0 ] || exit 0                       # 0 disables the cap
 

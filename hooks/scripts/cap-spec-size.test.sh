@@ -33,6 +33,17 @@ check "traversal-ignored" "$p" "$(payload Write .sdd/feat/../feat/spec.md "$big"
 rc=0; ( cd "$p" && printf 'not json' | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" >/dev/null 2>&1 ); rc=$?
 if [ "$rc" -eq 2 ]; then pass=$((pass+1)); echo "ok   malformed-json-fails-closed"; else fail=$((fail+1)); echo "FAIL malformed-json-fails-closed got=$rc"; fi
 
+# I4: a present-but-not-all-digits SPEC_MAX_KB (e.g. "24KB") must REFUSE (fail
+# closed), not silently disable the cap like the absent-field/leading-zero cases.
+p=$(new_proj bad1 24KB)
+check "malformed-cap-refuses" "$p" "$(payload Write .sdd/feat/spec.md "$small")" 2
+err=$( cd "$p" && printf '%s' "$(payload Write .sdd/feat/spec.md "$small")" | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" 2>&1 >/dev/null )
+if printf '%s' "$err" | grep -qF "SPEC_MAX_KB is not an integer ('24KB')"; then
+  pass=$((pass+1)); echo "ok   malformed-cap-refuses-message"
+else
+  fail=$((fail+1)); printf 'FAIL %-40s got=%s\n' "malformed-cap-refuses-message" "$err"
+fi
+
 # Defect fix tests: leading-zero octal, multiline replace_all, NotebookEdit
 p=$(new_proj l1 010)
 check "leading-zero-cap-decimal-over" "$p" "$(payload Write .sdd/feat/spec.md "$(head -c 10500 /dev/zero | tr '\0' 'x')")" 2

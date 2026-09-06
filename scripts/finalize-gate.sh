@@ -8,11 +8,15 @@
 # is "## Cycle <CYCLE> — <role> —"):
 #   - every roster role has a block                        else missing-<role>
 #   - zero UNREFUTED "- [blocker]" lines                    else open-blockers
-#   - every "- [major]" line's next line is one of
+#   - every "- [major]" line is closed by one of the following, found anywhere in
+#     the indented run of continuation lines following it (a legacy hand-written
+#     finding may wrap its OWN text across several "  "-indented lines before the
+#     real continuation appears — scan through those, don't stop at line+1):
 #       "  refuted-by: …"            (closed by the survival vote)
 #       "  disposition: adr ADR-N"   (closed — ADR-N must exist in DECISIONS.md, else majors-without-adr)
-#       "  disposition: fix" / none  (OPEN                              → majors-open)
-#   A "  refuted-by: …" continuation closes a blocker or a major.
+#       neither found in the run     (OPEN                              → majors-open)
+#   The indented run ends at the first line matching "^- [", "^status:", "^## " or EOF.
+#   A "  refuted-by: …" anywhere in that run closes a blocker or a major.
 #   `status:` lines are NOT evaluated (informational since v0.9).
 #
 # Usage: finalize-gate.sh <slug> [--roster a,b,c]
@@ -58,30 +62,48 @@ for role in $roles; do
   if [ -n "$next" ]; then end=$((start+next-1)); else end=$(wc -l < "$review" | tr -d ' '); fi
   block=$(sed -n "${start},${end}p" "$review")
 
-  # blockers + majors: examine each line + its following line (a "refuted-by:"
-  # continuation closes either; a major's "disposition: adr ADR-N" closes it too)
+  # blockers + majors: a finding is closed by a "refuted-by:"/"disposition: adr ADR-N"
+  # continuation found ANYWHERE in the indented run of lines following it (C1: a
+  # legacy hand-written finding may wrap its OWN text across several "  "-indented
+  # lines before the real continuation — scan forward, don't stop at line k+1). The
+  # run ends at the first line that is NOT indented (a new "- [" finding, "status:",
+  # "## " heading, a blank line, or EOF).
   n=$(printf '%s\n' "$block" | wc -l | tr -d ' ')
   k=1
   while [ $k -le $n ]; do
     line=$(printf '%s\n' "$block" | sed -n "${k}p")
-    nextl=$(printf '%s\n' "$block" | sed -n "$((k+1))p")
     if printf '%s' "$line" | grep -qE '^-[[:space:]]+\[blocker\]'; then
-      if printf '%s' "$nextl" | grep -qE '^[[:space:]]+refuted-by:'; then
-        :
-      else
-        add open_blockers "$line"
-      fi
+      refuted=false
+      j=$((k+1))
+      while [ $j -le $n ]; do
+        contl=$(printf '%s\n' "$block" | sed -n "${j}p")
+        printf '%s' "$contl" | grep -qE '^[[:space:]]+' || break
+        if printf '%s' "$contl" | grep -qE '^[[:space:]]+refuted-by:'; then refuted=true; break; fi
+        j=$((j+1))
+      done
+      [ "$refuted" = true ] || add open_blockers "$line"
     elif printf '%s' "$line" | grep -qE '^-[[:space:]]+\[major\]'; then
       id=$(printf '%s' "$line" | sed -nE 's/^-[[:space:]]+\[major\][[:space:]]+\(([^)]+)\).*/\1/p')
       [ -n "$id" ] || id="$line"
-      if printf '%s' "$nextl" | grep -qE '^[[:space:]]+refuted-by:'; then
-        :
-      elif printf '%s' "$nextl" | grep -qE '^[[:space:]]+disposition:[[:space:]]+adr[[:space:]]+ADR-0*[0-9]+'; then
-        adr=$(printf '%s' "$nextl" | sed -nE 's/.*ADR-0*([0-9]+).*/\1/p')
-        if [ -f "$decisions" ] && grep -qE "^##[[:space:]]+ADR-0*${adr}:" "$decisions"; then :; else add without_adr "$id"; fi
-      else
-        add open_majors "$id"
-      fi
+      closed="" adr=""
+      j=$((k+1))
+      while [ $j -le $n ]; do
+        contl=$(printf '%s\n' "$block" | sed -n "${j}p")
+        printf '%s' "$contl" | grep -qE '^[[:space:]]+' || break
+        if printf '%s' "$contl" | grep -qE '^[[:space:]]+refuted-by:'; then
+          closed="refuted"; break
+        elif printf '%s' "$contl" | grep -qE '^[[:space:]]+disposition:[[:space:]]+adr[[:space:]]+ADR-0*[0-9]+'; then
+          closed="adr"; adr=$(printf '%s' "$contl" | sed -nE 's/.*ADR-0*([0-9]+).*/\1/p'); break
+        fi
+        j=$((j+1))
+      done
+      case "$closed" in
+        refuted) : ;;
+        adr)
+          if [ -f "$decisions" ] && grep -qE "^##[[:space:]]+ADR-0*${adr}:" "$decisions"; then :; else add without_adr "$id"; fi
+          ;;
+        *) add open_majors "$id" ;;
+      esac
     fi
     k=$((k+1))
   done

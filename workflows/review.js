@@ -242,10 +242,19 @@ function formatAdr(adrId, title, body, cycle, nowIso, findingId, raisedBy) {
   ].join("\n");
 }
 
+// v0.9 fix round 3 (C1): a finding's own text must render as exactly ONE line —
+// finalize-gate.sh (and any hand-written legacy block) reads "the line after a
+// [blocker]/[major] line" as its continuation (refuted-by / disposition). An
+// embedded "\n" in agent-authored text would otherwise split the finding across
+// multiple lines and be misread as its own continuation.
+function flattenText(t) {
+  return String(t == null ? "" : t).replace(/\s*\n\s*/g, " ").trim();
+}
+
 // v0.9: REVIEW.md line grammar — "- [sev] (id) text", then optional indented
 // continuation lines: refuted-by (survival vote) and disposition (majors only).
 function formatFindingLines(c, dispositionMap) {
-  const lines = [`- [${c.severity}] (${c.id}) ${c.text}`];
+  const lines = [`- [${c.severity}] (${c.id}) ${flattenText(c.text)}`];
   if (c.refuted) {
     const cite = c.refutation_citation ? ` (cites ${c.refutation_citation.file} ${c.refutation_citation.locator})` : "";
     lines.push(`  refuted-by: ${c.refuted_by} — reason: ${c.refutation_reason}${cite}`);
@@ -849,7 +858,7 @@ async function applyScribe(envelope) {
 
 Marker ownership: RELEASE .sdd/${envelope.feature}/.workflow-in-flight by overwriting it with EMPTY content via the Write tool (you have no Bash; an empty marker counts as released and is reaped later) — ONLY if its current content matches the envelope's run_id${envelope.run_id ? ` ("${envelope.run_id}")` : " (null — legacy envelope: release unconditionally, best-effort)"}. If the content differs, leave the marker — it belongs to another run.
 
-Append rules: append to REVIEW.md and DECISIONS.md with an Edit anchored on the file's final non-empty line — never rewrite a whole file. A state_delta key with no matching line in PROGRESS.md is APPENDED as a new line.
+Append rules: append to REVIEW.md and DECISIONS.md with an Edit anchored on the file's final \`## \` block (its heading line through the last non-empty line), per agents/scribe.md — never rewrite a whole file. A state_delta key with no matching line in PROGRESS.md is APPENDED as a new line.
 
 Return the structured object {ok, error}: ok=true when the WHOLE envelope landed (your SCRIBE_OK condition), with error=null. ok=false with error="<one-line reason>" otherwise (your SCRIBE_ERROR reason).
 

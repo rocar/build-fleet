@@ -67,6 +67,18 @@ block "$p" 2 qa; block "$p" 2 coder
 run "$p"
 assert "refuted-blocker-passes" "[ $rc -eq 0 ] && printf '%s' \"\$out\" | grep -q '\"open_blockers\":\\[\\]'"
 
+# --- C1: a legacy hand-written multi-line finding text (second text line indented by
+# two spaces, same as a real continuation) does not stop the gate from finding the
+# ACTUAL continuation (refuted-by / disposition) further down the indented run ---
+p=$(new_proj multiline 2)
+block "$p" 2 architect '- [blocker] (architect-c2-1) first line of blocker text' '  second line of blocker text, hand-wrapped' '  refuted-by: coder — reason: long enough reason here for sure (cites spec.md § A)'
+block "$p" 2 qa '- [major] (qa-c2-1) first line of major text' '  second line of major text, hand-wrapped' '  disposition: adr ADR-4'
+block "$p" 2 coder
+run "$p"
+assert "multiline-legacy-text-passes" "[ $rc -eq 0 ]"
+assert "multiline-legacy-text-open-blockers-empty" "printf '%s' \"\$out\" | grep -q '\"open_blockers\":\\[\\]'"
+assert "multiline-legacy-text-open-majors-empty" "printf '%s' \"\$out\" | grep -q '\"open_majors\":\\[\\]'"
+
 # --- refuse: a roster role has no current-cycle block (stale cycle only) ---
 p=$(new_proj miss 2); block "$p" 1 architect; block "$p" 2 qa; block "$p" 2 coder
 run "$p"
