@@ -1027,7 +1027,7 @@ Append two bullets to the rules list:
 
 Append to `## On being wrong`:
 
-````markdown
+```markdown
 The same asymmetry governs risk, and it is milder: a false `low` costs one
 reviewer lens on a change that is still cross-examined, refuted by citation and
 gated; a false `elevated` costs roughly three extra agent invocations. So name a
@@ -1039,7 +1039,7 @@ In `## Hard rules`, replace the two fallback bullets with:
 ```markdown
 - If you cannot read the project at all (no files exist yet), default to `standard` with `confidence=low` and rationale "no project context available", `skill_manifest=null`, `risk=low`, `risk_reasons=[]`.
 - If the description is empty or nonsensical, default to `standard` with `confidence=low` and a rationale calling out the ambiguity, `skill_manifest=null`, `risk=low`, `risk_reasons=[]`.
-````
+```
 (The orchestrator's own parse-failure fallback is `elevated`; the classifier's in-band low-confidence default stays `low` because `standard` + `low` still reviews with two roles and the finalize gate.)
 
 - [ ] **Step 6: Verify**
@@ -1094,7 +1094,7 @@ In the PROGRESS block, insert `RISK: pending` directly after `BUILD_MODE: pendin
 - [ ] **Step 2: `new-feature` step 6 — parse the two new fields**
 
 Replace:
-````markdown
+```markdown
    Parse the classifier's JSON verdict. Extract `tier`, `build_mode`, `skip_review`,
    `skeleton_spec_hint`, `confidence`, `skill_manifest` (may be `null`).
 ```
@@ -1104,7 +1104,7 @@ with:
    `skeleton_spec_hint`, `confidence`, `skill_manifest` (may be `null`), `risk`
    (`low` | `elevated`) and `risk_reasons` (an array of slugs; `[]` when `risk` is
    `low`). `risk` is a required field: a verdict without it takes the fallback below.
-````
+```
 
 - [ ] **Step 3: `new-feature` step 6 — the fallback is `standard` + `elevated`, and a contradictory verdict is coerced**
 
