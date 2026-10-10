@@ -323,20 +323,23 @@ product-owner). Main equals the tag. No milestone names in command or agent text
 
 ## 5. Implementation order
 
-Work happens in a `release/0.10.0` worktree (D10).
+Work happens in a `release/0.10.0` worktree at `~/build-fleet-0.10` (D10); the main
+working tree stays at v0.9.0 until the merge, which is what step 1 relies on.
 
-1. `scripts/change-review-gate.test.sh`, failing, then `scripts/change-review-gate.sh`
+1. The measurement on tap against main at v0.9.0 (§6). Its result fixes the
+   `standard` + `low` row before the seeding table is written into `new-feature`.
+2. `scripts/change-review-gate.test.sh`, failing, then `scripts/change-review-gate.sh`
    until it passes; `run-tests.sh` picks it up by glob.
-2. `commands/handoff.md` §3.6; the three agents' CHANGE_REVIEW sections §3.7; the
+3. `commands/handoff.md` §3.6; the three agents' CHANGE_REVIEW sections §3.7; the
    rubric, protocol, loops, contract and status updates for change review.
-3. `agents/classifier.md` §3.1; `commands/new-feature.md`, `commands/dispatch.md`,
+4. `agents/classifier.md` §3.1; `commands/new-feature.md`, `commands/dispatch.md`,
    `commands/status.md` §3.2; protocol and README schema.
-4. Lenses §3.3 in the three agents and `review.js`; `lens-drift.test.sh` and
+5. Lenses §3.3 in the three agents and `review.js`; `lens-drift.test.sh` and
    `rubric-drift.test.sh` green; `node --check workflows/review.js` and the
    determinism lint green.
-5. Validation on tap (§6): classifier previews, then the two-roster measurement; fix
-   the `standard` + `low` row from the result.
-6. CHANGELOG with the measurement, version bump, descriptions, merge, tag.
+6. Classifier previews on tap from the worktree, `claude --plugin-dir ~/build-fleet-0.10`
+   (§6); CHANGELOG with the measurement and the previews; version bump; descriptions;
+   merge; tag.
 
 ## 6. Testing
 
@@ -360,19 +363,35 @@ change to the login check reads `standard` + `elevated` with `auth`; a docs typo
 `trivial` + `low`; a new table plus backfill across packages reads `large` with
 `data-migration`. Record the three signal lines in the CHANGELOG entry.
 
-**The measurement, release gate (D9).** On tap's `fixture-and-harness`, which is
-migrated at `CYCLE: 0` with its results uncommitted:
+**The measurement, release gate (D9).** tap's `.sdd/fixture-and-harness/` working tree
+already holds the three-role arm: the 2026-09-06 v0.9.0 cycle 1, uncommitted, with
+`CYCLE: 1`, `CYCLE_TOTAL: 6`, `LAST_REVIEW_OUTPUT_TOKENS: 274075`, three `## Cycle 1`
+blocks in REVIEW.md and disposition ADR-7 in DECISIONS.md. HEAD holds the pre-migration
+0.8 state at `CYCLE: 2`. So the measurement is one new run, not two:
 
-1. Snapshot `.sdd/fixture-and-harness/` (`git stash create` or a copy).
-2. Run `/build-fleet:review --roles architect,qa --cycle-budget 2`. Record the run's
-   agent count from the workflow log, wall-clock from the launch and completion
-   timestamps, `output_tokens`, and the surviving blockers and `fix` majors by text.
-3. Restore the snapshot. Run `/build-fleet:review` with the default roster. Record the
-   same.
-4. Compare the two surviving sets by content. If the two-role run lacks a blocker or
-   `fix` major that the three-role run kept and Ray judges real, the `standard` +
-   `low` row reverts to `architect, qa, coder` and budget `3` before tagging. Either
-   way the numbers go into the CHANGELOG entry.
+1. Copy `.sdd/fixture-and-harness/` aside as the three-role arm. Its figures are
+   recorded in CHANGELOG 0.9.0: 8 agents, 26.6 min, 274,075 output tokens, 0 blockers,
+   9 `fix` majors.
+2. Reconstruct the state that run started from, in place: delete the three `## Cycle 1`
+   blocks from REVIEW.md, delete ADR-7 from DECISIONS.md, set `CYCLE: 0` and
+   `CYCLE_TOTAL: 5`, drop `LAST_REVIEW_OUTPUT_TOKENS`. Keep REVIEW-archive.md and the
+   rest of PROGRESS.md as is.
+3. With the main working tree still at v0.9.0, which D10 guarantees until the merge,
+   run `/build-fleet:review --roles architect,qa --cycle-budget 2` in tap. Record the
+   agent count from the workflow log, wall-clock from the launch line to completion,
+   `output_tokens`, and the surviving blockers and `fix` majors by text.
+4. Compare the surviving sets by content. If the two-role arm lacks a blocker or `fix`
+   major that the three-role arm kept and Ray judges real, the `standard` + `low` row
+   reverts to `architect, qa, coder` and budget `3`: the risk axis and the seeding
+   mechanism still ship, without the cut. Either way the numbers go into the CHANGELOG
+   entry.
+5. Record the confounds with the result: one month of model drift between the arms.
+   The lens changes are in neither arm, because the run uses v0.9.0, so the roster is
+   the only plugin-side difference.
+6. Whichever arm Ray continues the feature from goes back into the working tree. If it
+   is the two-role arm, first edit PROGRESS.md to `REVIEW_ROLES: architect, qa` and
+   `REVIEW_CYCLE_BUDGET: 2`: the flag is not persisted, and the finalize gate would
+   otherwise report `missing-coder`.
 
 Success criteria: the two-role cycle logs 5 or 6 agent invocations against 8; the gate
 harness passes every case above; both handoff call sites cite the script; the suite is
