@@ -39,7 +39,7 @@ stay.
 | D4 | **Elevated risk is a trivial disqualifier.** | A risky change never skips review, however small. The existing never-trivial list becomes the first group of risk reasons. |
 | D5 | **Align the three lenses to the reviewer discipline.** Severity words in the lenses change; the rubric table does not. The coder lens drops its coverage bullet. | The calibration already exists in `agents/reviewer.md`; this removes a contradiction, not adds policy. The coder coverage bullet duplicates qa's and produces paired findings the cross-examination processes twice. |
 | D6 | **CHANGE_REVIEW stays static and gets a deterministic gate**, `scripts/change-review-gate.sh`, modelled on `finalize-gate.sh` but its own script. | `docs/loops.md` records why change review is static: the orchestrator needs Bash for the diff and the counterfactual. A workflow conversion is the right eventual shape and the wrong blast radius for a minor release. A separate script leaves the finalize gate and its harness untouched. |
-| D7 | **Change-review findings get ids, dispositions, closed-by-id and a delta rule.** Ids `<role>-cc<N>-<n>`; every major carries `disposition:`; an id closed by an ADR in any current-cycle block is closed everywhere; a new major at change cycle ≥ 2 is advisory. | These are the v0.9 convergence rules, ported to the static path. Closed-by-id is the static form of the disposition leg, where the architect already overrules the raiser. |
+| D7 | **Change-review findings get ids, dispositions, closed-by-id and a delta rule.** Ids `<role>-cc<N>-<n>`; every major carries `disposition:`; an id closed by an ADR in any current-cycle block is closed everywhere; a new major at change cycle ≥ 2 is advisory. **The fan-out is two-stage**: qa and product-owner in parallel, then the architect, who reads their blocks. | These are the v0.9 convergence rules, ported to the static path. Closed-by-id is the static form of the disposition leg, where the architect already overrules the raiser; sequencing the architect after its peers is what lets it accept a peer's trade-off major in the same cycle instead of after a coder bounce. Costs wall-clock, not agents. |
 | D8 | **CHANGE_REVIEW roster and budget unchanged**: architect, product-owner, qa; 3 cycles. | The measured pain was the exit rule, not headcount. qa must hold Bash for the counterfactual; the PO sign-off is the acceptance check. A tier-based change-review roster is parked until measured. |
 | D9 | **The two-role versus three-role measurement is the release gate.** | The only evidence that headcount drops losslessly is one unreplicated run. v0.9.0 validated live on tap before tagging; this release does the same and lets the result fix the `standard` + `low` row. |
 | D10 | **One release, v0.10.0, implemented in a separate worktree** and merged at the release commit. | tap sessions run with `--plugin-dir=~/build-fleet`; a half-landed edit on main breaks an in-flight review. Same as v0.9's D7. |
@@ -110,9 +110,17 @@ writes `RISK:` and rewrites `REVIEW_ROLES:` and `REVIEW_CYCLE_BUDGET:` from this
 | standard | elevated | architect, qa, coder | 3 |
 | large | low or elevated | architect, qa, coder | 3 |
 | trivial | low | architect, qa | 2 |
+| trivial | elevated | coerced to `standard` + `elevated`: architect, qa, coder | 3 |
 
-The trivial row exists so a later hand edit of `TIER` to `standard` finds a sane roster;
-REVIEW is skipped for trivial features. `BUILD_CYCLE_BUDGET`, `CYCLE_TOTAL_MAX`,
+The trivial-low row exists so a later hand edit of `TIER` to `standard` finds a sane
+roster; REVIEW is skipped for trivial features. The trivial-elevated row is a
+coercion, not a seeding: the classifier's rule forbids the pair, but a verdict is model
+output, so `new-feature` step 7 enforces it deterministically. If `risk=elevated` and
+`tier=trivial`, the command writes `TIER: standard`, `BUILD_MODE: standard`, treats
+`skip_review` as false, ignores `skeleton_spec_hint`, and emits
+`BUILD_FLEET_CLASSIFIER_FALLBACK` with `"reason":"risk-tier-conflict"` before the
+classification line. Without this row a mis-emitted verdict would reach the trivial
+fast-path and skip review on exactly the change that needed it. `BUILD_CYCLE_BUDGET`, `CYCLE_TOTAL_MAX`,
 `SPEC_MAX_KB` and `AC_MAX` are unchanged. The pair is architect plus qa because the
 architect lens carries correctness, failure modes, data integrity and security and the
 architect already runs the disposition leg, while the qa lens carries testability and
@@ -202,12 +210,21 @@ status: concerns-raised
   appends the ADR to `DECISIONS.md` first. The product-owner and qa never write ADRs.
 - **Closed-by-id wins across blocks.** The architect may accept a peer's open major by
   listing its id under the architect block with `disposition: adr ADR-N`. The gate
-  closes that id in every block of the current cycle.
+  closes that id in every block of the current cycle. So that this works within one
+  cycle, the fan-out is two-stage: qa and product-owner run in parallel and write their
+  blocks; the architect runs after them, reads those blocks, and reviews the diff and
+  dispositions peer majors in one Task. Running all three in parallel would mean every
+  trade-off major costs a coder bounce and a full extra cycle before the architect
+  could accept it.
 - **Delta rule from change cycle 2.** Each reviewer verifies closure of its own prior
   blockers and `fix` majors against the new diff and re-raises by id what is still
   open. New findings are `[blocker]` only, plus advisory minors. A new `[major]` whose
   id originates at the current cycle is advisory: the gate reports it as demoted and
-  it does not block.
+  it does not block. This is safe by the rubric, not by luck: correctness, security,
+  data loss and spec contradiction are blockers and are never demoted, and the qa
+  change-review lens already rates a missing acceptance test as a blocker. What
+  demotion touches is maintainability-class findings in code written to close the
+  previous cycle. The 3-cycle budget bounds the rest, as it does in spec review.
 - **`status:` is informational**, as in spec review.
 
 ### 3.5 The gate (`scripts/change-review-gate.sh`)
@@ -228,7 +245,9 @@ Within a block, a finding's continuation run is the indented lines that follow i
       "refuted-by:" in its run                                                  → CLOSED
       id matches <role>-cc<K>-<n> with K == N and N >= 2                        → DEMOTED
       otherwise                                                                 → OPEN
-After all blocks: an id CLOSED by adr in any block is CLOSED in every block.
+Two passes, not one: pass one scans every roster block and records each finding's
+  state per id; pass two resolves, so an id CLOSED by adr in any block is CLOSED in
+  every block, and only then are open_blockers / open_majors / demoted emitted.
 Output (stdout, exactly one line):
   BUILD_FLEET_CHANGE_REVIEW_GATE: {"feature","change_cycle","pass":bool,"reasons":[…],"open_blockers":[…],"open_majors":[…],"majors_without_adr":[…],"demoted":[…]}
   reasons ⊆ {missing-<role>, open-blockers, majors-open, majors-without-adr}
@@ -248,10 +267,14 @@ bash 3.2 + BSD/GNU compatible; read-only; requires jq.
 - **Step 5** becomes: read `CHANGE_CYCLE`. If it is `>= 3`, run the gate. Pass → the
   current cycle already passed; continue to step 9. Fail → write `ESCALATION.md` from
   the gate line's `open_blockers` and `open_majors`, set `PHASE: ESCALATED`, stop.
-- **Step 7** prompts add: the id grammar and the `disposition:` requirement on every
-  major; the delta rule when `CHANGE_CYCLE >= 2`, with a pointer to the previous
-  Change-Cycle blocks; for the architect, the closed-by-id rule and the ADR-first
-  requirement. The role lenses in the prompt are unchanged.
+- **Step 7** becomes two-stage. First, `build-fleet:product-owner` and `build-fleet:qa`
+  in parallel (two Task calls in one message). When both blocks exist, `build-fleet:architect`
+  alone, with a pointer to the two fresh blocks. All prompts add the id grammar and the
+  `disposition:` requirement on every major, and the delta rule when `CHANGE_CYCLE >= 2`
+  with a pointer to the previous Change-Cycle blocks. The architect prompt adds the
+  closed-by-id rule and the ADR-first requirement. The role lenses in the prompt are
+  unchanged. Wall-clock per change cycle grows by roughly one architect run; the agent
+  count does not change.
 - **Step 8** becomes: run the gate and relay its line. Pass → step 9. Fail with
   `CHANGE_CYCLE < 3` → delegate `build-fleet:coder` with exactly the gate's
   `open_blockers` and `open_majors`, set `PHASE: BUILD`, stop. Fail with
@@ -268,9 +291,10 @@ bash 3.2 + BSD/GNU compatible; read-only; requires jq.
   the `disposition:` line and the delta rule. The product-owner section currently
   names `## Cycle <N> — product-owner`, which `check-review-written.sh` rejects during
   CHANGE_REVIEW; it moves to `## Change-Cycle <N>`.
-- The architect section adds: on change cycle ≥ 2, read the previous cycle's peer
-  blocks; for each open `fix` major that is a trade-off rather than a defect, append
-  the ADR, then list the id under your block with `disposition: adr ADR-N`.
+- The architect section adds: you run after qa and product-owner; read their blocks
+  for this cycle and, from change cycle 2, the previous cycle's blocks too. For each
+  open `fix` major that is a trade-off rather than a defect, append the ADR, then list
+  the id under your block with `disposition: adr ADR-N`. A defect stays `fix`.
 - qa and product-owner: every major you raise carries `disposition: fix`.
 - The REVIEW.md block examples in all three agents gain the `(id)` and `disposition:`
   lines. Descriptions change with bodies.
@@ -379,7 +403,10 @@ blocks in REVIEW.md and disposition ADR-7 in DECISIONS.md. HEAD holds the pre-mi
 3. With the main working tree still at v0.9.0, which D10 guarantees until the merge,
    run `/build-fleet:review --roles architect,qa --cycle-budget 2` in tap. Record the
    agent count from the workflow log, wall-clock from the launch line to completion,
-   `output_tokens`, and the surviving blockers and `fix` majors by text.
+   `output_tokens`, the surviving blockers and `fix` majors by text, and the
+   cross-examination yield: refutations issued and concerns actually discarded, from
+   the `refuted-by:` lines. The yield tests the objection that two orthogonal lenses
+   cannot refute each other; the three-role arm's REVIEW.md gives the baseline.
 4. Compare the surviving sets by content. If the two-role arm lacks a blocker or `fix`
    major that the three-role arm kept and Ray judges real, the `standard` + `low` row
    reverts to `architect, qa, coder` and budget `3`: the risk axis and the seeding
