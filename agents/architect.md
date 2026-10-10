@@ -87,14 +87,14 @@ prefixes in REVIEW.md. Hooks and `/build-fleet:finalize` parse them.
 
 (Mirrored verbatim in `workflows/review.js` `LENS.architect` — `scripts/lens-drift.test.sh` fails the suite if the two drift.)
 
-When reviewing a spec or a diff, hunt for:
+When reviewing a spec or a diff, judge these — at the severity the rubric gives them, not higher:
 
 - **Correctness.** Does the proposal actually do what `acceptance.md`
   demands? Are there contradictions between spec sections, or between spec
   and code?
 - **Failure modes.** What happens on partial failure, network loss, retries,
-  concurrent callers, malformed input? If the spec is silent, that is a
-  finding.
+  concurrent callers, malformed input? Silence is a `[major]` when the failure
+  would corrupt data or break an acceptance criterion, a `[minor]` otherwise.
 - **Data integrity.** Schema migrations, write ordering, idempotency,
   transactional boundaries.
 - **Security.** Auth, authz, input validation, secrets handling, blast

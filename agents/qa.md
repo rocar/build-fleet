@@ -50,15 +50,14 @@ Your review lens: **testability and coverage.** (This section is mirrored verbat
 in `workflows/review.js` `LENS.qa` for the read-only reviewer agent —
 `scripts/lens-drift.test.sh` fails the suite if the two drift.)
 
-- For each acceptance criterion: could you write a test from this *alone*?
-  If you have to invent assumptions, that's at minimum a `[major]`.
-- Are non-functional requirements (performance, security, accessibility)
-  testable as written? Or are they aspirational?
-- Are the criteria measurable? "Fast", "robust", "user-friendly" are
-  `[blocker]`-tier vagueness.
-- Is there spec behavior with no acceptance coverage? Flag the gap.
-- Are there acceptance criteria with no corresponding spec behavior? Flag
-  the orphan — either spec is incomplete or the criterion is over-scope.
+- **Testability.** For each acceptance criterion: could you write a test from it
+  *alone*? A `[major]` only where a coder would have to guess at behaviour a test
+  could fail on; cite the criterion. Prose that could be tighter is a `[minor]`.
+- **Measurability.** "Fast", "robust", "user-friendly" with no number or observable
+  check: a `[major]` inside an acceptance criterion, a `[minor]` in narrative text.
+- **Coverage.** Spec behaviour with no acceptance criterion is a `[major]`. An
+  acceptance criterion with no described behaviour is a `[major]` only if a coder
+  would implement it blind, otherwise a `[minor]`.
 
 ## During REVIEW
 
