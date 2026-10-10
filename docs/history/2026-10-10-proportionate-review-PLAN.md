@@ -85,7 +85,6 @@ cd ~/Projects/tap
 git status --short .sdd/fixture-and-harness        # expect: M DECISIONS.md, M PROGRESS.md, M REVIEW.md, ?? REVIEW-archive.md
 mkdir -p ~/tap-measurement && cp -R .sdd/fixture-and-harness ~/tap-measurement/three-role
 grep -c '^## Cycle 1 — ' ~/tap-measurement/three-role/REVIEW.md   # expect: 3
-grep -c '^  refuted-by:' ~/tap-measurement/three-role/REVIEW.md   # the three-role arm's refutation count — note it
 ```
 
 - [ ] **Step 3: Reconstruct the state the 2026-09-06 run started from, guarded**
@@ -93,6 +92,7 @@ grep -c '^  refuted-by:' ~/tap-measurement/three-role/REVIEW.md   # the three-ro
 Run this exactly; it aborts before changing anything if an anchor is not where the spec says.
 
 ```bash
+(
 cd ~/Projects/tap/.sdd/fixture-and-harness
 r=$(grep -n '^## Cycle 1 — architect — 2026-09-06' REVIEW.md | head -1 | cut -d: -f1)
 d=$(grep -n '^## ADR-7:' DECISIONS.md | head -1 | cut -d: -f1)
@@ -103,8 +103,26 @@ sed -i.bak -e 's/^CYCLE: 1$/CYCLE: 0/' -e 's/^CYCLE_TOTAL: 6$/CYCLE_TOTAL: 5/' -
 rm -f REVIEW.md.bak DECISIONS.md.bak PROGRESS.md.bak
 grep -c '^## Cycle 1 — ' REVIEW.md; grep -c '^## ADR-7:' DECISIONS.md   # expect: 0 and 0
 grep -E '^(CYCLE|CYCLE_TOTAL|CYCLE_TOTAL_MAX|REVIEW_ROLES|REVIEW_CYCLE_BUDGET|LAST_REVIEW_OUTPUT_TOKENS):' PROGRESS.md
+)
 ```
-Expected last block: `CYCLE: 0`, `CYCLE_TOTAL: 5`, `CYCLE_TOTAL_MAX: 7`, `REVIEW_ROLES: architect, qa, coder`, `REVIEW_CYCLE_BUDGET: 3`, and no `LAST_REVIEW_OUTPUT_TOKENS` line. `REVIEW-archive.md` stays as is: reviewers never read it, so its presence does not change their inputs. One known small difference: the rotation at dispatch will run with `--roster 2` and archive one more legacy block (`## Cycle 2 — qa`) than the three-role run saw; legacy blocks cannot be re-raised by id, so this is noise, and it is recorded in step 6.
+The subshell keeps a failed anchor check from closing your shell. Expected last block: `CYCLE: 0`, `CYCLE_TOTAL: 5`, `CYCLE_TOTAL_MAX: 7`, `REVIEW_ROLES: architect, qa, coder`, `REVIEW_CYCLE_BUDGET: 3`, and no `LAST_REVIEW_OUTPUT_TOKENS` line. `REVIEW-archive.md` stays as is: reviewers never read it, so its presence does not change their inputs. One known small difference: the rotation at dispatch will run with `--roster 2` and archive one more legacy block (`## Cycle 2 — qa`) than the three-role run saw; legacy blocks cannot be re-raised by id, so this is noise, and it is recorded in step 6.
+
+- [ ] **Step 3b: Check tap's local cycle-total guard before spending a run**
+
+tap carries its own hooks in `~/Projects/tap/.claude/hooks/` (`cycle-total-cap.sh`,
+`spec-size-cap.sh`, registered in `.claude/settings.json`) and a sidecar
+`.sdd/fixture-and-harness/.cycle-total`. On 2026-09-02 that guard refused the scribe's
+recording write after a full cycle's tokens were spent, so confirm it cannot fire here:
+
+```bash
+cat ~/Projects/tap/.sdd/fixture-and-harness/.cycle-total          # expect: 5 — matches the reconstructed CYCLE_TOTAL: 5
+grep -E '^CYCLE_TOTAL_MAX:' ~/Projects/tap/.sdd/fixture-and-harness/PROGRESS.md   # expect: 7 — one cycle of headroom (5 + 1 < 7)
+```
+If the sidecar does not read `5`, write `5` into it (`printf '5' > …/.cycle-total`). This is
+the same state the 2026-09-06 run started from and that run recorded cleanly. If the
+guard still refuses the recording write during step 4, the fallback is to remove the
+`cycle-total-cap.sh` entry from `~/Projects/tap/.claude/settings.json` for the run and
+restore it afterwards; whichever you did goes into MEASUREMENT.md's Confounds.
 
 - [ ] **Step 4: Run the two-role arm against main at v0.9.0**
 
@@ -592,7 +610,7 @@ Replace step 5 in full. Old:
 ```
 New:
 
-```markdown
+````markdown
 5. **Check the change-cycle budget.** Read `CHANGE_CYCLE:` from PROGRESS.md.
    The budget is 3 change-review cycles. If `CHANGE_CYCLE >= 3`, run the gate
    over the current cycle — never evaluate REVIEW.md in prose:
@@ -607,7 +625,7 @@ New:
    `PHASE: ESCALATED`, stop. This guard exists for a workspace whose third cycle
    was recorded before the gate existed and bounced without escalating; a run
    that reaches step 8 on the exhausting cycle escalates there directly.
-```
+````
 
 - [ ] **Step 3: Step 7 becomes two-stage with the finding grammar in every prompt**
 
@@ -661,7 +679,7 @@ Replace step 7 in full. Old: the step beginning `7. **Fan out CHANGE_REVIEW revi
 
 Replace step 8 in full. Old: the step beginning `8. **Evaluate the cycle.** Once all three` and ending `CHANGE_REVIEW passes. Continue to step 9.`. New:
 
-```markdown
+````markdown
 8. **Evaluate the cycle with the gate.** Once the three `## Change-Cycle <CHANGE_CYCLE>`
    blocks exist, run — never evaluate REVIEW.md in prose:
    ```bash
@@ -684,7 +702,7 @@ Replace step 8 in full. Old: the step beginning `8. **Evaluate the cycle.** Once
      and `open_majors` (both listed, verbatim), set `PHASE: ESCALATED`, stop.
    - `"demoted"` non-empty → mention the demoted ids to the user as advisory; they
      never block.
-```
+````
 
 - [ ] **Step 5: Refusal cases name the gate's reasons**
 
@@ -754,7 +772,7 @@ existing ADR without justification, that's a `[blocker]`.
 ```
 New:
 
-```markdown
+````markdown
 ## During CHANGE_REVIEW
 
 Your specific job: **design adherence + ADR compliance**. Walk the diff
@@ -765,8 +783,8 @@ existing ADR without justification, that's a `[blocker]`.
 **You run last.** `/build-fleet:handoff` dispatches product-owner and qa first
 and you after them, so their `## Change-Cycle <N>` blocks exist when you start.
 Read them. The gate (`scripts/change-review-gate.sh`) closes a `[major]` only by
-an ADR or by refutation, and it closes an id in every block when any block
-closes it — so you are the one who can accept a peer's trade-off in this cycle:
+an ADR or by refutation, and an ADR in any block closes that id in every block —
+so you are the one who can accept a peer's trade-off in this cycle:
 
 - For each open `fix` major in a peer's block that is a design trade-off rather
   than a defect: append the ADR to `DECISIONS.md` **first**, then list the peer's
@@ -794,7 +812,7 @@ status: concerns-raised
 blockers and `fix` majors against the new diff and re-raise by original id what
 is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a new
 `[major]` at this cycle is advisory (the gate reports it as demoted).
-```
+````
 
 - [ ] **Step 2: `agents/qa.md` — description and the CHANGE_REVIEW closing paragraph**
 
@@ -812,7 +830,7 @@ and a final `status:` line. Approve only when coverage is complete.
 ```
 New:
 
-```markdown
+````markdown
 Append your CHANGE_REVIEW block to REVIEW.md, headed
 `## Change-Cycle <N> — qa — <iso8601>`, with severity-tagged items and a final
 `status:` line. Every finding carries a stable id `(qa-cc<K>-<n>)` where `K` is the
@@ -834,7 +852,7 @@ status: concerns-raised
 blockers and `fix` majors against the new diff and re-raise by original id what
 is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a new
 `[major]` at this cycle is advisory (the gate reports it as demoted).
-```
+````
 
 - [ ] **Step 3: `agents/product-owner.md` — description and CHANGE_REVIEW section**
 
@@ -858,7 +876,7 @@ a final `status:` line.
 ```
 New:
 
-```markdown
+````markdown
 ## During CHANGE_REVIEW
 
 `/build-fleet:handoff` dispatches you alongside qa in the first stage, before
@@ -887,7 +905,7 @@ status: concerns-raised
 blockers and `fix` majors against the new diff and re-raise by original id what
 is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a new
 `[major]` at this cycle is advisory (the gate reports it as demoted).
-```
+````
 
 - [ ] **Step 4: Drift tests stay green**
 
@@ -1009,7 +1027,7 @@ Append two bullets to the rules list:
 
 Append to `## On being wrong`:
 
-```markdown
+````markdown
 The same asymmetry governs risk, and it is milder: a false `low` costs one
 reviewer lens on a change that is still cross-examined, refuted by citation and
 gated; a false `elevated` costs roughly three extra agent invocations. So name a
@@ -1021,7 +1039,7 @@ In `## Hard rules`, replace the two fallback bullets with:
 ```markdown
 - If you cannot read the project at all (no files exist yet), default to `standard` with `confidence=low` and rationale "no project context available", `skill_manifest=null`, `risk=low`, `risk_reasons=[]`.
 - If the description is empty or nonsensical, default to `standard` with `confidence=low` and a rationale calling out the ambiguity, `skill_manifest=null`, `risk=low`, `risk_reasons=[]`.
-```
+````
 (The orchestrator's own parse-failure fallback is `elevated`; the classifier's in-band low-confidence default stays `low` because `standard` + `low` still reviews with two roles and the finalize gate.)
 
 - [ ] **Step 6: Verify**
@@ -1076,7 +1094,7 @@ In the PROGRESS block, insert `RISK: pending` directly after `BUILD_MODE: pendin
 - [ ] **Step 2: `new-feature` step 6 — parse the two new fields**
 
 Replace:
-```markdown
+````markdown
    Parse the classifier's JSON verdict. Extract `tier`, `build_mode`, `skip_review`,
    `skeleton_spec_hint`, `confidence`, `skill_manifest` (may be `null`).
 ```
@@ -1086,12 +1104,12 @@ with:
    `skeleton_spec_hint`, `confidence`, `skill_manifest` (may be `null`), `risk`
    (`low` | `elevated`) and `risk_reasons` (an array of slugs; `[]` when `risk` is
    `low`). `risk` is a required field: a verdict without it takes the fallback below.
-```
+````
 
 - [ ] **Step 3: `new-feature` step 6 — the fallback is `standard` + `elevated`, and a contradictory verdict is coerced**
 
 Replace the fallback paragraph and its signal. Old:
-```markdown
+````markdown
    **Parse-failure fallback.** If the classifier returns malformed JSON or omits
    any of the required fields above, do NOT write `undefined` to PROGRESS.md.
    Instead, default to `tier=standard` / `build_mode=standard` / `skip_review=false`
@@ -1100,9 +1118,9 @@ Replace the fallback paragraph and its signal. Old:
    ```
    BUILD_FLEET_CLASSIFIER_FALLBACK: {"feature":"<slug>","reason":"<parse-error|missing-field|empty-output>","tier_assigned":"standard"}
    ```
-```
+````
 New:
-```markdown
+````markdown
    **Parse-failure fallback.** If the classifier returns malformed JSON or omits
    any of the required fields above (including `risk`), do NOT write `undefined`
    to PROGRESS.md. Instead, default to `tier=standard` / `build_mode=standard` /
@@ -1122,7 +1140,7 @@ New:
    ```
    BUILD_FLEET_CLASSIFIER_FALLBACK: {"feature":"<slug>","reason":"risk-tier-conflict","tier_assigned":"standard","risk_assigned":"elevated"}
    ```
-```
+````
 Then replace the classification signal line:
 ```
    BUILD_FLEET_CLASSIFICATION: {"feature":"<slug>","tier":"<...>","build_mode":"<...>","skip_review":<bool>,"confidence":"<...>"}
