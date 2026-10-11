@@ -166,4 +166,26 @@ p=$(new_proj crlf 1); printf 'PHASE: CHANGE_REVIEW\r\nCHANGE_CYCLE: 1\r\n' > "$p
 run "$p"
 assert "crlf-progress-parses" "[ $rc -eq 0 ]"
 
+# --- final review: an unterminated last line (no trailing newline) must not hide a blocker ---
+p=$(new_proj unterminated 1); cblock "$p" 1 product-owner; cblock "$p" 1 qa
+printf '## Change-Cycle 1 — architect — 2026-10-12T00:00:00Z\n- [blocker] (architect-cc1-1) silent ADR override' >> "$p/.sdd/feat/REVIEW.md"
+run "$p"
+assert "unterminated-last-line-blocker-refuses" "[ $rc -eq 2 ] && printf '%s' \"\$out\" | grep -q open-blockers"
+
+# --- final review: a legacy (id-less) major whose text holds backslashes must still read OPEN ---
+p=$(new_proj backslash 1); cblock "$p" 1 product-owner; cblock "$p" 1 qa; cblock "$p" 1 architect '- [major] path "C:\temp\new" is not escaped'
+run "$p"
+assert "legacy-major-with-backslash-refuses" "[ $rc -eq 2 ] && printf '%s' \"\$out\" | grep -q majors-open"
+
+# --- final review: a CRLF REVIEW.md must not turn a blank line into a continuation (the LF form reads OPEN) ---
+p=$(new_proj crlfreview 1); cblock "$p" 1 product-owner; cblock "$p" 1 qa
+printf '## Change-Cycle 1 — architect — 2026-10-12T00:00:00Z\r\n- [major] (architect-cc1-1) x\r\n\r\n  disposition: adr ADR-4\r\nstatus: concerns-raised\r\n\r\n' >> "$p/.sdd/feat/REVIEW.md"
+run "$p"
+assert "crlf-review-blank-line-fails-closed" "[ $rc -eq 2 ] && printf '%s' \"\$out\" | grep -q majors-open"
+
+# --- final review: an indented finding bullet is a finding the grammar cannot classify → refuse, never invisible ---
+p=$(new_proj nested 1); cblock "$p" 1 product-owner; cblock "$p" 1 qa; cblock "$p" 1 architect '  - [blocker] (architect-cc1-1) nested under a note'
+run "$p"
+assert "indented-finding-bullet-refuses" "[ $rc -eq 2 ] && printf '%s' \"\$out\" | grep -q unparsed-findings"
+
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]
