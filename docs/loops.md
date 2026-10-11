@@ -98,7 +98,7 @@ survival vote (REVIEW), a file-partition + N-coder aggregation + adversarial
 sub-review (deep-build), a diagnosis-confirmation vote (diagnose), an interrogation
 consolidation (plan-review). Everything linear (TDD qa→coder), Bash-dependent
 (CHANGE_REVIEW's `git diff` + counterfactual `git stash`, the DEVELOPING resolver),
-and every gate stays static. The instructive case is **CHANGE_REVIEW: a parallel
+and every gate stays static. The instructive case is **CHANGE_REVIEW: an
 adversarial review that stays static** — three `Task` reviewers, not a workflow —
 because the orchestrator drives it with Bash the isolated runtime can't run, and it
 needs no survival-vote machinery: a two-stage fan-out (product-owner + qa, then the

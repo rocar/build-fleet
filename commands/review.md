@@ -140,7 +140,7 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
 - Does not append to REVIEW.md. The workflow's reviewer subagents return structured payloads; the scribe appends the canonical entries.
 - Does not write ESCALATION.md. The workflow detects budget-exhaustion and writes via the envelope.
 - Does not release `.workflow-in-flight` on success. The scribe does that as the final phase (it empties the marker; the reaper deletes the empty file).
-- Does not persist `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET`. The durable per-feature default lives in PROGRESS.md (set out-of-band — e.g. a human edit; the scribe preserves unknown fields across its state writes). A `--roles`/`--cycle-budget` flag overrides that default for the current run only.
+- Does not persist `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET`. The durable per-feature default lives in PROGRESS.md (seeded by `/build-fleet:new-feature` from TIER and RISK, or set by a human edit; the scribe preserves unknown fields across its state writes). A `--roles`/`--cycle-budget` flag overrides that default for the current run only.
 - Does not evaluate or edit REVIEW.md beyond the deterministic rotation script (which moves whole blocks verbatim into REVIEW-archive.md and never edits a block).
 
 ## Refusal contract (machine-readable)

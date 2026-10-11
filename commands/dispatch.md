@@ -1,5 +1,5 @@
 ---
-description: Preview a feature's tier classification; writes no state
+description: Preview a feature's tier, risk and review roster; writes no state
 argument-hint: "<feature description>"
 allowed-tools: Read, Task
 ---
@@ -61,7 +61,8 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
      the Read tool, the target repo holds no copy: `standard` and `large` seed
      `architect, qa, coder` with budget 3 at either risk; `trivial` + `low` seeds
      `architect, qa` with budget 2. A `trivial` + `elevated` verdict is shown as
-     what new-feature would coerce it to: `standard` + `elevated`.
+     what new-feature would coerce it to: `standard` + `elevated`. A verdict with
+     no `risk` field is shown as `elevated`, the fallback new-feature applies.
    - Routing implications:
      - `trivial`: `/build-fleet:new-feature <slug>` will scaffold a skeleton spec via PO (using the classifier's `skeleton_spec_hint`); user can run `/build-fleet:finalize` immediately to skip REVIEW (then `/build-fleet:build`).
      - `standard`: `/build-fleet:new-feature <slug>` will scaffold and PO will draft the full spec; user runs `/build-fleet:review`, `/build-fleet:finalize`, then `/build-fleet:build`.

@@ -34,7 +34,7 @@ stay.
 | # | Decision | Rationale |
 |---|---|---|
 | D1 | **A risk axis, separate from size.** The classifier emits `risk: low | elevated` plus `risk_reasons`. | Size and stakes are different axes; today heavy review is keyed on size alone. Anthropic's cost guidance is a stakes criterion, which is the classifier's job. |
-| D2 | **Seed the roster and budget from a tier-by-risk table at new-feature.** `standard` + `low` seeds `architect, qa` and budget `2`; everything else keeps `architect, qa, coder` and `3`. | Config-only: review.js's roster floor is already 2 and the finalize gate and rotation script already read `REVIEW_ROLES`. Seeding keeps the value visible and editable in PROGRESS.md. Resolving at dispatch instead would hide it and duplicate the logic in three readers. |
+| D2 | **Seed the roster and budget from a tier-by-risk table at new-feature.** `standard` + `low` seeds `architect, qa` and budget `2`; everything else keeps `architect, qa, coder` and `3`. **Outcome: the §6 measurement chose REVERT; `standard` + `low` ships as `architect, qa, coder` / `3` (see the MEASUREMENT file).** | Config-only: review.js's roster floor is already 2 and the finalize gate and rotation script already read `REVIEW_ROLES`. Seeding keeps the value visible and editable in PROGRESS.md. Resolving at dispatch instead would hide it and duplicate the logic in three readers. |
 | D3 | **Parse-failure fallback is `standard` + `elevated`.** | Reproduces today's behaviour exactly when the classifier misbehaves. |
 | D4 | **Elevated risk is a trivial disqualifier.** | A risky change never skips review, however small. The existing never-trivial list becomes the first group of risk reasons. |
 | D5 | **Align the three lenses to the reviewer discipline.** Severity words in the lenses change; the rubric table does not. The coder lens drops its coverage bullet. | The calibration already exists in `agents/reviewer.md`; this removes a contradiction, not adds policy. The coder coverage bullet duplicates qa's and produces paired findings the cross-examination processes twice. |
@@ -103,6 +103,11 @@ RISK: low | elevated | pending    # set by the classifier at /build-fleet:new-fe
 `new-feature` step 3 keeps seeding the historical defaults (`architect, qa, coder`, budget
 `3`) so a classifier fallback or an interrupted run leaves a working feature. Step 7
 writes `RISK:` and rewrites `REVIEW_ROLES:` and `REVIEW_CYCLE_BUDGET:` from this table:
+
+> **Outcome:** the §6 measurement chose REVERT, so 0.10.0 shipped the `standard` + `low`
+> row as `architect, qa, coder` / `3`. The table below is the design as proposed; the
+> shipped table is in `commands/new-feature.md` step 7, and the evidence is in
+> `2026-10-10-proportionate-review-MEASUREMENT.md`.
 
 | TIER | RISK | REVIEW_ROLES | REVIEW_CYCLE_BUDGET |
 |---|---|---|---|
@@ -327,7 +332,7 @@ heading family are the same.
 
 `SDD_SCHEMA` stays `1`. Additive changes only:
 
-- PROGRESS field `RISK` (read-with-default; absent reads as `pending` in `status`).
+- PROGRESS field `RISK` (read-with-default; `pending` until the classifier runs, and absent on an older feature prints as `unset` in `status`).
 - Signal grammar: new fields `risk`, `risk_reasons` on `BUILD_FLEET_CLASSIFICATION`;
   new field `risk_assigned` on `BUILD_FLEET_CLASSIFIER_FALLBACK`; new lines
   `BUILD_FLEET_REVIEW_DEFAULTS` and `BUILD_FLEET_CHANGE_REVIEW_GATE`.

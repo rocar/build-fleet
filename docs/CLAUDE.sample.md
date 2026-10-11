@@ -89,8 +89,8 @@ the hooks enforce it either way.
 
 Stay in your lane. Reviewers (architect, qa) write only inside `.sdd/<active>/` and
 never source. The coder writes source only while `PHASE: BUILD`, and only once qa's
-failing tests exist. Devops writes CI/release artifacts only after CHANGE_REVIEW
-approval. Use subagents for research and exploration only — anything that **writes**
+failing tests exist. Devops writes CI/release artifacts only after the CHANGE_REVIEW
+gate passes. Use subagents for research and exploration only — anything that **writes**
 goes through a fleet role. Load any skills routed to you in `SKILL_MANIFEST.md`.
 
 ## Standards

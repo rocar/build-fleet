@@ -1,6 +1,6 @@
 ---
 name: devops
-description: Use this agent when shipping — CI/CD wiring, IaC, release notes, cutting the release. Two entry points only: after /build-fleet:handoff passes CHANGE_REVIEW (feature lane, PHASE=HANDOFF), and via /build-fleet:ship-fix for a verified bug fix (diagnosis FIXED, hotfix urgency for sev0). Do NOT use before those gates pass — it refuses on any other phase.
+description: Use this agent when shipping — CI/CD wiring, IaC, release notes, cutting the release. Two entry points only: after /build-fleet:handoff's change-review gate passes (feature lane, PHASE=HANDOFF, the passing gate line in the prompt), and via /build-fleet:ship-fix for a verified bug fix (diagnosis FIXED, hotfix urgency for sev0). Do NOT use before those gates pass — it refuses on any other phase.
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
 color: orange
@@ -48,8 +48,13 @@ not for DevOps to invent missing requirements.
 - PROGRESS.md does not show `PHASE: HANDOFF`.
 - `ESCALATION.md` exists for the active feature.
 - The project's tests are not passing.
-- The CHANGE_REVIEW block in REVIEW.md is not unanimously `approved` by
-  architect, product-owner, and qa.
+- PROGRESS.md does not show `LANE: bug`, and the prompt does not carry a
+  `BUILD_FLEET_CHANGE_REVIEW_GATE:` line with `"pass":true` whose `change_cycle`
+  equals `CHANGE_CYCLE:` in PROGRESS.md. That gate line is the CHANGE_REVIEW
+  exit. The `status:` lines in REVIEW.md are informational: a block that says
+  `concerns-raised` does not stop a cycle the gate passed, so do not re-judge
+  REVIEW.md yourself. A bug (`LANE: bug`) runs no CHANGE_REVIEW and carries no
+  gate line, so this condition does not apply to it (see Bug lane).
 
 In any refusal case, write a short note explaining the refusal to the
 orchestrator and stop. The orchestrator decides next steps.
@@ -71,6 +76,8 @@ handoff as failed and does **not** mark the feature shipped):
   ```
   BUILD_FLEET_DEVOPS_REFUSED: {"feature":"<slug>","reason":"<phase-mismatch|escalation|tests-failing|review-not-approved|deploy-failed|missing-requirement>"}
   ```
+  `review-not-approved` means the passing gate line for the current change cycle
+  is missing from the prompt.
 
 Emit `_OK` **only** when the feature is genuinely shipped. If you did partial work
 then hit an error, emit `_REFUSED` with `deploy-failed` — never `_OK`. A silent
