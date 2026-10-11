@@ -22,7 +22,7 @@ stopping conditions.
 | **REVIEW internal** | 5-stage micro-loop | fan-out → cross-examination → survival vote → disposition → apply | pure-JS survival vote | `workflows/review.js` |
 | **BUILD** (TDD) | generator/evaluator | coder iterates against qa's pre-written failing tests | every qa test passes | `SKILL.md:260-267` |
 | **deep-build** | orchestrator-workers | architect partitions files → N coders fan out → adversarial review | `clean` / `needs-iteration` / `escalate`, bounded by `BUILD_CYCLE ≤3` | `workflows/deep-build.js`, `SKILL.md:283-287` |
-| **CHANGE_REVIEW** | evaluator-optimizer | one `/build-fleet:handoff` pass | 3 approvals; fail → back to BUILD, `≤3 CHANGE_CYCLE` then `escalate` | `SKILL.md:289-300` |
+| **CHANGE_REVIEW** | evaluator-optimizer | one `/build-fleet:handoff` pass | change-review gate passes (zero blockers, every major ADR'd or demoted — `scripts/change-review-gate.sh`); fail → back to BUILD, `≤3 CHANGE_CYCLE` then `escalate` | `SKILL.md:289-300` |
 | **Bug lane** | prompt-chaining + convergence | reproduce → diagnose → fix → verify | diagnose-confirm `CYCLE` + verify→fix `FIX_CYCLE`, both bounded | `references/bug-lane.md` |
 | **stop-tests** (Stop hook) | loop-enforcement guard | each session-stop attempt | won't stop on a red suite; **3 red-strikes** → escalate + release | `hooks/scripts/stop-tests`, `SKILL.md:337` |
 | **Product PLAN** | *deliberately non-converging* | PLAN → PLAN_REVIEW → ratify | interrogation surfaces risk; a **human** ratifies (never auto-converges) | `references/product-tier.md:58-118` |
@@ -101,8 +101,9 @@ consolidation (plan-review). Everything linear (TDD qa→coder), Bash-dependent
 and every gate stays static. The instructive case is **CHANGE_REVIEW: a parallel
 adversarial review that stays static** — three `Task` reviewers, not a workflow —
 because the orchestrator drives it with Bash the isolated runtime can't run, and it
-needs no survival-vote machinery (a plain all-approve-or-bounce gate against the
-3-cycle `CHANGE_CYCLE` budget).
+needs no survival-vote machinery: a two-stage fan-out (product-owner + qa, then the
+architect, who dispositions their majors) and a deterministic rubric gate
+(`scripts/change-review-gate.sh`) against the 3-cycle `CHANGE_CYCLE` budget.
 
 ## What makes them *engineered* loops
 

@@ -135,8 +135,9 @@ CHANGE_CYCLE: <int>   # change-review cycles consumed (one increment per /build-
 BUILD_CYCLE: <int>    # deep-build cycles consumed (one increment per deep-build workflow run)
 TIER: trivial | standard | large    # set by the classifier at /build-fleet:new-feature. `pending` until it runs.
 BUILD_MODE: standard | deep-build   # selects /build-fleet:build's orchestration. Classifier sets deep-build for tier=large. `pending` until it runs.
-REVIEW_ROLES: <csv>         # optional — /build-fleet:review roster (>=2 of architect,qa,coder,product-owner). Default architect,qa,coder. A --roles flag overrides per-run.
-REVIEW_CYCLE_BUDGET: <int>  # optional — /build-fleet:review escalation budget (1..3, clamped to the ceiling). Default 3. A --cycle-budget flag overrides per-run.
+RISK: low | elevated                 # set by the classifier at /build-fleet:new-feature (reversibility, blast radius, the never-trivial list). `pending` until it runs. With TIER it selects the seeded review roster and budget.
+REVIEW_ROLES: <csv>         # optional — /build-fleet:review roster (>=2 of architect,qa,coder,product-owner). Seeded by new-feature from TIER + RISK (table in commands/new-feature.md step 7; architect,qa,coder for every standard and large feature after the 0.10.0 measurement); absent ⇒ architect,qa,coder. A --roles flag overrides per-run.
+REVIEW_CYCLE_BUDGET: <int>  # optional — /build-fleet:review escalation budget (1..3, clamped to the ceiling). Seeded with the roster (3 for standard and large; 2 on the trivial row); absent ⇒ 3. A --cycle-budget flag overrides per-run.
 BUILD_CYCLE_BUDGET: <int>   # optional — deep-build escalation budget (1..3, clamped). Default 3. A --cycle-budget flag overrides per-run.
 CYCLE_TOTAL: <int>          # cumulative spec-review cycles, scribe-written, NEVER reset (not by resolve-escalation, not by park)
 CYCLE_TOTAL_MAX: <int>      # /build-fleet:review refuses to dispatch when CYCLE_TOTAL_MAX is not 0 and CYCLE_TOTAL >= CYCLE_TOTAL_MAX (default 6; 0 disables)
@@ -242,7 +243,8 @@ The REVIEW loop's per-cycle ritual is `/build-fleet:review` → `/build-fleet:re
 `/build-fleet:review` …; the cumulative bound is `CYCLE_TOTAL_MAX`.
 
 **SPEC.** `/build-fleet:new-feature <slug>` scaffolds `.sdd/<slug>/`, runs the
-classifier subagent to set `TIER` + `BUILD_MODE` in PROGRESS.md, and delegates to
+classifier subagent to set `TIER`, `RISK` + `BUILD_MODE` in PROGRESS.md and to seed
+`REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET` from tier and risk (`commands/new-feature.md` step 7), and delegates to
 product-owner to draft `spec.md` (STATUS=DRAFT) + `acceptance.md` — a minimal
 skeleton from the classifier's `skeleton_spec_hint` for `TIER=trivial`, the full
 spec otherwise. With a product tier present, the feature inherits the binding stack
@@ -358,8 +360,19 @@ revert, operate against that ref, verify the restore against it before evaluatin
 any verdict, and never use a bare `git checkout` of the changed files (full
 procedure in `agents/qa.md`).
 
-Exit (to HANDOFF): all three approve with no open blockers. Fail → back to BUILD,
-bounded by the 3-cycle `CHANGE_CYCLE` budget, then ESCALATE.
+The fan-out is two-stage: product-owner and qa in parallel, then the architect,
+who reads their blocks. Findings carry ids `<role>-cc<K>-<n>` (`K` = the change
+cycle first raised); every `[major]` carries `disposition: fix` or, architect only,
+`disposition: adr ADR-N` after the ADR is appended — and the architect may close a
+peer's open major by re-listing its id with an ADR (closed-by-id). From change
+cycle 2 each reviewer re-raises its own open findings by id and raises new findings
+at `[blocker]` only; a new `[major]` is advisory (demoted).
+
+Exit (to HANDOFF): `scripts/change-review-gate.sh` passes — every roster role has a
+current-cycle block, zero unrefuted `[blocker]`s, every `[major]` closed by an ADR
+present in DECISIONS.md or demoted. `status:` is informational. Fail below the
+budget → back to BUILD with exactly the open items; fail on the exhausting cycle
+(`CHANGE_CYCLE` 3) → ESCALATE with blockers and `fix` majors both listed.
 
 **HANDOFF.** devops takes the finalized, reviewed change → CI/CD, IaC, release
 notes. It advances only on an explicit `BUILD_FLEET_DEVOPS_OK` signal (a silent or

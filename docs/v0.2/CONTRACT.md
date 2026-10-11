@@ -672,7 +672,10 @@ Every refusal emits exactly one `BUILD_FLEET_*REFUSE*:` line whose JSON carries:
 | `reason` | kebab-case slug (e.g. `no-active-feature`, `cycle-budget-exhausted`, `workflow-runtime-unavailable`) |
 
 Success paths emit their command-specific signal (`BUILD_FLEET_WORKFLOW_LAUNCHED`,
-`BUILD_FLEET_FINALIZE_PASS`, `BUILD_FLEET_PLAN_FINALIZE_PASS`, …).
+`BUILD_FLEET_FINALIZE_PASS`, `BUILD_FLEET_PLAN_FINALIZE_PASS`, `BUILD_FLEET_CHANGE_REVIEW_GATE`,
+`BUILD_FLEET_REVIEW_DEFAULTS`, …). `BUILD_FLEET_CLASSIFICATION` carries `risk` and
+`risk_reasons`; `BUILD_FLEET_CLASSIFIER_FALLBACK` carries `risk_assigned` and may name
+the reason `risk-tier-conflict`.
 
 Hermes (or any orchestrator) maps **signal lines** — `code`/`reason` on refusal,
 the success signal otherwise — to kanban task state transitions, and must treat

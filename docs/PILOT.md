@@ -48,7 +48,7 @@ The simplest entry point. Everything after the slug is the feature description:
     the line level before tax, not at the invoice level. Applies to the checkout
     and invoice PDF paths. Out of scope: currency conversion."
 
-/build-fleet:review      # adversarial review workflow — architect, qa, coder
+/build-fleet:review      # adversarial review workflow — roster seeded by tier + risk
 /build-fleet:finalize    # the gate: flips spec.md to FINALIZED, unlocks source
 /build-fleet:build       # qa writes the failing suite first, then coder implements
 /build-fleet:handoff     # change-review against acceptance.md, then ship

@@ -67,17 +67,23 @@ This describes the non-workflow paths (CHANGE_REVIEW and direct invocation). In
 workflow REVIEW the architect disposition leg records the ADR — see "Delta review
 and disposition (v0.9)" below.
 
-`[major]` items have two resolution paths:
+In CHANGE_REVIEW the same grammar applies, read by `scripts/change-review-gate.sh`:
 
-- **Fix it** in the spec or the code, then approve in the next cycle.
-- **Accept it** — PO and architect explicitly agree the trade-off stands.
-  Architect writes a new ADR in `DECISIONS.md` capturing the decision, the
-  alternatives, and the consequences. The ADR ID is cited in the
-  approving REVIEW.md block.
+- Ids `<role>-cc<K>-<n>`, `K` the change cycle the finding was first raised in; a
+  re-raised finding keeps its id.
+- Every `[major]` carries `disposition: fix` (the default; coder closes it) or
+  `disposition: adr ADR-N` (architect only, ADR appended first).
+- **Closed-by-id.** The architect runs after product-owner and qa and may accept a
+  peer's open major as a trade-off by listing the peer's id under its own block with
+  an ADR disposition. An id closed by an ADR in any block is closed in every block.
+- **Delta rule.** From change cycle 2, new findings are `[blocker]` only; a new
+  `[major]` is advisory (the gate reports it as demoted). Blockers are never demoted,
+  and qa's change-review lens rates a missing acceptance test as a blocker, so
+  demotion touches maintainability-class findings in fix code only.
 
-A `[major]` that gets quietly dropped between cycles without a fix or an
-ADR is a finding the next reviewer should re-raise — same content,
-elevated to `[blocker]` for lack of audit trail.
+A `[major]` that gets quietly dropped between cycles without a fix or an ADR is a
+finding the next reviewer should re-raise by id — same content, elevated to
+`[blocker]` for lack of audit trail.
 
 ## Delta review and disposition (v0.9)
 
