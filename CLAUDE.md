@@ -26,8 +26,10 @@ hooks/scripts/                # 12 gate scripts + their *.test.sh harnesses
 workflows/                    # 4 dynamic workflows: review.js, deep-build.js,
                               #   diagnose.js, plan-review.js
 scripts/                      # deterministic helpers (next-feature, intent-block,
-                              #   product-memory-splice, status-snapshot, run-tests)
-                              #   + their *.test.sh
+                              #   product-memory-splice, status-snapshot, run-tests,
+                              #   acquire-active, finalize-gate, change-review-gate,
+                              #   review-rotate, adr-index, workflow-determinism-lint,
+                              #   pin-workflow) + their *.test.sh
 docs/                         # contracts, smoke fixtures, history
 .github/workflows/ci.yml      # CI: test matrix + release-channel check
 ```

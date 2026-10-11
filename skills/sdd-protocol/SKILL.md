@@ -136,7 +136,7 @@ BUILD_CYCLE: <int>    # deep-build cycles consumed (one increment per deep-build
 TIER: trivial | standard | large    # set by the classifier at /build-fleet:new-feature. `pending` until it runs.
 BUILD_MODE: standard | deep-build   # selects /build-fleet:build's orchestration. Classifier sets deep-build for tier=large. `pending` until it runs.
 RISK: low | elevated                 # set by the classifier at /build-fleet:new-feature (reversibility, blast radius, the never-trivial list). `pending` until it runs. With TIER it selects the seeded review roster and budget.
-REVIEW_ROLES: <csv>         # optional — /build-fleet:review roster (>=2 of architect,qa,coder,product-owner). Seeded by new-feature from TIER + RISK (table in commands/new-feature.md step 7; architect,qa,coder for every standard and large feature after the 0.10.0 measurement); absent ⇒ architect,qa,coder. A --roles flag overrides per-run.
+REVIEW_ROLES: <csv>         # optional — /build-fleet:review roster (>=2 of architect,qa,coder,product-owner). Seeded by new-feature from TIER + RISK (table in commands/new-feature.md step 7; architect,qa,coder for every standard and large feature); absent ⇒ architect,qa,coder. A --roles flag overrides per-run.
 REVIEW_CYCLE_BUDGET: <int>  # optional — /build-fleet:review escalation budget (1..3, clamped to the ceiling). Seeded with the roster (3 for standard and large; 2 on the trivial row); absent ⇒ 3. A --cycle-budget flag overrides per-run.
 BUILD_CYCLE_BUDGET: <int>   # optional — deep-build escalation budget (1..3, clamped). Default 3. A --cycle-budget flag overrides per-run.
 CYCLE_TOTAL: <int>          # cumulative spec-review cycles, scribe-written, NEVER reset (not by resolve-escalation, not by park)

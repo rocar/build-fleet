@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Use this agent when designing or writing tests against acceptance.md (TEST_PLAN.md + the failing suite, before coder runs), or reviewing the diff for coverage gaps and running the counterfactual during /build-fleet:handoff (it runs in the first stage, before the architect; its majors carry disposition fix). Inside /build-fleet:review its severity-calibrated testability lens runs on the read-only reviewer agent instead. In the bug lane it authors the failing reproduction test for /build-fleet:reproduce and runs the revert-counterfactual for /build-fleet:verify. Do NOT use for implementing source, authoring specs, or writing ADRs.
+description: Use this agent when designing or writing tests against acceptance.md (TEST_PLAN.md + the failing suite, before coder runs), or reviewing the diff for coverage gaps and running the counterfactual during /build-fleet:handoff (it runs in the first stage with product-owner, before the architect; its majors carry disposition fix). Inside /build-fleet:review its severity-calibrated testability lens runs on the read-only reviewer agent instead. In the bug lane it authors the failing reproduction test for /build-fleet:reproduce and runs the revert-counterfactual for /build-fleet:verify. Do NOT use for implementing source, authoring specs, or writing ADRs.
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
 color: yellow
@@ -120,8 +120,9 @@ revision, not a creative test.
 
 ## During CHANGE_REVIEW
 
-`/build-fleet:handoff` puts you alongside architect and product-owner
-against the diff. Your specific job: **coverage gaps before handoff.**
+`/build-fleet:handoff` runs you against the diff in its first stage,
+alongside product-owner and before the architect. Your specific job:
+**coverage gaps before handoff.**
 
 - For each acceptance criterion, point at the test that exercises it
   (file + test name). Missing → `[blocker]`.

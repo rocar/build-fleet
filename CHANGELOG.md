@@ -14,6 +14,22 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.10.1] — 2026-10-11
+
+Documentation and prompt fixes from a review of the 0.10.0 surface. One of them changes behavior.
+
+### Fixed
+- **devops no longer refuses a cycle the change-review gate passed.** Its refusal condition still required every CHANGE_REVIEW block to say `approved`, while the 0.10.0 gate ignores `status:` lines and passes a cycle whose majors are all ADR'd or demoted. A passing cycle with a `concerns-raised` block was refused, `/build-fleet:handoff` left `PHASE: HANDOFF`, and every re-run resumed at devops and refused again. Handoff now passes the gate line to devops, and devops refuses only when the prompt lacks a passing line for the current `CHANGE_CYCLE`. The refusal reason `review-not-approved` keeps its name and now means that.
+- `/build-fleet:handoff` refuses with the gate's stderr when the gate prints no line (exit 1: no PROGRESS.md, a non-integer `CHANGE_CYCLE`, jq missing). Before, the resume path handled only pass and fail.
+- `/build-fleet:dispatch` shows a verdict with no `risk` field as `elevated`, matching new-feature's fallback. Its description now names the risk and roster preview.
+- Prompt wording: qa's CHANGE_REVIEW section names the two-stage order. The architect is told an ADR is the only way its block closes a peer's major. `/build-fleet:review` says new-feature seeds the durable roster. The sdd-protocol skill drops a release reference.
+
+### Docs
+- The 0.10.0 design spec gains an outcome note on D2 and the §3.2 table pointing at the REVERT, and §4 says absent `RISK` prints `unset`.
+- README: the review workflow node, the dispatch and status rows, and the scripts list. CLAUDE.md's scripts list, `docs/loops.md` and `docs/CLAUDE.sample.md` match the gate.
+
+**Compatibility.** No schema or signal-grammar change. `review-not-approved` keeps its slug with the narrower meaning above.
+
 ## [0.10.0] — 2026-10-11
 
 The **proportionate review** release. Review effort now scales with stakes: the

@@ -27,7 +27,10 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    still passes —
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/change-review-gate.sh" "<slug>"` — and
    on `"pass":true` skip straight to step 9. On `"pass":false` the workspace was
-   edited by hand since; continue at step 3 as a normal run.
+   edited by hand since; continue at step 3 as a normal run. If the gate prints
+   no `BUILD_FLEET_CHANGE_REVIEW_GATE:` line it could not evaluate (exit 1: no
+   PROGRESS.md, a non-integer `CHANGE_CYCLE`, jq missing); refuse with its
+   stderr. The same holds wherever this command runs the gate.
 
 3. **Check ESCALATION.md.** If it exists, refuse.
 
@@ -141,6 +144,9 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 9. **Hand off to devops.** Set `PHASE: HANDOFF` in PROGRESS.md. Use the Task
    tool to launch `build-fleet:devops` with a prompt that:
    - Names the active feature.
+   - Carries the passing `BUILD_FLEET_CHANGE_REVIEW_GATE:` line verbatim (from
+     step 8, or from step 2 / step 5 when those skipped here). devops refuses
+     without it.
    - Pointers to spec.md, acceptance.md, DECISIONS.md, IMPL_NOTES.md.
    - Asks for CI/CD updates, IaC if applicable, and release notes.
    - Reminds devops to refuse if PHASE isn't HANDOFF — defense in depth.
@@ -253,6 +259,8 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
   (`HANDOFF` is a resume, step 2).
 - ESCALATION.md exists → refuse.
 - No tests, or test command fails → refuse with the failing output.
+- The gate prints no `BUILD_FLEET_CHANGE_REVIEW_GATE:` line (exit 1) → refuse
+  with its stderr.
 - `CHANGE_CYCLE` budget exhausted with the gate failing (`open-blockers` or
   `majors-open` in its `reasons`, after step 8's re-dispatches for
   `missing-<role>`, `unparsed-findings` and `majors-without-adr`) → write

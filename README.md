@@ -82,7 +82,7 @@ flowchart TD
     PR(["⚙️ /plan-review · plan-review workflow<br/>PO · architect · qa interrogate"])
     PF{"🙋 /plan-finalize ratify<br/>human gate · never auto-passes"}
     NF["✨ /new-feature<br/>inherits stack + intent"]
-    RV(["⚙️ /review · review workflow<br/>architect · qa · coder → cross-exam → vote"])
+    RV(["⚙️ /review · review workflow<br/>roster by tier and risk → cross-exam → vote"])
     FZ["✅ /finalize<br/>gate · flips spec FINALIZED"]
     BD["🔨 /build<br/>tests-first BUILD"]
     DB(["⚙️ deep-build workflow<br/>architect partitions → coders → qa"])
@@ -169,7 +169,8 @@ either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field). The
 `diagnose.js` (bug-lane root-cause confirmation — the survival vote, inverted).
 Plus deterministic shared scripts under `scripts/` (the backlog resolver, the
 intent-block extractor, the product-memory splice, the status snapshot, the
-atomic ACTIVE-lock acquirer, plus the workflow determinism-lint and pinner that
+atomic ACTIVE-lock acquirer, the finalize and change-review gates, the REVIEW.md
+rotation, the ADR index, plus the workflow determinism-lint and pinner that
 govern the generate-then-pin lane — each with its own test harness), seven craft
 skills, twelve gate-enforcing hooks, and the shared memory layer under `.sdd/`.
 
@@ -548,14 +549,14 @@ execution.
 | Command | Phase | What it does |
 |---|---|---|
 | `/build-fleet:new-feature <slug> [details]` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` + `acceptance.md`. Takes the feature description from an optional inline `[details]` arg (wins), else the conversation, else a backlog intent; asks in a structured clarify loop if none is usable. Inherits the product stack if present. |
-| `/build-fleet:dispatch` | — | Re-classifies the active feature (query-only). |
+| `/build-fleet:dispatch <description>` | — | Previews the classifier's verdict for a description: tier, risk, and the review roster and budget new-feature would seed. Writes no state. |
 | `/build-fleet:review` | REVIEW | Runs the adversarial review workflow. (Skipped for trivial.) Accepts `--roles` / `--cycle-budget` (else `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET`). |
 | `/build-fleet:revise` | REVIEW | Hand the product-owner exactly the open review items to close. |
 | `/build-fleet:finalize` | FINALIZE → BUILD | Gate only: refuses on open blockers; on pass flips the spec to FINALIZED. Idempotent — re-running is a safe no-op. |
 | `/build-fleet:build` | BUILD | Orchestrates BUILD: qa drafts the failing suite first, then coder implements (routes to the deep-build workflow when `BUILD_MODE=deep-build`). |
 | `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by `/build-fleet:build`); also the iteration entry point. Accepts `--cycle-budget` (else `BUILD_CYCLE_BUDGET`). |
 | `/build-fleet:handoff` | CHANGE_REVIEW → HANDOFF | product-owner + qa review the diff, then architect (who may accept a peer's major by ADR); exits on the deterministic change-review gate; refuses if tests are missing/failing. On pass devops ships, the backlog flips, and the loop advances. |
-| `/build-fleet:status` | — | Prints active feature state, open concerns, cycle counts, the product backlog, and the next unblocked feature. **Bug-lane aware:** `LANE: bug` → phase / `SEV` / `diagnosis.md` STATUS / cycles. |
+| `/build-fleet:status` | — | Prints active feature state (including TIER, RISK and the review roster), open concerns, cycle counts, the product backlog, and the next unblocked feature. **Bug-lane aware:** `LANE: bug` → phase / `SEV` / `diagnosis.md` STATUS / cycles. |
 | `/build-fleet:park <reason>` | any → PARKED | **Human-only** (not model-invocable). Records the parked state in PROGRESS.md and frees `.sdd/ACTIVE` — the sanctioned sev0-preemption path. Workspace stays intact. |
 | `/build-fleet:resolve-escalation [<slug>] <decision>` | ESCALATED → pre-escalation phase | **Human-only** (not model-invocable). Archives ESCALATION.md into REVIEW.md (append-only), resets the exhausted cycle counter, restores the phase. |
 
