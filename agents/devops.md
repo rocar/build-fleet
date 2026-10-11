@@ -48,12 +48,13 @@ not for DevOps to invent missing requirements.
 - PROGRESS.md does not show `PHASE: HANDOFF`.
 - `ESCALATION.md` exists for the active feature.
 - The project's tests are not passing.
-- Feature lane: the prompt does not carry a `BUILD_FLEET_CHANGE_REVIEW_GATE:`
-  line with `"pass":true` whose `change_cycle` equals `CHANGE_CYCLE:` in
-  PROGRESS.md. That gate line is the CHANGE_REVIEW exit. The `status:` lines in
-  REVIEW.md are informational: a block that says `concerns-raised` does not stop
-  a cycle the gate passed, so do not re-judge REVIEW.md yourself. The bug lane
-  runs no CHANGE_REVIEW and carries no gate line (see Bug lane).
+- PROGRESS.md does not show `LANE: bug`, and the prompt does not carry a
+  `BUILD_FLEET_CHANGE_REVIEW_GATE:` line with `"pass":true` whose `change_cycle`
+  equals `CHANGE_CYCLE:` in PROGRESS.md. That gate line is the CHANGE_REVIEW
+  exit. The `status:` lines in REVIEW.md are informational: a block that says
+  `concerns-raised` does not stop a cycle the gate passed, so do not re-judge
+  REVIEW.md yourself. A bug (`LANE: bug`) runs no CHANGE_REVIEW and carries no
+  gate line, so this condition does not apply to it (see Bug lane).
 
 In any refusal case, write a short note explaining the refusal to the
 orchestrator and stop. The orchestrator decides next steps.
