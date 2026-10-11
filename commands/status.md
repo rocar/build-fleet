@@ -80,8 +80,9 @@ Snapshot (`build-fleet/status-snapshot@1`):
      every roster role (architect, product-owner, qa) has a block, zero unrefuted
      `[blocker]` lines, and every `[major]` is closed by `disposition: adr ADR-N`
      with that ADR in DECISIONS.md (an architect ADR closes a peer's id in every
-     block) or is a new major on cycle ≥ 2 (advisory, "demoted"). `status:` lines
-     are not evaluated.
+     block) or is a new major on cycle ≥ 2 (advisory, "demoted"). A finding bullet
+     the gate cannot read (an indented `- [blocker]` / `- [major]`) makes it `no`.
+     `status:` lines are not evaluated.
    - Verbatim text of every `[blocker]` item (so the user sees what's
      actually open).
 

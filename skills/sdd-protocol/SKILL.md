@@ -370,7 +370,8 @@ at `[blocker]` only; a new `[major]` is advisory (demoted).
 
 Exit (to HANDOFF): `scripts/change-review-gate.sh` passes — every roster role has a
 current-cycle block, zero unrefuted `[blocker]`s, every `[major]` closed by an ADR
-present in DECISIONS.md or demoted. `status:` is informational. Fail below the
+present in DECISIONS.md or demoted, and no finding bullet the gate cannot read (an
+indented one refuses with `unparsed-findings`). `status:` is informational. Fail below the
 budget → back to BUILD with exactly the open items; fail on the exhausting cycle
 (`CHANGE_CYCLE` 3) → ESCALATE with blockers and `fix` majors both listed.
 
