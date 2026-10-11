@@ -49,9 +49,11 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    Relay its `BUILD_FLEET_CHANGE_REVIEW_GATE:` line. On `"pass":true` the
    current cycle already passed (a previous run stopped before devops): skip to
    step 9. On `"pass":false` the budget is exhausted with findings open: write
-   `ESCALATION.md` with the change-cycle context and the gate line's
-   `open_blockers` and `open_majors` (both listed, verbatim), set
-   `PHASE: ESCALATED`, stop. This guard exists for a workspace whose third cycle
+   `ESCALATION.md` with the change-cycle context, the gate line's
+   `open_blockers` verbatim and each `open_majors` id with its raising `- [major]`
+   line from REVIEW.md, set `PHASE: ESCALATED`, stop. If `reasons` holds only
+   `missing-<role>`, `unparsed-findings` or `majors-without-adr`, apply step 8's
+   re-dispatch bullets first and re-run the gate before escalating. This guard exists for a workspace whose third cycle
    was recorded before the gate existed and bounced without escalating; a run
    that reaches step 8 on the exhausting cycle escalates there directly.
 
@@ -111,16 +113,28 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    `[blocker]`s; every `[major]` closed by `disposition: adr ADR-N` (ADR present) or
    demoted as a new major on a delta cycle. `status:` lines are never evaluated.
    - `"pass":true` → CHANGE_REVIEW passes. Continue to step 9.
-   - `"pass":false` and `CHANGE_CYCLE < 3` → delegate to `build-fleet:coder` with
-     exactly the line's `open_blockers` and `open_majors` (ids and text) and a
-     pointer to the blocks that raised them (PHASE returns to `BUILD`). Do not
-     auto-loop; tell the user BUILD is open again and to re-run
-     `/build-fleet:handoff` once coder is done. The `CHANGE_CYCLE` counter
-     persists. **STOP here — do NOT continue to steps 9–12.** The feature is not
-     shipped; `.sdd/ACTIVE` stays set.
-   - `"pass":false` and `CHANGE_CYCLE >= 3` → the exhausting cycle escalates: write
-     `ESCALATION.md` with the change-cycle context and the line's `open_blockers`
-     and `open_majors` (both listed, verbatim), set `PHASE: ESCALATED`, stop.
+   - `"pass":false` with `missing-<role>` or `unparsed-findings` in `reasons` → a
+     reviewer's block is absent, or holds a finding bullet the grammar cannot read
+     (an indented `- [blocker]` / `- [major]`; the gate lists them under
+     `unparsed`). Re-dispatch that reviewer (`build-fleet:<role>`) to write its
+     `## Change-Cycle <CHANGE_CYCLE>` block with every finding at column 0, then
+     re-run the gate. No cycle bump; coder is not involved.
+   - `"pass":false` with `majors-without-adr` in `reasons` → the architect cited an
+     ADR that DECISIONS.md does not hold (ids under `majors_without_adr`). That is
+     the architect's defect, not coder's: re-dispatch `build-fleet:architect` to
+     append the ADR or correct the id, then re-run the gate. No cycle bump.
+   - `"pass":false` with only `open-blockers` / `majors-open` left and
+     `CHANGE_CYCLE < 3` → delegate to `build-fleet:coder` with exactly the line's
+     `open_blockers` (full text) and `open_majors` — resolve each id to its
+     `- [major]` line in the raising block and pass id + text — plus a pointer to
+     the blocks that raised them (PHASE returns to `BUILD`). Do not auto-loop; tell
+     the user BUILD is open again and to re-run `/build-fleet:handoff` once coder
+     is done. The `CHANGE_CYCLE` counter persists. **STOP here — do NOT continue to
+     steps 9–12.** The feature is not shipped; `.sdd/ACTIVE` stays set.
+   - `"pass":false` with only `open-blockers` / `majors-open` left and
+     `CHANGE_CYCLE >= 3` → the exhausting cycle escalates: write `ESCALATION.md`
+     with the change-cycle context, the line's `open_blockers` verbatim and each
+     `open_majors` id with its raising line, set `PHASE: ESCALATED`, stop.
    - `"demoted"` non-empty → mention the demoted ids to the user as advisory; they
      never block.
 
@@ -235,11 +249,13 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 ## Refusal cases
 
 - `.sdd/ACTIVE` empty → refuse.
-- PHASE not in `{BUILD, CHANGE_REVIEW}` → refuse with the actual phase.
+- PHASE not in `{BUILD, CHANGE_REVIEW, HANDOFF}` → refuse with the actual phase
+  (`HANDOFF` is a resume, step 2).
 - ESCALATION.md exists → refuse.
 - No tests, or test command fails → refuse with the failing output.
-- `CHANGE_CYCLE` budget exhausted with the gate failing (`open-blockers`,
-  `majors-open` or `majors-without-adr` in its `reasons`) → write ESCALATION.md
-  and stop.
+- `CHANGE_CYCLE` budget exhausted with the gate failing (`open-blockers` or
+  `majors-open` in its `reasons`, after step 8's re-dispatches for
+  `missing-<role>`, `unparsed-findings` and `majors-without-adr`) → write
+  ESCALATION.md and stop.
 - Gate failing below the budget → bounce to BUILD (not a refusal: coder is
   dispatched, the user re-runs handoff).
