@@ -68,6 +68,7 @@ spec STATUS contract.
    BUILD_CYCLE: 0
    TIER: pending
    BUILD_MODE: pending
+   RISK: pending
    REVIEW_ROLES: architect, qa, coder
    REVIEW_CYCLE_BUDGET: 3
    BUILD_CYCLE_BUDGET: 3
@@ -76,12 +77,15 @@ spec STATUS contract.
    UPDATED: <iso8601>
    ```
 
-   The last three are **optional per-feature config**, seeded at their defaults so they
-   are discoverable and editable: `REVIEW_ROLES` (the `/build-fleet:review` roster — a
-   ≥2 subset of architect, qa, coder, product-owner) and `REVIEW_CYCLE_BUDGET` /
-   `BUILD_CYCLE_BUDGET` (escalation budgets, 1–3, clamped to the 3-cycle ceiling). A
-   command flag overrides these per run; the workflow validates them and falls back to
-   these defaults if absent. Leaving them as-is reproduces the historical behavior.
+   `REVIEW_ROLES`, `REVIEW_CYCLE_BUDGET` and `BUILD_CYCLE_BUDGET` are **optional
+   per-feature config**, seeded here at the historical defaults so a classifier
+   fallback or an interrupted run still leaves a working feature. **Step 7 rewrites
+   `REVIEW_ROLES` and `REVIEW_CYCLE_BUDGET` from the classifier's tier and risk**
+   (table there); `RISK` is `pending` until then. They stay discoverable and
+   editable: `REVIEW_ROLES` is the `/build-fleet:review` roster — a ≥2 subset of
+   architect, qa, coder, product-owner; the budgets are escalation budgets, 1–3,
+   clamped to the 3-cycle ceiling. A command flag overrides these per run; the
+   workflow validates them and falls back to its own defaults if absent.
    `CYCLE_TOTAL` is the cumulative spec-review cycle count — written by the review
    workflow's scribe and **never reset** by resolve-escalation or park;
    `/build-fleet:review` refuses to dispatch at `CYCLE_TOTAL_MAX` (0 disables). Raising
@@ -211,15 +215,28 @@ spec STATUS contract.
    > size the work. Do not exhaustively read source.
 
    Parse the classifier's JSON verdict. Extract `tier`, `build_mode`, `skip_review`,
-   `skeleton_spec_hint`, `confidence`, `skill_manifest` (may be `null`).
+   `skeleton_spec_hint`, `confidence`, `skill_manifest` (may be `null`), `risk`
+   (`low` | `elevated`) and `risk_reasons` (an array of slugs; `[]` when `risk` is
+   `low`). `risk` is a required field: a verdict without it takes the fallback below.
 
    **Parse-failure fallback.** If the classifier returns malformed JSON or omits
-   any of the required fields above, do NOT write `undefined` to PROGRESS.md.
-   Instead, default to `tier=standard` / `build_mode=standard` / `skip_review=false`
-   and emit:
+   any of the required fields above (including `risk`), do NOT write `undefined`
+   to PROGRESS.md. Instead, default to `tier=standard` / `build_mode=standard` /
+   `skip_review=false` / `risk=elevated` / `risk_reasons=[]` — the historical
+   three-role review — and emit:
 
    ```
-   BUILD_FLEET_CLASSIFIER_FALLBACK: {"feature":"<slug>","reason":"<parse-error|missing-field|empty-output>","tier_assigned":"standard"}
+   BUILD_FLEET_CLASSIFIER_FALLBACK: {"feature":"<slug>","reason":"<parse-error|missing-field|empty-output>","tier_assigned":"standard","risk_assigned":"elevated"}
+   ```
+
+   **Risk–tier coercion.** The classifier's rule forbids `tier=trivial` with
+   `risk=elevated`, but a verdict is model output. If it arrives anyway, do NOT
+   let it reach the trivial fast-path: set `tier=standard`, `build_mode=standard`,
+   `skip_review=false`, ignore `skeleton_spec_hint`, keep `risk=elevated` and its
+   reasons, and emit (before the classification line):
+
+   ```
+   BUILD_FLEET_CLASSIFIER_FALLBACK: {"feature":"<slug>","reason":"risk-tier-conflict","tier_assigned":"standard","risk_assigned":"elevated"}
    ```
 
    Continue to step 7 with the fallback values. Surface the raw classifier
@@ -230,7 +247,7 @@ spec STATUS contract.
    On successful parse, emit the classification signal:
 
    ```
-   BUILD_FLEET_CLASSIFICATION: {"feature":"<slug>","tier":"<...>","build_mode":"<...>","skip_review":<bool>,"confidence":"<...>"}
+   BUILD_FLEET_CLASSIFICATION: {"feature":"<slug>","tier":"<...>","build_mode":"<...>","skip_review":<bool>,"confidence":"<...>","risk":"<low|elevated>","risk_reasons":[<slugs>]}
    ```
 
    If `confidence=low`, surface the rationale to the user and *recommend* the
@@ -240,6 +257,29 @@ spec STATUS contract.
 7. **Write classifier verdict to PROGRESS.md.** Edit PROGRESS.md:
    - `TIER:` ← classifier's `tier` (`trivial`, `standard`, or `large`)
    - `BUILD_MODE:` ← classifier's `build_mode` (`standard` for trivial/standard, `deep-build` for large)
+   - `RISK:` ← classifier's `risk` (`low` or `elevated`; `elevated` after a fallback or a
+     coercion).
+   - **Review roster and budget by tier and risk.** Rewrite `REVIEW_ROLES:` and
+     `REVIEW_CYCLE_BUDGET:` from this table (the step-3 defaults are the
+     `elevated` row, so a fallback changes nothing):
+
+     | TIER | RISK | REVIEW_ROLES | REVIEW_CYCLE_BUDGET |
+     |---|---|---|---|
+     | standard | low | architect, qa, coder | 3 |
+     | standard | elevated | architect, qa, coder | 3 |
+     | large | low or elevated | architect, qa, coder | 3 |
+     | trivial | low | architect, qa | 2 |
+
+     Two full-lens reviewers still cross-examine each other and the finalize gate
+     still applies; what a smaller roster drops is the third fan-out lens. The
+     trivial row only matters if TIER is later edited by hand — REVIEW is skipped
+     for trivial features. A human overrides by editing these two lines or by
+     passing `--roles` / `--cycle-budget` to `/build-fleet:review` for one run.
+     Then emit exactly one line:
+
+     ```
+     BUILD_FLEET_REVIEW_DEFAULTS: {"feature":"<slug>","tier":"<...>","risk":"<...>","roles":["..."],"cycle_budget":<n>}
+     ```
    - `UPDATED:` ← current iso8601 (`date -u +%Y-%m-%dT%H:%M:%SZ`)
    - **Size budget (v0.9).** Add two lines by tier — `standard`: `SPEC_MAX_KB: 24` and
      `AC_MAX: 15`; `large`: `SPEC_MAX_KB: 48` and `AC_MAX: 30`; `trivial`: neither.
@@ -326,11 +366,17 @@ spec STATUS contract.
      `/build-fleet:build`."
    - **standard:** "Spec drafted (TIER=standard). Next command: `/build-fleet:review`
      to run the adversarial review workflow (then finalize, then build)."
+     Also say: "Review roster seeded `<REVIEW_ROLES>` with cycle budget `<REVIEW_CYCLE_BUDGET>`
+     (TIER=<tier>, RISK=<risk>); edit PROGRESS.md or pass `--roles` / `--cycle-budget` to
+     change it."
    - **large:** "Spec drafted (TIER=large; BUILD_MODE=deep-build). Next command:
      `/build-fleet:review` to run the adversarial review workflow. After
      `/build-fleet:finalize`, `/build-fleet:build` routes the BUILD phase to
      `workflows/deep-build.js` automatically (fan-out coders across file
      partitions)."
+     Also say: "Review roster seeded `<REVIEW_ROLES>` with cycle budget `<REVIEW_CYCLE_BUDGET>`
+     (TIER=<tier>, RISK=<risk>); edit PROGRESS.md or pass `--roles` / `--cycle-budget` to
+     change it."
 
 ## Gates to honor
 

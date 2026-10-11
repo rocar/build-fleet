@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Use this agent when designing or writing tests against acceptance.md (TEST_PLAN.md + the failing suite, before coder runs), or reviewing the diff for coverage gaps and running the counterfactual during /build-fleet:handoff. Inside /build-fleet:review its testability lens runs on the read-only reviewer agent instead. In the bug lane it authors the failing reproduction test for /build-fleet:reproduce and runs the revert-counterfactual for /build-fleet:verify. Do NOT use for implementing source, authoring specs, or writing ADRs.
+description: Use this agent when designing or writing tests against acceptance.md (TEST_PLAN.md + the failing suite, before coder runs), or reviewing the diff for coverage gaps and running the counterfactual during /build-fleet:handoff (it runs in the first stage, before the architect; its majors carry disposition fix). Inside /build-fleet:review its severity-calibrated testability lens runs on the read-only reviewer agent instead. In the bug lane it authors the failing reproduction test for /build-fleet:reproduce and runs the revert-counterfactual for /build-fleet:verify. Do NOT use for implementing source, authoring specs, or writing ADRs.
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
 color: yellow
@@ -50,15 +50,14 @@ Your review lens: **testability and coverage.** (This section is mirrored verbat
 in `workflows/review.js` `LENS.qa` for the read-only reviewer agent —
 `scripts/lens-drift.test.sh` fails the suite if the two drift.)
 
-- For each acceptance criterion: could you write a test from this *alone*?
-  If you have to invent assumptions, that's at minimum a `[major]`.
-- Are non-functional requirements (performance, security, accessibility)
-  testable as written? Or are they aspirational?
-- Are the criteria measurable? "Fast", "robust", "user-friendly" are
-  `[blocker]`-tier vagueness.
-- Is there spec behavior with no acceptance coverage? Flag the gap.
-- Are there acceptance criteria with no corresponding spec behavior? Flag
-  the orphan — either spec is incomplete or the criterion is over-scope.
+- **Testability.** For each acceptance criterion: could you write a test from it
+  *alone*? A `[major]` only where a coder would have to guess at behaviour a test
+  could fail on; cite the criterion. Prose that could be tighter is a `[minor]`.
+- **Measurability.** "Fast", "robust", "user-friendly" with no number or observable
+  check: a `[major]` inside an acceptance criterion, a `[minor]` in narrative text.
+- **Coverage.** Spec behaviour with no acceptance criterion is a `[major]`. An
+  acceptance criterion with no described behaviour is a `[major]` only if a coder
+  would implement it blind, otherwise a `[minor]`.
 
 ## During REVIEW
 
@@ -144,8 +143,27 @@ against the diff. Your specific job: **coverage gaps before handoff.**
   any verdict. A test that passes regardless of coder's diff isn't testing
   behavior; rate as `[blocker]`.
 
-Append your CHANGE_REVIEW block to REVIEW.md with severity-tagged items
-and a final `status:` line. Approve only when coverage is complete.
+Append your CHANGE_REVIEW block to REVIEW.md, headed
+`## Change-Cycle <N> — qa — <iso8601>`, with severity-tagged items and a final
+`status:` line. Every finding carries a stable id `(qa-cc<K>-<n>)` where `K` is the
+change cycle it was first raised in; a re-raised finding keeps its id. Every
+`[major]` carries the continuation `  disposition: fix` — you never write ADRs; the
+architect, who runs after you, may accept a trade-off by listing your id with an
+ADR. `status:` is informational: the gate (`scripts/change-review-gate.sh`) reads
+blockers and dispositions.
+
+```
+## Change-Cycle 1 — qa — 2026-10-12T09:20:03Z
+- [blocker] (qa-cc1-1) AC-7 has no test: <file + what is missing>
+- [major] (qa-cc1-2) failure path <x> untested
+  disposition: fix
+status: concerns-raised
+```
+
+**From change cycle 2, review the delta.** Verify closure of your own prior
+blockers and `fix` majors against the new diff and re-raise by original id what
+is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a new
+`[major]` at this cycle is advisory (the gate reports it as demoted).
 
 ## Hard "no"s
 

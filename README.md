@@ -51,7 +51,7 @@ flowchart TB
     end
     subgraph FT["🛠️ FEATURE · loop per unit of work"]
         direction LR
-        SPEC["✍️ SPEC"] --> REVIEW(["⚙️ review workflow<br/>architect · qa · coder"]) --> FIN["✅ FINALIZE"] --> BUILD(["⚙️ deep-build workflow<br/>architect → coders → qa"]) --> CR["🔍 CHANGE_REVIEW"] --> HO["🚀 HANDOFF"]
+        SPEC["✍️ SPEC"] --> REVIEW(["⚙️ review workflow<br/>roster by tier and risk"]) --> FIN["✅ FINALIZE"] --> BUILD(["⚙️ deep-build workflow<br/>architect → coders → qa"]) --> CR["🔍 CHANGE_REVIEW"] --> HO["🚀 HANDOFF"]
     end
     DEV ==>|"inherit stack · intent · skills"| SPEC
     HO ==>|"ship → flip backlog → next"| DEV
@@ -156,7 +156,8 @@ gates, and writes `.sdd/` state, but never writes source itself.
 | Scribe | `build-fleet:scribe` | applies workflow state deltas to `.sdd/` (feature or product scope) | sonnet |
 
 The **classifier** and **scribe** are infrastructure agents. The classifier sizes
-incoming work and routes domain skills; the scribe is the canonical writer for
+incoming work, rates its risk (reversibility, blast radius) — which seeds the
+review roster — and routes domain skills; the scribe is the canonical writer for
 state mutations produced by dynamic workflows (workflow scripts cannot touch the
 filesystem, so they hand a structured envelope to the scribe — which now targets
 either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field). The
@@ -553,7 +554,7 @@ execution.
 | `/build-fleet:finalize` | FINALIZE → BUILD | Gate only: refuses on open blockers; on pass flips the spec to FINALIZED. Idempotent — re-running is a safe no-op. |
 | `/build-fleet:build` | BUILD | Orchestrates BUILD: qa drafts the failing suite first, then coder implements (routes to the deep-build workflow when `BUILD_MODE=deep-build`). |
 | `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by `/build-fleet:build`); also the iteration entry point. Accepts `--cycle-budget` (else `BUILD_CYCLE_BUDGET`). |
-| `/build-fleet:handoff` | CHANGE_REVIEW → HANDOFF | architect + PO + qa review the diff; refuses if tests are missing/failing. On pass devops ships, the backlog flips, and the loop advances. |
+| `/build-fleet:handoff` | CHANGE_REVIEW → HANDOFF | product-owner + qa review the diff, then architect (who may accept a peer's major by ADR); exits on the deterministic change-review gate; refuses if tests are missing/failing. On pass devops ships, the backlog flips, and the loop advances. |
 | `/build-fleet:status` | — | Prints active feature state, open concerns, cycle counts, the product backlog, and the next unblocked feature. **Bug-lane aware:** `LANE: bug` → phase / `SEV` / `diagnosis.md` STATUS / cycles. |
 | `/build-fleet:park <reason>` | any → PARKED | **Human-only** (not model-invocable). Records the parked state in PROGRESS.md and frees `.sdd/ACTIVE` — the sanctioned sev0-preemption path. Workspace stays intact. |
 | `/build-fleet:resolve-escalation [<slug>] <decision>` | ESCALATED → pre-escalation phase | **Human-only** (not model-invocable). Archives ESCALATION.md into REVIEW.md (append-only), resets the exhausted cycle counter, restores the phase. |
@@ -702,14 +703,16 @@ BUILD_CYCLE: <deep-build workflow runs>
 CHANGE_CYCLE: <change-review rounds>
 TIER:    trivial | standard | large | pending
 BUILD_MODE: standard | deep-build | pending
-REVIEW_ROLES: <csv>          # optional — review roster (default architect,qa,coder)
-REVIEW_CYCLE_BUDGET: <int>   # optional — review budget 1..3 (default 3)
+RISK:    low | elevated | pending
+REVIEW_ROLES: <csv>          # seeded by tier + risk (new-feature step 7 table; architect,qa,coder for standard and large)
+REVIEW_CYCLE_BUDGET: <int>   # seeded with the roster (3 for standard and large; 2 on the trivial row)
 BUILD_CYCLE_BUDGET: <int>    # optional — deep-build budget 1..3 (default 3)
 UPDATED: <iso8601>
 ```
 
-(The three optional config fields are seeded by `/build-fleet:new-feature` and read
-with-default by their commands; a `--roles` / `--cycle-budget` flag overrides per run.
+(The three optional config fields are seeded by `/build-fleet:new-feature` — the review
+roster and budget from the classifier's tier and risk — and read with-default by their
+commands; a `--roles` / `--cycle-budget` flag overrides per run.
 `SDD_SCHEMA` is stamped by every scaffold — feature, bug, and product —
 so future schema changes can be detected; readers tolerate its absence.)
 

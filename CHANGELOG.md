@@ -14,6 +14,68 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.10.0] — 2026-10-11
+
+The **proportionate review** release. Review effort now scales with stakes: the
+classifier rates risk on a second axis, `new-feature` seeds the review roster and
+cycle budget from tier and risk, the three review lenses are calibrated to the
+reviewer discipline, and CHANGE_REVIEW exits on a deterministic rubric gate with the
+v0.9 convergence rules (ids, dispositions, closed-by-id, delta demotion). Design:
+`docs/history/2026-10-10-proportionate-review.md`; evidence:
+`docs/history/2026-10-10-orchestration-balance-research.md`. Measured on the tap
+pilot before tagging (`docs/history/2026-10-10-proportionate-review-MEASUREMENT.md`):
+
+| Arm | Roster | Agents | Wall-clock | output_tokens | Surviving blockers | Surviving `fix` majors | Refutations that discarded a concern |
+|---|---|---|---|---|---|---|---|
+| three-role (2026-09-06) | architect, qa, coder | 8 | 26.6 min | 274,075 | 0 | 9 | 3 |
+| two-role (2026-10-11) | architect, qa | 6 | 3.8 min | 23,448 | 0 | 5 | 0 |
+
+**Decision: REVERT.** The two-role arm lacked six of the three-role arm's nine `fix`
+majors, and at least one is real by evidence (openpyxl's `COLOR_INDEX` has 64 entries
+and the fixture's styles.xml carries `indexed="64"`), so under the spec's rule the
+`standard` + `low` row keeps `architect, qa, coder` with budget 3. The risk axis and the
+seeding mechanism ship; the cut does not. Two caveats travel with the number: five of
+the six lacked findings came from roles present in both arms and the arms differ 7× in
+wall-clock and 12× in output tokens, so one month of model drift, not the roster, is
+the likelier cause — the pre-registered rule was applied as written and a same-model
+re-measurement is open to a later release. And the tap used for both arms is an
+archived copy; production tap does not run build-fleet, and the measured feature is
+not being continued.
+
+Classifier previews on tap (`/build-fleet:dispatch`, run headlessly against the worktree):
+
+```
+"tighten the login check so a disabled account cannot obtain a session token"
+→ BUILD_FLEET_CLASSIFICATION: {"tier":"standard","build_mode":"standard","skip_review":false,"confidence":"medium","risk":"elevated","risk_reasons":["auth"]}
+"fix the typo 'recieve' in docs/README.md"
+→ BUILD_FLEET_CLASSIFICATION: {"tier":"trivial","build_mode":"standard","skip_review":true,"confidence":"low","risk":"low","risk_reasons":[]}
+"add a position_history table and backfill it from the positions table across the ingest and export packages"
+→ BUILD_FLEET_CLASSIFICATION: {"tier":"standard","build_mode":"standard","skip_review":false,"confidence":"medium","risk":"elevated","risk_reasons":["data-migration"]}
+```
+
+The third reads `standard` where the design expected `large`: the classifier read tap,
+found no `ingest`/`export` packages and one tight package (`src/tap/db` plus migrations),
+and applied the existing single-partition rule; main at v0.9.0 sizes the same description
+`standard` too. The risk half is what this release adds, and it reads as designed.
+
+No live CHANGE_REVIEW run exists yet: the gate harness is this release's proof, and
+the first `/build-fleet:handoff` on a build-fleet-driven repository is the live check.
+
+### Added
+- **Classifier risk axis** — `risk: low | elevated` + `risk_reasons` (slugs: `auth`, `secrets`, `billing`, `data-migration`, `ci-release`, `new-dependency`, `review-requested`, `irreversible`, `public-contract`, `shared-module`). Elevated is never `trivial`. PROGRESS gains `RISK:`.
+- **Tier-by-risk review seeding** in `new-feature` step 7 (`standard` + `low` → architect, qa, coder, budget 3 — reverted from the designed architect, qa / 2 by the measurement above; everything else → architect, qa, coder, budget 3; the hand-edit-only trivial row → architect, qa, budget 2), recorded by the new `BUILD_FLEET_REVIEW_DEFAULTS` line. A `trivial` + `elevated` verdict is coerced to `standard` (`BUILD_FLEET_CLASSIFIER_FALLBACK` reason `risk-tier-conflict`). `dispatch` previews risk and the would-seed roster; `status` prints TIER, RISK and the roster.
+- **`scripts/change-review-gate.sh`** (+ harness, 35 cases) — the CHANGE_REVIEW exit `/build-fleet:handoff` now computes: every roster role has a `## Change-Cycle N` block, zero unrefuted blockers, every major closed by an ADR present in DECISIONS.md or demoted; two passes so an architect ADR closes a peer's id in every block. Fails closed on an unterminated last line, a CRLF file, a legacy major with backslashes, and an indented finding bullet (reason `unparsed-findings`). One signal line, `BUILD_FLEET_CHANGE_REVIEW_GATE`.
+
+### Changed
+- **CHANGE_REVIEW is two-stage**: product-owner and qa in parallel, then the architect, who reads their blocks and may accept a peer's major by ADR (closed-by-id). Findings carry ids `<role>-cc<K>-<n>` and `disposition:` lines; from change cycle 2 the delta rule applies and a new major is advisory. The budget guard and the exit both call the gate, so they cannot disagree; the exhausting cycle escalates directly with blockers and `fix` majors both listed. A missing block, an unparsed finding or an ADR the architect cited but never wrote re-dispatches that reviewer, not the coder.
+- **`handoff` resumes at devops when `PHASE: HANDOFF`** (a previous run's devops refusal) instead of refusing the phase it told the user to re-run from.
+- **Lenses calibrated**: qa's "invent assumptions ⇒ major" and "vague words ⇒ blocker-tier" and coder's gap list move to "a major only where a coder would guess at behaviour a test could fail on; vagueness is a major inside an acceptance criterion and a minor elsewhere"; the coder lens drops its coverage bullet (qa's duplicate); the architect's failure-modes bullet is severity-rated. Both copies (agent + `review.js` LENS); descriptions refreshed (classifier, architect, qa, coder, product-owner).
+
+### Fixed
+- `agents/product-owner.md` named a `## Cycle <N>` heading for its CHANGE_REVIEW block, which `check-review-written.sh` rejects in that phase; now `## Change-Cycle <N>`.
+
+**Compatibility.** `SDD_SCHEMA` stays `1`. Additive PROGRESS field `RISK` (read-with-default; absent prints `unset`). Signal grammar: new lines `BUILD_FLEET_CHANGE_REVIEW_GATE`, `BUILD_FLEET_REVIEW_DEFAULTS`; new fields `risk`, `risk_reasons` on `BUILD_FLEET_CLASSIFICATION`, `risk_assigned` on `BUILD_FLEET_CLASSIFIER_FALLBACK`; new fallback reason `risk-tier-conflict`; gate reason slugs `missing-<role>`, `open-blockers`, `majors-open`, `majors-without-adr`, `unparsed-findings`. REVIEW.md Change-Cycle lines gain `(id)` and `disposition:`; old blocks still parse — an undispositioned legacy major reads as open and bounces to the coder once, after which reviewers re-raise with ids. A feature seeded before 0.10.0 keeps its three-role roster; edit `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET` by hand to adopt the table. No migration required.
+
 ## [0.9.0] — 2026-09-06
 
 The **convergent review** release. The REVIEW loop is now bounded and monotone: a

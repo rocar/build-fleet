@@ -282,8 +282,8 @@ const LENS = {
   demands? Are there contradictions between spec sections, or between spec
   and code?
 - **Failure modes.** What happens on partial failure, network loss, retries,
-  concurrent callers, malformed input? If the spec is silent, that is a
-  finding.
+  concurrent callers, malformed input? Silence is a \`[major]\` when the failure
+  would corrupt data or break an acceptance criterion, a \`[minor]\` otherwise.
 - **Data integrity.** Schema migrations, write ordering, idempotency,
   transactional boundaries.
 - **Security.** Auth, authz, input validation, secrets handling, blast
@@ -292,20 +292,22 @@ const LENS = {
 - **Blast radius.** If this change is wrong, what else breaks?
 - **ADR compliance** (during CHANGE_REVIEW). Does the diff honor every ADR
   in \`DECISIONS.md\`? A silent override is a \`[blocker]\`.`,
-  qa: `- For each acceptance criterion: could you write a test from this *alone*?
-  If you have to invent assumptions, that's at minimum a \`[major]\`.
-- Are non-functional requirements (performance, security, accessibility)
-  testable as written? Or are they aspirational?
-- Are the criteria measurable? "Fast", "robust", "user-friendly" are
-  \`[blocker]\`-tier vagueness.
-- Is there spec behavior with no acceptance coverage? Flag the gap.
-- Are there acceptance criteria with no corresponding spec behavior? Flag
-  the orphan — either spec is incomplete or the criterion is over-scope.`,
-  coder: `- Missing or unclear interface contracts (signatures, error envelopes).
-- Acceptance criteria that can't be implemented as written.
-- Spec behavior with no corresponding acceptance coverage (you'll have to
-  guess what "done" means).
-- Implicit dependencies on infra or libraries the spec doesn't mention.`,
+  qa: `- **Testability.** For each acceptance criterion: could you write a test from it
+  *alone*? A \`[major]\` only where a coder would have to guess at behaviour a test
+  could fail on; cite the criterion. Prose that could be tighter is a \`[minor]\`.
+- **Measurability.** "Fast", "robust", "user-friendly" with no number or observable
+  check: a \`[major]\` inside an acceptance criterion, a \`[minor]\` in narrative text.
+- **Coverage.** Spec behaviour with no acceptance criterion is a \`[major]\`. An
+  acceptance criterion with no described behaviour is a \`[major]\` only if a coder
+  would implement it blind, otherwise a \`[minor]\`.`,
+  coder: `- **Interface contracts.** A signature, error envelope or data shape the spec
+  leaves open is a \`[major]\` only when two reasonable implementations would fail
+  different tests; otherwise state the assumption you would make as a \`[minor]\`.
+- **Implementability.** An acceptance criterion that cannot be implemented as
+  written, or that contradicts another, is a \`[blocker]\`.
+- **Hidden dependencies.** An implicit dependency on infrastructure or a library
+  the spec does not name is a \`[major]\` when it changes the stack or the deploy
+  shape, a \`[minor]\` otherwise.`,
   "product-owner": `- Does the spec realize the inherited backlog intent, or has it drifted
   in scope without saying so in its Self-review notes?
 - Is every acceptance criterion testable and mapped 1:1 to a described behavior?

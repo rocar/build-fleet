@@ -126,7 +126,7 @@ restore it afterwards; whichever you did goes into MEASUREMENT.md's Confounds.
 
 - [ ] **Step 4: Run the two-role arm against main at v0.9.0**
 
-In a **new** Claude Code session in tap, started with the main tree as the plugin (`cd ~/Projects/tap && claude --plugin-dir ~/build-fleet`), run:
+In a **new** Claude Code session in tap, started with the main tree as the plugin (`cd ~/Projects/tap && claude --plugin-dir ~/build-fleet --add-dir ~/build-fleet`; the `--add-dir` is required because the Workflow tool only accepts a `scriptPath` inside a session working directory (`commands/review.md` line 18)), run:
 
 ```
 /build-fleet:review --roles architect,qa --cycle-budget 2
