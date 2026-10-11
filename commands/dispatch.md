@@ -56,9 +56,12 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
    - Tier with one-line rationale.
    - Confidence level.
    - Risk with its reasons, and the review roster + cycle budget
-     `/build-fleet:new-feature` would seed for this tier and risk (the table in
-     `commands/new-feature.md` step 7). A `trivial` + `elevated` verdict is shown
-     as what new-feature would coerce it to: `standard` + `elevated`.
+     `/build-fleet:new-feature` would seed for this tier and risk. The rule is the
+     table in `${CLAUDE_PLUGIN_ROOT}/commands/new-feature.md` step 7 — read it with
+     the Read tool, the target repo holds no copy: `standard` and `large` seed
+     `architect, qa, coder` with budget 3 at either risk; `trivial` + `low` seeds
+     `architect, qa` with budget 2. A `trivial` + `elevated` verdict is shown as
+     what new-feature would coerce it to: `standard` + `elevated`.
    - Routing implications:
      - `trivial`: `/build-fleet:new-feature <slug>` will scaffold a skeleton spec via PO (using the classifier's `skeleton_spec_hint`); user can run `/build-fleet:finalize` immediately to skip REVIEW (then `/build-fleet:build`).
      - `standard`: `/build-fleet:new-feature <slug>` will scaffold and PO will draft the full spec; user runs `/build-fleet:review`, `/build-fleet:finalize`, then `/build-fleet:build`.
