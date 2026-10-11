@@ -50,6 +50,9 @@ Snapshot (`build-fleet/status-snapshot@1`):
 2. **Read `.sdd/<active>/PROGRESS.md`.** Print:
    - Feature slug.
    - PHASE.
+   - TIER and RISK (`pending` when the classifier has not run; absent RISK on a
+     feature scaffolded before this field existed prints as `unset`).
+   - REVIEW_ROLES and REVIEW_CYCLE_BUDGET (the seeded review roster and budget).
    - CYCLE (spec-review cycles consumed).
    - CHANGE_CYCLE (change-review cycles consumed).
    - CYCLE_TOTAL (cumulative spec-review cycles, never reset) against CYCLE_TOTAL_MAX
@@ -72,6 +75,13 @@ Snapshot (`build-fleet/status-snapshot@1`):
    - `finalize_ready`: yes iff zero UNREFUTED `[blocker]` lines (a `refuted-by:`
      continuation closes one) and zero open majors across the current cycle's blocks
      (this is the finalize gate's rule).
+   - `change_review_ready` (change-review territory only): yes iff the rule of
+     `scripts/change-review-gate.sh` holds over the current `CHANGE_CYCLE` blocks —
+     every roster role (architect, product-owner, qa) has a block, zero unrefuted
+     `[blocker]` lines, and every `[major]` is closed by `disposition: adr ADR-N`
+     with that ADR in DECISIONS.md (an architect ADR closes a peer's id in every
+     block) or is a new major on cycle ≥ 2 (advisory, "demoted"). `status:` lines
+     are not evaluated.
    - Verbatim text of every `[blocker]` item (so the user sees what's
      actually open).
 

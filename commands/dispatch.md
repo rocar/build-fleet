@@ -38,12 +38,12 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
    >
    > Project context: read whatever files in the current directory help you size the work. Do not exhaustively read source.
 
-3. **Parse the verdict.** The classifier emits a single JSON block of the shape documented in agents/classifier.md (`tier`, `rationale`, `skip_review`, `build_mode`, `skeleton_spec_hint`, `confidence`, `skill_manifest`). Extract it. `skill_manifest` may be `null`.
+3. **Parse the verdict.** The classifier emits a single JSON block of the shape documented in agents/classifier.md (`tier`, `rationale`, `skip_review`, `build_mode`, `skeleton_spec_hint`, `confidence`, `skill_manifest`, `risk`, `risk_reasons`). Extract it. `skill_manifest` may be `null`.
 
 4. **Emit the classification signal.** Before any human-readable output, write exactly one line:
 
    ```
-   BUILD_FLEET_CLASSIFICATION: {"tier":"<...>","build_mode":"<...>","skip_review":<bool>,"confidence":"<...>"}
+   BUILD_FLEET_CLASSIFICATION: {"tier":"<...>","build_mode":"<...>","skip_review":<bool>,"confidence":"<...>","risk":"<low|elevated>","risk_reasons":[<slugs>]}
    ```
 
    If `skill_manifest` is non-null with at least one non-empty `roles` entry, also emit (preview only — dispatch writes no file):
@@ -55,6 +55,10 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
 5. **Report to the user.** Human-readable summary:
    - Tier with one-line rationale.
    - Confidence level.
+   - Risk with its reasons, and the review roster + cycle budget
+     `/build-fleet:new-feature` would seed for this tier and risk (the table in
+     `commands/new-feature.md` step 7). A `trivial` + `elevated` verdict is shown
+     as what new-feature would coerce it to: `standard` + `elevated`.
    - Routing implications:
      - `trivial`: `/build-fleet:new-feature <slug>` will scaffold a skeleton spec via PO (using the classifier's `skeleton_spec_hint`); user can run `/build-fleet:finalize` immediately to skip REVIEW (then `/build-fleet:build`).
      - `standard`: `/build-fleet:new-feature <slug>` will scaffold and PO will draft the full spec; user runs `/build-fleet:review`, `/build-fleet:finalize`, then `/build-fleet:build`.
@@ -84,11 +88,14 @@ Orchestrators dispatch on the signal line, never on the process exit status.
 
 ```
 /build-fleet:dispatch "fix typo in README"
-→ BUILD_FLEET_CLASSIFICATION: {"tier":"trivial","build_mode":"standard","skip_review":true,"confidence":"high"}
+→ BUILD_FLEET_CLASSIFICATION: {"tier":"trivial","build_mode":"standard","skip_review":true,"confidence":"high","risk":"low","risk_reasons":[]}
 
 /build-fleet:dispatch "add --shout flag to greet CLI"
-→ BUILD_FLEET_CLASSIFICATION: {"tier":"standard","build_mode":"standard","skip_review":false,"confidence":"high"}
+→ BUILD_FLEET_CLASSIFICATION: {"tier":"standard","build_mode":"standard","skip_review":false,"confidence":"high","risk":"low","risk_reasons":[]}
+
+/build-fleet:dispatch "rotate the API signing key and add a key-version header to every response"
+→ BUILD_FLEET_CLASSIFICATION: {"tier":"standard","build_mode":"standard","skip_review":false,"confidence":"high","risk":"elevated","risk_reasons":["secrets","public-contract"]}
 
 /build-fleet:dispatch "rewrite greet to support multiple languages with i18n loader and locale dispatch across cli, core, and api packages"
-→ BUILD_FLEET_CLASSIFICATION: {"tier":"large","build_mode":"deep-build","skip_review":false,"confidence":"high"}
+→ BUILD_FLEET_CLASSIFICATION: {"tier":"large","build_mode":"deep-build","skip_review":false,"confidence":"high","risk":"low","risk_reasons":[]}
 ```
