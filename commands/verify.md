@@ -21,7 +21,7 @@ Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`; the CHANGE_REVIEW 
 
 3. **Pre-flight.** ≥1 test exists under `tests/` and the **full suite passes** (the fix made
    the reproducing test green). If the suite fails → refuse: the fix isn't done; run
-   `/build-fleet:fix`.
+   `/build-fleet:apply-fix`.
 
 3b. **Snapshot the fix BEFORE any counterfactual (mandatory).** The working tree holds the
    *uncommitted, only copy* of the fix — reverting it without a recoverable snapshot is how
@@ -80,7 +80,7 @@ Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`; the CHANGE_REVIEW 
        ```
        BUILD_FLEET_VERIFY: {"slug":"<slug>","verdict":"bounce","counterfactual_ok":false}
        ```
-       Next command: `/build-fleet:fix` — the coder iterates.
+       Next command: `/build-fleet:apply-fix` — the coder iterates.
 
 ## Refusal cases
 

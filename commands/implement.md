@@ -3,7 +3,7 @@ description: Drive BUILD: qa writes the failing suite, then coder implements
 allowed-tools: Read, Write, Edit, Task, Workflow, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
 ---
 
-# /build-fleet:build
+# /build-fleet:implement
 
 You are the **orchestrator**. The runtime rulebook is the `sdd-protocol`
 skill. This command drives the BUILD sequence for a feature whose spec the
@@ -23,7 +23,7 @@ this orchestration owns its own preconditions.
 1. **Resolve the active feature.** Read `.sdd/ACTIVE`. If empty, refuse:
    `BUILD_FLEET_BUILD_REFUSE: {"code":2,"reason":"no-active-feature"}`.
    Read `.sdd/<slug>/PROGRESS.md`; if it carries `LANE: bug`, refuse —
-   the bug lane builds via `/build-fleet:fix`
+   the bug lane builds via `/build-fleet:apply-fix`
    (`{"code":2,"reason":"bug-lane-item"}`).
 
 2. **Check the gate has passed.** `spec.md` STATUS must be `FINALIZED` and
@@ -86,7 +86,7 @@ b. **Wait for QA's signal and verify.** When qa's Task call returns, parse its
 
    then refuse to dispatch coder and surface the discrepancy. STATUS stays FINALIZED,
    PHASE stays BUILD. The user resolves the discrepancy externally (re-run qa
-   manually or edit the test suite); a blind re-run of `/build-fleet:build` will
+   manually or edit the test suite); a blind re-run of `/build-fleet:implement` will
    refuse via the precondition-4 re-run guard.
 
 c. **Route on BUILD_MODE.** Read `BUILD_MODE:` from PROGRESS.md.

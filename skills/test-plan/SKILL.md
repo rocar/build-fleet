@@ -19,7 +19,7 @@ problem — surface it to the orchestrator and stop. Do not invent
 creative tests to paper over an unclear criterion.
 
 **Tests-first ordering.** The failing test suite must exist in `tests/` BEFORE
-coder begins implementation. The orchestrator dispatches qa via `/build-fleet:build`'s
+coder begins implementation. The orchestrator dispatches qa via `/build-fleet:implement`'s
 pass-output sequence; qa signals `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/` once
 the plan + suite are in place; only then is coder dispatched. CHANGE_REVIEW verifies
 each test would FAIL if coder's source change were reverted (the counterfactual gate).

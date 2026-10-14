@@ -64,9 +64,9 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
      what new-feature would coerce it to: `standard` + `elevated`. A verdict with
      no `risk` field is shown as `elevated`, the fallback new-feature applies.
    - Routing implications:
-     - `trivial`: `/build-fleet:new-feature <slug>` will scaffold a skeleton spec via PO (using the classifier's `skeleton_spec_hint`); user can run `/build-fleet:finalize` immediately to skip REVIEW (then `/build-fleet:build`).
-     - `standard`: `/build-fleet:new-feature <slug>` will scaffold and PO will draft the full spec; user runs `/build-fleet:review`, `/build-fleet:finalize`, then `/build-fleet:build`.
-     - `large`: same as standard PLUS PROGRESS.md gets `BUILD_MODE=deep-build` so `/build-fleet:build` routes the implementation phase to `workflows/deep-build.js`.
+     - `trivial`: `/build-fleet:new-feature <slug>` will scaffold a skeleton spec via PO (using the classifier's `skeleton_spec_hint`); user can run `/build-fleet:finalize` immediately to skip REVIEW (then `/build-fleet:implement`).
+     - `standard`: `/build-fleet:new-feature <slug>` will scaffold and PO will draft the full spec; user runs `/build-fleet:review`, `/build-fleet:finalize`, then `/build-fleet:implement`.
+     - `large`: same as standard PLUS PROGRESS.md gets `BUILD_MODE=deep-build` so `/build-fleet:implement` routes the implementation phase to `workflows/deep-build.js`.
    - If `confidence=low`: surface the rationale and recommend the user either provide a more detailed description or override the tier manually by editing PROGRESS.md after scaffolding.
    - **Skill routing preview.** If `skill_manifest` is non-null, show
      `feature_type` and the per-role skill names (coder / qa) it would write to

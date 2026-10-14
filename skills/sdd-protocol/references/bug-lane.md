@@ -127,11 +127,11 @@ re-run). Cross-examination rounds within one run do not bump `CYCLE` (one
 envelope shape matches `review.js`'s, and a surviving refutation is recorded as a
 `blocker`.
 
-**Gate-split: the CONFIRMED flip is `/build-fleet:fix`'s job, not
+**Gate-split: the CONFIRMED flip is `/build-fleet:apply-fix`'s job, not
 `/build-fleet:diagnose`.** `diagnose.js` is async-launched (fire-and-forget, like
 `review.js`); the scribe records the verdict (`REVIEW.md` + `PROGRESS.md` CYCLE) on
 completion. On `confirmed` the workflow advances `PHASE` → `FIX` (the scribe writes
-PROGRESS PHASE); the **`/build-fleet:fix`** gate then flips the `diagnosis.md` STATUS
+PROGRESS PHASE); the **`/build-fleet:apply-fix`** gate then flips the `diagnosis.md` STATUS
 → `CONFIRMED` *content* — the write the scribe must not do — exactly as
 `/build-fleet:finalize` (not `/build-fleet:review`) flips a spec to `FINALIZED` after
 the async review. Keeping the deterministic STATUS write in a synchronous gate keeps
@@ -141,14 +141,14 @@ it out of the fire-and-forget workflow.
 
 Three gate commands carry a confirmed bug to a shipped fix, completing the lane:
 
-- **`/build-fleet:fix` (the FIX gate — the bug-lane `/build-fleet:finalize`).** On a
+- **`/build-fleet:apply-fix` (the FIX gate — the bug-lane `/build-fleet:finalize`).** On a
   `confirmed` bug (`PHASE: FIX`, set by `diagnose.js`) it flips `diagnosis.md` STATUS
   → `CONFIRMED` (the content write that unlocks source — `block-source`'s second
   unlock + `require-reproducing-test` now both pass, since the REPRODUCE test
   exists), then delegates to **coder** to implement the recorded fix strategy and
   turn the reproducing test GREEN without breaking the suite. Emits
   `BUILD_FLEET_FIX_DONE`.
-  - **sev0 hotfix fast-path.** `SEV: sev0` may run `/build-fleet:fix` directly from
+  - **sev0 hotfix fast-path.** `SEV: sev0` may run `/build-fleet:apply-fix` directly from
     `PHASE: DIAGNOSE` / STATUS `DIAGNOSED`, skipping the `diagnose.js`
     confirmation — but it records a **post-hoc obligation**
     (`BUILD_FLEET_POSTHOC_DIAGNOSIS_DUE` + a `diagnosis.md` note) and **never**

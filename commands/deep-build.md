@@ -12,10 +12,10 @@ The workflow itself: architect plans an N-way file partition, N coders fan out i
 
 ## When to use this vs. standard BUILD
 
-- **`/build-fleet:build`** runs standard BUILD (qa first, then a single coder). Best for single-file or tightly coupled features where partitioning has no benefit.
+- **`/build-fleet:implement`** runs standard BUILD (qa first, then a single coder). Best for single-file or tightly coupled features where partitioning has no benefit.
 - **`/build-fleet:deep-build`** runs the fan-out workflow. Best for multi-package monorepos or features spanning many independent files where parallel coders give real time wins.
 
-The classifier sets `BUILD_MODE: deep-build` in `PROGRESS.md` for features it routes here, and `/build-fleet:build` dispatches this workflow automatically. This command is the manual / iteration entry point.
+The classifier sets `BUILD_MODE: deep-build` in `PROGRESS.md` for features it routes here, and `/build-fleet:implement` dispatches this workflow automatically. This command is the manual / iteration entry point.
 
 ## Workflow runtime requirement
 
@@ -36,7 +36,7 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
 
 3. **Check phase.** Read `.sdd/<slug>/PROGRESS.md`. PHASE must be `BUILD`. STATUS in `spec.md` must be `FINALIZED`. If either fails, refuse and name the actual state (`{"command":"deep-build","code":2,"reason":"not-finalized","status":"<STATUS>","phase":"<PHASE>"}`).
 
-4. **Check tests-first prerequisite.** List files under `tests/`. If empty or absent, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"no-failing-tests","detail":"run /build-fleet:build first so qa drafts the suite (tests-first ordering)"}`.
+4. **Check tests-first prerequisite.** List files under `tests/`. If empty or absent, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"no-failing-tests","detail":"run /build-fleet:implement first so qa drafts the suite (tests-first ordering)"}`.
 
 5. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"deep-build","code":2,"reason":"escalation-present"}`) — `/build-fleet:resolve-escalation` is the unblock path.
 
@@ -89,7 +89,7 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
 
 ## What this command does NOT do
 
-- Does not draft tests. `/build-fleet:build` already dispatched qa for that. Deep-build assumes the failing test suite exists.
+- Does not draft tests. `/build-fleet:implement` already dispatched qa for that. Deep-build assumes the failing test suite exists.
 - Does not bump PHASE, `BUILD_CYCLE`, or run CHANGE_REVIEW. The workflow's scribe writes `BUILD_CYCLE` (and the rest of the BUILD-completion delta) via the envelope's `state_delta`; this command only normalizes a missing `BUILD_CYCLE: 0` field pre-dispatch. CHANGE_REVIEW is `/build-fleet:handoff`'s job.
 - Does not write source. Only its coder subagents (inside the workflow) write source — each restricted to its partition.
 - Does not release `.workflow-in-flight` on success. Scribe does that as the final phase (only when the marker still contains this run's id; it empties the marker and the reaper deletes the empty file).

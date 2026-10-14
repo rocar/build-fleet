@@ -20,7 +20,7 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 
 2. **Check phase.** Read PROGRESS.md. PHASE must be `BUILD`, `CHANGE_REVIEW`
    or `HANDOFF`. If it's anything else (especially `SPEC` or `REVIEW`), refuse
-   and tell the user to run `/build-fleet:finalize` then `/build-fleet:build`
+   and tell the user to run `/build-fleet:finalize` then `/build-fleet:implement`
    first. **`PHASE: HANDOFF` is a resume**: a previous run passed CHANGE_REVIEW
    and reached devops, and devops refused or failed (step 9 leaves `PHASE:
    HANDOFF` in that case). Run the gate to confirm the current change cycle

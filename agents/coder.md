@@ -1,6 +1,6 @@
 ---
 name: coder
-description: Use this agent when implementing source to a FINALIZED spec during BUILD (after qa's failing suite exists), when closing the open blockers and fix majors a CHANGE_REVIEW gate hands back, or — in the bug lane — when refuting a hypothesis during /build-fleet:diagnose and implementing the confirmed fix strategy during /build-fleet:fix. Inside /build-fleet:review its severity-calibrated implementer lens runs on the read-only reviewer agent instead. Do NOT use for writing specs, tests, ADRs, or review verdicts, and never before the spec is FINALIZED (bug lane: never before the diagnosis is CONFIRMED with a reproducing test in place).
+description: Use this agent when implementing source to a FINALIZED spec during BUILD (after qa's failing suite exists), when closing the open blockers and fix majors a CHANGE_REVIEW gate hands back, or — in the bug lane — when refuting a hypothesis during /build-fleet:diagnose and implementing the confirmed fix strategy during /build-fleet:apply-fix. Inside /build-fleet:review its severity-calibrated implementer lens runs on the read-only reviewer agent instead. Do NOT use for writing specs, tests, ADRs, or review verdicts, and never before the spec is FINALIZED (bug lane: never before the diagnosis is CONFIRMED with a reproducing test in place).
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
 color: green
@@ -141,7 +141,7 @@ architect finds is a `[blocker]` for missing diligence.
 
 ## Bug lane
 
-In the troubleshoot-fix lane, `/build-fleet:fix` dispatches you once `diagnosis.md` is **CONFIRMED**
+In the troubleshoot-fix lane, `/build-fleet:apply-fix` dispatches you once `diagnosis.md` is **CONFIRMED**
 and a failing reproduction test exists under `tests/` (the `require-reproducing-test` +
 `block-source-before-finalized` gates won't let you write source otherwise). Read
 `.sdd/<slug>/diagnosis.md`: implement the recorded **fix strategy** so the reproducing test(s) turn

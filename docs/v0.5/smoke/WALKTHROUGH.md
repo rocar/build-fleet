@@ -74,7 +74,7 @@ Then drive the lane (watch the `BUILD_FLEET_*` signal line each command prints *
 | **REPRODUCE** | `/build-fleet:reproduce` | qa writes `tests/test_pagination.py` (RED), flips STATUS `REPORTED→REPRODUCING`. `BUILD_FLEET_REPRO_READY {failing_tests:1}`, `PHASE: REPRODUCE`. |
 | *(record the hypothesis)* | — | Whoever holds the reproduction fills `diagnosis.md`'s `## Root-cause hypothesis` / `## Blast radius` / `## Fix strategy` (see `diagnosis.example.md`). |
 | **DIAGNOSE** | `/build-fleet:diagnose` | Gates on the hypothesis, flips `→DIAGNOSED`, dispatches `diagnose.js` (`BUILD_FLEET_WORKFLOW_LAUNCHED`). architect + coder try to refute it citing the reproduction; it survives → `confirmed`. The scribe records the verdict; `PHASE: FIX`. `/build-fleet:status` shows the verdict on completion. |
-| **FIX** | `/build-fleet:fix` | Flips `diagnosis.md → CONFIRMED` (unlocks source), coder applies ceiling division → test GREEN. `BUILD_FLEET_FIX_DONE {tests_green:…}`. |
+| **FIX** | `/build-fleet:apply-fix` | Flips `diagnosis.md → CONFIRMED` (unlocks source), coder applies ceiling division → test GREEN. `BUILD_FLEET_FIX_DONE {tests_green:…}`. |
 | **VERIFY** | `/build-fleet:verify` | qa runs the **counterfactual** (revert the fix → test must go RED → restore); architect checks blast radius. Clean → `diagnosis.md → FIXED`, `PHASE: HANDOFF`. `BUILD_FLEET_VERIFY {verdict:clean, counterfactual_ok:true}`. |
 | **HANDOFF** | `/build-fleet:ship-fix` | devops ships; `BUILD_FLEET_SHIP_FIX`; **clears `.sdd/ACTIVE`**. `/build-fleet:status` → no active item. |
 
@@ -84,7 +84,7 @@ At any point, `/build-fleet:status` prints the bug view (phase · `SEV` · `diag
 ### sev0 hotfix variant (optional)
 
 Describe the bug as production-down (or set `SEV: sev0` in `PROGRESS.md`). Now `/build-fleet:diagnose`
-**short-circuits** — `BUILD_FLEET_DIAGNOSE_SEV0_SKIP` — and you go straight to `/build-fleet:fix`,
+**short-circuits** — `BUILD_FLEET_DIAGNOSE_SEV0_SKIP` — and you go straight to `/build-fleet:apply-fix`,
 which takes the fast-path from `DIAGNOSED`, emits `BUILD_FLEET_POSTHOC_DIAGNOSIS_DUE`, and flips to
 CONFIRMED **without** the adversarial workflow. The reproducing-test gate still holds — sev0 never
 ships source without a red-first test.

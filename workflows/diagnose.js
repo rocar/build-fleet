@@ -423,7 +423,7 @@ function buildEnvelope({ slug, cycle, cycleBudget, now, refutals, judged, verdic
       : null;
 
   // PHASE advance (the scribe writes PROGRESS PHASE, like review.js — it never writes the
-  // diagnosis.md body): `confirmed` advances to FIX; the /build-fleet:fix gate then flips
+  // diagnosis.md body): `confirmed` advances to FIX; the /build-fleet:apply-fix gate then flips
   // diagnosis.md STATUS → CONFIRMED (the content write the scribe must not do, mirroring how
   // /build-fleet:finalize flips spec.md after review). `refuted` stays at DIAGNOSE for a
   // re-run; `escalate` is terminal.
@@ -443,7 +443,7 @@ function buildEnvelope({ slug, cycle, cycleBudget, now, refutals, judged, verdic
     },
     next_legal_commands:
       verdict === "confirmed"
-        ? ["/build-fleet:fix"]
+        ? ["/build-fleet:apply-fix"]
         : verdict === "escalate"
         ? []
         : ["/build-fleet:diagnose"],

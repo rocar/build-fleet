@@ -140,7 +140,7 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
     - The run's return object carries `finalize_ready`, `open_majors`, `adrs_written`,
       `cycle_total` and `output_tokens`. Next legal command:
       - `finalize_ready: true` (zero blockers, every major accepted via ADR) →
-        `/build-fleet:finalize` (the gate), then `/build-fleet:build`.
+        `/build-fleet:finalize` (the gate), then `/build-fleet:implement`.
       - `finalize_ready: false` with `verdict` `clean` or `revise` → `/build-fleet:revise`
         (hands the PO exactly the open blockers + `fix` majors), then `/build-fleet:review`.
       - `escalate` → human action on the ESCALATION.md the workflow wrote (it lists both

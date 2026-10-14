@@ -363,7 +363,7 @@ spec STATUS contract.
    - **trivial:** "Spec drafted as a skeleton (TIER=trivial). REVIEW is skipped
      for this fast-path. Next commands: `/build-fleet:finalize` (which recognizes
      TIER=trivial and flips the spec without requiring a review cycle), then
-     `/build-fleet:build`."
+     `/build-fleet:implement`."
    - **standard:** "Spec drafted (TIER=standard). Next command: `/build-fleet:review`
      to run the adversarial review workflow (then finalize, then build)."
      Also say: "Review roster seeded `<REVIEW_ROLES>` with cycle budget `<REVIEW_CYCLE_BUDGET>`
@@ -371,7 +371,7 @@ spec STATUS contract.
      change it."
    - **large:** "Spec drafted (TIER=large; BUILD_MODE=deep-build). Next command:
      `/build-fleet:review` to run the adversarial review workflow. After
-     `/build-fleet:finalize`, `/build-fleet:build` routes the BUILD phase to
+     `/build-fleet:finalize`, `/build-fleet:implement` routes the BUILD phase to
      `workflows/deep-build.js` automatically (fan-out coders across file
      partitions)."
      Also say: "Review roster seeded `<REVIEW_ROLES>` with cycle budget `<REVIEW_CYCLE_BUDGET>`

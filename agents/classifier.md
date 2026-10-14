@@ -12,7 +12,7 @@ You **never** write files. You **never** modify `.sdd/`. The orchestrator (new-f
 
 ## Authority
 
-The runtime rulebook is the `sdd-protocol` skill. Your verdict feeds the TIER field in PROGRESS.md and the trivial fast-path through `/build-fleet:finalize` (the gate; `/build-fleet:build` then runs BUILD).
+The runtime rulebook is the `sdd-protocol` skill. Your verdict feeds the TIER field in PROGRESS.md and the trivial fast-path through `/build-fleet:finalize` (the gate; `/build-fleet:implement` then runs BUILD).
 
 ## The three tiers
 
@@ -20,7 +20,7 @@ Err toward `standard` when in doubt. False positives on `trivial` skip a review 
 
 ### `trivial`
 
-Skip the REVIEW phase. PO drafts a skeleton spec from your `skeleton_spec_hint`; `/build-fleet:finalize` allows the fast-path flip without a completed review cycle, and `/build-fleet:build` runs BUILD.
+Skip the REVIEW phase. PO drafts a skeleton spec from your `skeleton_spec_hint`; `/build-fleet:finalize` allows the fast-path flip without a completed review cycle, and `/build-fleet:implement` runs BUILD.
 
 Criteria (must hit at least TWO):
 - Typo or wording fix in docs/comments only.
@@ -39,7 +39,7 @@ Disqualifiers (force tier=standard even if trivial criteria fire):
 
 ### `large`
 
-Standard SDD pipeline (SPEC → REVIEW → FINALIZE) plus `BUILD_MODE=deep-build` so `/build-fleet:build` routes implementation to the deep-build workflow. Use parallel coders for fan-out.
+Standard SDD pipeline (SPEC → REVIEW → FINALIZE) plus `BUILD_MODE=deep-build` so `/build-fleet:implement` routes implementation to the deep-build workflow. Use parallel coders for fan-out.
 
 Criteria (must hit at least ONE):
 - Multi-package monorepo change with parallel-implementable partitions (e.g., touch `packages/auth/`, `packages/billing/`, and `packages/sdk/`).

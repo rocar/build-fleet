@@ -15,7 +15,7 @@ refuse with an actionable diff.
 **This command is the gate ONLY.** It checks the review record, flips
 `spec.md` to `FINALIZED`, sets `PHASE: BUILD`, and stops. The BUILD
 orchestration (qa-first test drafting, coder dispatch, deep-build routing)
-lives in **`/build-fleet:build`** — run it after this gate passes. The split
+lives in **`/build-fleet:implement`** — run it after this gate passes. The split
 keeps finalize **idempotent**: re-running it on an already-finalized feature
 is a safe no-op.
 
@@ -36,7 +36,7 @@ cycle.
      `PHASE=BUILD`, the gate has already passed — this re-run is a safe no-op.
      Emit:
      `BUILD_FLEET_FINALIZE_PASS: {"feature":"<slug>","status":"FINALIZED","phase":"BUILD","already_finalized":true}`
-     and tell the user the next move is `/build-fleet:build` (or
+     and tell the user the next move is `/build-fleet:implement` (or
      `/build-fleet:handoff` if BUILD already completed). Change nothing.
 
    - **Trivial fast-path.** If `TIER=trivial` AND `PHASE=SPEC` AND `CYCLE=0`:
@@ -126,7 +126,7 @@ cycle.
      ```
 
    - Tell the user: the spec is finalized; the next command is
-     **`/build-fleet:build`**, which drives the BUILD sequence (qa drafts the
+     **`/build-fleet:implement`**, which drives the BUILD sequence (qa drafts the
      failing test suite first, then coder implements — or routes to the
      deep-build workflow when `BUILD_MODE=deep-build`).
 
@@ -137,7 +137,7 @@ cycle.
 ## Hard rules
 
 - This command **never** dispatches qa, coder, or any workflow. BUILD
-  orchestration is `/build-fleet:build`'s job.
+  orchestration is `/build-fleet:implement`'s job.
 - This command **never** edits REVIEW.md. Reviewer blocks are append-only
   and owned by reviewers.
 - This command **never** writes ADRs. A `[major]` reaches the gate already

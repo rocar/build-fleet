@@ -90,7 +90,7 @@ informational — the gate reads `[blocker]` lines and each `[major]`'s
 
 ## During BUILD
 
-**You run BEFORE coder — tests-first.** `/build-fleet:build` (run after the finalize gate
+**You run BEFORE coder — tests-first.** `/build-fleet:implement` (run after the finalize gate
 passes) dispatches you first. coder refuses to begin until your failing test suite is in place.
 
 **Skill manifest.** Before drafting tests, check for

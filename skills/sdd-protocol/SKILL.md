@@ -135,7 +135,7 @@ CYCLE: <int>          # spec-review cycles consumed (one increment per /build-fl
 CHANGE_CYCLE: <int>   # change-review cycles consumed (one increment per /build-fleet:handoff pass)
 BUILD_CYCLE: <int>    # deep-build cycles consumed (one increment per deep-build workflow run)
 TIER: trivial | standard | large    # set by the classifier at /build-fleet:new-feature. `pending` until it runs.
-BUILD_MODE: standard | deep-build   # selects /build-fleet:build's orchestration. Classifier sets deep-build for tier=large. `pending` until it runs.
+BUILD_MODE: standard | deep-build   # selects /build-fleet:implement's orchestration. Classifier sets deep-build for tier=large. `pending` until it runs.
 RISK: low | elevated                 # set by the classifier at /build-fleet:new-feature (reversibility, blast radius, the never-trivial list). `pending` until it runs. With TIER it selects the seeded review roster and budget.
 REVIEW_ROLES: <csv>         # optional — /build-fleet:review roster (>=2 of architect,qa,coder,product-owner). Seeded by new-feature from TIER + RISK (table in commands/new-feature.md step 7; architect,qa,coder for every standard and large feature); absent ⇒ architect,qa,coder. A --roles flag overrides per-run.
 REVIEW_CYCLE_BUDGET: <int>  # optional — /build-fleet:review escalation budget (1..3, clamped to the ceiling). Seeded with the roster (3 for standard and large; 2 on the trivial row); absent ⇒ 3. A --cycle-budget flag overrides per-run.
@@ -314,7 +314,7 @@ older blocks go to `REVIEW-archive.md`), (c) computes `next_adr_id`
 (`scripts/adr-index.sh --next`) and a real `now` (`date -u`).
 
 **FINALIZE.** `/build-fleet:finalize` runs the finalize gate — the gate ONLY (it is
-idempotent; the BUILD orchestration is `/build-fleet:build`'s). Permitted only when
+idempotent; the BUILD orchestration is `/build-fleet:implement`'s). Permitted only when
 `scripts/finalize-gate.sh` passes: every roster role has a current-cycle block; zero
 UNREFUTED `[blocker]` lines; zero `[major]` lines dispositioned `fix` (or
 undispositioned); every `disposition: adr ADR-N` cites an ADR present in the feature
@@ -326,7 +326,7 @@ deterministically, and is the same rule the workflow reports as `finalize_ready`
 STATUS=FINALIZED, PHASE=BUILD. The source-write block lifts at this point and not
 before.
 
-**BUILD.** Sequential, tests-first. `/build-fleet:build` (run after the finalize
+**BUILD.** Sequential, tests-first. `/build-fleet:implement` (run after the finalize
 gate passes) dispatches qa first, then coder:
 
 1. **qa drafts TEST_PLAN.md + writes failing tests** per the `test-plan` skill —
@@ -344,8 +344,8 @@ never gating — see the `skill-routing` skill).
 `/build-fleet:deep-build` directly):
 
 - **`standard`** — the sequential qa-then-coder pattern above, orchestrated by
-  `/build-fleet:build` via the Task tool.
-- **`deep-build`** — for multi-file / multi-package features. `/build-fleet:build`
+  `/build-fleet:implement` via the Task tool.
+- **`deep-build`** — for multi-file / multi-package features. `/build-fleet:implement`
   runs qa first (same as standard), then routes implementation to
   `workflows/deep-build.js`: an architect subagent designs a file partition, N
   coders (default 3, max 8) fan out in parallel against the pre-existing failing

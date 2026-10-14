@@ -93,7 +93,7 @@ without a recorded choice:
    ```
    Tell the user which phase the item is back in and the natural next command
    (e.g. `/build-fleet:review`, `/build-fleet:deep-build`, `/build-fleet:handoff`,
-   `/build-fleet:diagnose`, or `/build-fleet:fix`). If the decision implies spec
+   `/build-fleet:diagnose`, or `/build-fleet:apply-fix`). If the decision implies spec
    or diagnosis edits (e.g. "drop the requirement"), remind the human those edits
    are theirs/PO's to make before re-running the phase.
 

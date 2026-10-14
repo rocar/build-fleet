@@ -50,7 +50,7 @@ esac
 # suite IS the counterfactual the protocol is built on. Enforcing a green suite
 # in that window contradicts the very phase this gate exists to cover, and would
 # wedge every feature's BUILD until escalation. Detected with the same signal
-# /build-fleet:build's re-run guard uses: qa has written TEST_PLAN.md and coder
+# /build-fleet:implement's re-run guard uses: qa has written TEST_PLAN.md and coder
 # has not yet recorded work in IMPL_NOTES.md. The gate re-engages the moment
 # coder writes, and is never skipped in CHANGE_REVIEW/HANDOFF.
 # "Has content" = at least one line that is neither blank nor a markdown heading,

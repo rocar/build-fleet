@@ -41,8 +41,8 @@ Snapshot (`build-fleet/status-snapshot@1`):
    - The most recent `.sdd/<slug>/REVIEW.md` diagnose block(s), if any (verbatim verdict lines).
    - Then do the ESCALATION check (step 5) and recommend the next bug-lane command by `PHASE`:
      `REPORT`→`/build-fleet:reproduce`; `REPRODUCE`→record a hypothesis, then `/build-fleet:diagnose`;
-     `DIAGNOSE`→`/build-fleet:diagnose` again (if refuted) or `/build-fleet:fix` (if confirmed —
-     PHASE will read `FIX`); `FIX`→`/build-fleet:fix` then `/build-fleet:verify`;
+     `DIAGNOSE`→`/build-fleet:diagnose` again (if refuted) or `/build-fleet:apply-fix` (if confirmed —
+     PHASE will read `FIX`); `FIX`→`/build-fleet:apply-fix` then `/build-fleet:verify`;
      `VERIFY`→`/build-fleet:verify`; `HANDOFF`→`/build-fleet:ship-fix`;
      `ESCALATED`→human only: `/build-fleet:resolve-escalation <decision>` (or `/build-fleet:park <reason>` to abandon).
    Then **stop** — do not run the forward-feature steps below.
@@ -126,9 +126,9 @@ Snapshot (`build-fleet/status-snapshot@1`):
    - `REVIEW` and not finalize-ready → `/build-fleet:revise` (PO closes the open
      blockers and `fix` majors), then `/build-fleet:review`.
    - `REVIEW` and finalize-ready → `/build-fleet:finalize` (the gate), then
-     `/build-fleet:build` (the BUILD orchestration).
+     `/build-fleet:implement` (the BUILD orchestration).
    - `BUILD` → if the BUILD orchestration has not started (no qa test suite /
-     IMPL_NOTES activity yet), run `/build-fleet:build`; once coder + qa
+     IMPL_NOTES activity yet), run `/build-fleet:implement`; once coder + qa
      signal done, run `/build-fleet:handoff`.
    - `CHANGE_REVIEW` with open blockers → coder is fixing; re-run
      `/build-fleet:handoff` once fixes land.

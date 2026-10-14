@@ -3,7 +3,7 @@ description: Confirm the diagnosis, then implement the recorded fix
 allowed-tools: Read, Write, Edit, Task, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
 ---
 
-# /build-fleet:fix
+# /build-fleet:apply-fix
 
 You are the **orchestrator**. This is the bug-lane analog of `/build-fleet:finalize` — a
 **gate**, not a request. The `diagnose.js` workflow advances a confirmed bug to `PHASE: FIX`;
