@@ -97,6 +97,11 @@ forward behavior as a regression).
 
 ## REPRODUCE + DIAGNOSE (the confirmation workflow)
 
+The hypothesis carries `HYPOTHESIS_CYCLE: <n>` as the first line under
+`## Root-cause hypothesis`: the diagnose cycle it is written for (`CYCLE + 1`). The lite
+router runs `diagnose` only while `HYPOTHESIS_CYCLE > CYCLE`; a refuted hypothesis
+(`CYCLE` has caught up) is rewritten first.
+
 Two commands carry a bug from a reproduction to a confirmed (or refuted) root cause:
 
 - **`/build-fleet:reproduce` (REPORT→REPRODUCE).** Delegates to **qa** to author ≥1

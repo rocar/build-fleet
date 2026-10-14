@@ -2,6 +2,7 @@
 description: Interrogate the product plan from each role's lens
 argument-hint: "[--roles <r1,r2,...>]"
 allowed-tools: Read, Write, Edit, Workflow, Bash(date:*)
+user-invocable: false
 ---
 
 # /build-fleet:plan-review

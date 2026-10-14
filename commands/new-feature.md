@@ -2,6 +2,7 @@
 description: Scaffold a feature workspace and draft its spec
 argument-hint: "<feature-slug> [feature details]"
 allowed-tools: Read, Write, Edit, Task, AskUserQuestion, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/adr-index.sh":*), Bash(date:*)
+user-invocable: false
 ---
 
 # /build-fleet:new-feature

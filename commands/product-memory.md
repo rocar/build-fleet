@@ -1,6 +1,7 @@
 ---
 description: Regenerate the product block in the root CLAUDE.md
 allowed-tools: Read, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/product-memory-splice.sh":*)
+user-invocable: false
 ---
 
 # /build-fleet:product-memory

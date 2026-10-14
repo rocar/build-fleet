@@ -1,6 +1,7 @@
 ---
 description: Resolve and gate the next unblocked backlog feature
 allowed-tools: Read, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/next-feature.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*)
+user-invocable: false
 ---
 
 # /build-fleet:next-feature

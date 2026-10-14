@@ -2,6 +2,7 @@
 description: Run the adversarial spec-review workflow
 argument-hint: "[--roles <r1,r2,...>] [--cycle-budget <1-3>] [--shape debate|verified] [--verifier-model opus|sonnet|haiku] [--verify-blockers-solo] [--override-cost]"
 allowed-tools: Read, Write, Workflow, Bash(date:*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-rotate.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/adr-index.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-carry.sh":*)
+user-invocable: false
 ---
 
 # /build-fleet:review

@@ -1,6 +1,7 @@
 ---
 description: Drive BUILD: qa writes the failing suite, then coder implements
 allowed-tools: Read, Write, Edit, Task, Workflow, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
+user-invocable: false
 ---
 
 # /build-fleet:implement

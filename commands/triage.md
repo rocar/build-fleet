@@ -2,6 +2,7 @@
 description: File a bug into the troubleshoot-fix lane
 argument-hint: "<symptom>"
 allowed-tools: Read, Write, Edit, Task, Bash(rm -rf .sdd/:*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*)
+user-invocable: false
 ---
 
 # /build-fleet:triage

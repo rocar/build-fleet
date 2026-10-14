@@ -1,7 +1,8 @@
 ---
 description: Scaffold the product tier: vision, backlog, stack
-argument-hint: "<product-slug>"
+argument-hint: "<product-slug> [vision…]"
 allowed-tools: Read, Write, Edit, Task
+user-invocable: false
 ---
 
 # /build-fleet:new-product
@@ -17,8 +18,9 @@ runs here.
 
 ## Arguments
 
-`$ARGUMENTS` — the product slug. Kebab-case, no whitespace. If empty, refuse and
-tell the user a slug is required.
+`$ARGUMENTS` — `<product-slug> [vision…]`. The first whitespace-delimited token is the
+product slug (kebab-case). Everything after it is the user's product vision, free text,
+possibly empty. If `$ARGUMENTS` is empty, refuse and tell the user a slug is required.
 
 ## Refusal cases (check first, in order)
 
@@ -39,8 +41,9 @@ tell the user a slug is required.
 
 ## Establish the product description
 
-Before scaffolding, determine *what the product is*. Look back through the
-conversation for a description the user already gave. **If none exists, STOP and
+Before scaffolding, determine *what the product is*. A vision given after the slug
+is the user's description. Otherwise look back through the conversation for a
+description the user already gave. **If none exists, STOP and
 ask** — do not infer a product from its slug. Ask for: the problem it solves,
 who it's for, the rough feature set, and any stack the user already has in mind.
 Wait for the answer. Carry it verbatim into the delegations below.
@@ -130,7 +133,8 @@ abandoned — bias small.
 2. **Delegate vision + backlog to product-owner.** Spawn `build-fleet:product-owner`
    via the Task tool. Tell it: it owns `.sdd/_product/vision.md` and
    `.sdd/_product/backlog.md`; draft the vision from the description (size-gated
-   sections per above) and a **phased** feature backlog.
+   sections per above) and a **phased** feature backlog. If a vision was given after
+   the slug, include it verbatim as the user's stated vision.
 
    **Phase 1 is a walking skeleton (v0.9):** the smallest VERTICAL slice that produces
    the product's primary artifact end to end — the thing a user would recognise as

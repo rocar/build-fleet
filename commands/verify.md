@@ -1,6 +1,7 @@
 ---
 description: Verify the bug fix via the counterfactual gate
 allowed-tools: Read, Write, Edit, Task, Bash(git status:*), Bash(git diff:*), Bash(git stash:*), Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
+user-invocable: false
 ---
 
 # /build-fleet:verify

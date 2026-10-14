@@ -1,6 +1,7 @@
 ---
 description: Run CHANGE_REVIEW on the diff, then hand off to devops
 allowed-tools: Read, Write, Edit, Bash, Task
+user-invocable: false
 ---
 
 <!-- Deliberately model-invocable (audit §3.22 evaluated): handoff is dispatched

@@ -2,6 +2,7 @@
 description: Draft, review, and pin a project workflow for a novel task
 argument-hint: "<name> \"<task>\" | ratify <name>"
 allowed-tools: Read, Write, Task, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/workflow-determinism-lint.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/pin-workflow.sh":*)
+user-invocable: false
 ---
 
 # /build-fleet:scaffold-workflow

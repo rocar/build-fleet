@@ -2,6 +2,7 @@
 description: Preview a feature's tier, risk and review roster; writes no state
 argument-hint: "<feature description>"
 allowed-tools: Read, Task
+user-invocable: false
 ---
 
 # /build-fleet:dispatch

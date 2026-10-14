@@ -1,6 +1,7 @@
 ---
 description: Gate: flip the spec to FINALIZED and unlock source
 allowed-tools: Read, Edit, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh":*), Bash(date:*)
+user-invocable: false
 ---
 
 # /build-fleet:finalize

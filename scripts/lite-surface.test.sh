@@ -37,5 +37,32 @@ for form in 'park <reason>' 'resolve' 'ratify'; do
 done
 if fm "$ROOT/commands/status.md" | /usr/bin/grep -q '^model:'; then no "status has no model pin" "model: still set"; else ok "status has no model pin"; fi
 
+# --- the five-command surface ---
+count=$(ls "$ROOT"/commands/*.md | wc -l | tr -d ' ')
+if [ "$count" = 24 ]; then ok "24 command files"; else no "24 command files" "found $count"; fi
+for f in "$ROOT"/commands/*.md; do
+  c=$(basename "$f" .md)
+  hidden=no; fm "$f" | /usr/bin/grep -q '^user-invocable: false$' && hidden=yes
+  human=no; fm "$f" | /usr/bin/grep -q '^disable-model-invocation: true$' && human=yes
+  if is_lite "$c"; then
+    [ "$hidden" = no ] && ok "$c is user-invocable" || no "$c is user-invocable" "has user-invocable: false"
+  else
+    [ "$hidden" = yes ] && ok "$c is hidden" || no "$c is hidden" "missing user-invocable: false"
+  fi
+  case "$c" in build|ship|status) want=yes ;; *) want=no ;; esac
+  [ "$human" = "$want" ] && ok "$c human-only=$want" || no "$c human-only=$want" "got $human"
+done
+# the loop block is identical in all four drivers
+ref=""
+for c in start build ship fix; do
+  blk=$(awk '/<!-- LITE-LOOP START -->/{f=1} f{print} /<!-- LITE-LOOP END -->/{f=0}' "$ROOT/commands/$c.md" 2>/dev/null)
+  if [ -z "$blk" ]; then no "$c has the loop block" "missing"; continue; fi
+  if [ -z "$ref" ]; then ref="$blk"; ok "$c has the loop block"
+  elif [ "$blk" = "$ref" ]; then ok "$c loop block matches start"
+  else no "$c loop block matches start" "drift"; fi
+  words=$(wc -w < "$ROOT/commands/$c.md" | tr -d ' ')
+  [ "$words" -le 650 ] && ok "$c body ≤ 650 words ($words)" || no "$c body ≤ 650 words" "$words"
+done
+
 echo "lite-surface: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

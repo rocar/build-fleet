@@ -2,6 +2,7 @@
 description: Fan out parallel coders over a planned file partition
 argument-hint: "[max_partitions] [--cycle-budget <1-3>]"
 allowed-tools: Read, Write, Edit, Workflow, Bash(date:*)
+user-invocable: false
 ---
 
 # /build-fleet:deep-build

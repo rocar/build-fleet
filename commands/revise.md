@@ -1,6 +1,7 @@
 ---
 description: Hand the product-owner exactly the open review items to close
 allowed-tools: Read, Task, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh":*)
+user-invocable: false
 ---
 
 # /build-fleet:revise

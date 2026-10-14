@@ -1,6 +1,7 @@
 ---
 description: Ship the verified bug fix via devops
 allowed-tools: Read, Write, Edit, Task, Bash(npm test:*), Bash(pytest:*), Bash(make test:*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*)
+user-invocable: false
 ---
 
 <!-- Deliberately model-invocable (audit §3.22 evaluated): ship-fix is the

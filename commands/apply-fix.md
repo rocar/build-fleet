@@ -1,6 +1,7 @@
 ---
 description: Confirm the diagnosis, then implement the recorded fix
 allowed-tools: Read, Write, Edit, Task, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
+user-invocable: false
 ---
 
 # /build-fleet:apply-fix

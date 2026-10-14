@@ -2,6 +2,7 @@
 description: Adversarially confirm the bug's root-cause hypothesis
 argument-hint: "[--cycle-budget <1-3>]"
 allowed-tools: Read, Write, Edit, Workflow, Bash(date:*)
+user-invocable: false
 ---
 
 # /build-fleet:diagnose

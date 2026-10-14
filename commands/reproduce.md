@@ -1,6 +1,7 @@
 ---
 description: Author a failing reproduction test for the active bug
 allowed-tools: Read, Write, Edit, Task
+user-invocable: false
 ---
 
 # /build-fleet:reproduce
