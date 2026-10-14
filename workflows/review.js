@@ -34,11 +34,13 @@
 
 export const meta = {
   name: "build-fleet-review",
-  description: "SDD spec review: fan-out reviewers (delta review from cycle 2), adversarial cross-examination, survival vote, architect disposition of surviving majors, scribe applies state",
+  description: "SDD spec review: fan-out reviewers (delta review from cycle 2), then either adversarial cross-examination + survival vote (debate shape) or a panel of fresh verifiers + quote-backed majority vote (verified shape), architect disposition of surviving majors, scribe applies state",
   phases: [
     { title: "Fan-out review", detail: "read-only reviewer agents review the spec in parallel (roster configurable; default architect, qa, coder); cycle >= 2 is a delta review" },
     { title: "Cross-examination", detail: "each reviewer challenges peers' concerns, citing spec/acceptance/DECISIONS" },
     { title: "Survival vote", detail: "retain concerns not refuted by a different-role reviewer" },
+    { title: "Verification panel", detail: "verified shape: 3 fresh verifiers judge every blocker/major and closure claim independently, quoting the spec" },
+    { title: "Vote", detail: "verified shape: kill on 2 valid refutations; severity is the median vote, lowered only with quoted evidence" },
     { title: "Disposition", detail: "architect classifies each surviving major: adr (trade-off, ADR drafted) or fix (PO must close it in the spec)" },
     { title: "Apply", detail: "scribe writes PROGRESS + REVIEW + DECISIONS deltas" },
   ],
@@ -521,6 +523,11 @@ const LENS = {
 // Validation failures are NEVER a bare throw (a throw would strand the marker).
 const rolesResult = normalizeRoles(A.roles);
 const budgetResult = normalizeCycleBudget(A.cycle_budget);
+const shapeResult = normalizeShape(A.shape);
+const verifierModelResult = normalizeVerifierModel(A.verifier_model);
+const soloResult = normalizeFlag(A.verify_blockers_solo, "verify_blockers_solo");
+const exemptResult = normalizeExemptCycles(A.exempt_cycles);
+const carriedResult = normalizeCarried(A.carried, shapeResult.shape);
 
 const argErrors = [];
 if (!feature || typeof feature !== "string") argErrors.push("feature: required non-empty string");
@@ -528,6 +535,7 @@ if (typeof cycle !== "number" || Number.isNaN(cycle)) argErrors.push("cycle: req
 if (!now || typeof now !== "string") argErrors.push("now: required iso8601 string (the dispatching command supplies it — the script cannot call Date)");
 if (rolesResult.error) argErrors.push(rolesResult.error);
 if (budgetResult.error) argErrors.push(budgetResult.error);
+for (const r of [shapeResult, verifierModelResult, soloResult, exemptResult, carriedResult]) if (r.error) argErrors.push(r.error);
 if (argErrors.length > 0) {
   log(`Invalid args: ${argErrors.join("; ")}. No state advanced.`);
   if (feature && typeof feature === "string") {
@@ -546,6 +554,14 @@ const ROLES = rolesResult.roles;
 const cycleBudget = budgetResult.budget;
 const cycleTotalBefore = normalizeCycleTotal(A.cycle_total, cycle);
 const nextAdrId = normalizeNextAdrId(A.next_adr_id);
+const SHAPE = shapeResult.shape;
+const VERIFIER_MODEL = verifierModelResult.model;
+const VERIFY_BLOCKERS_SOLO = soloResult.value;
+const CARRIED = carriedResult.carried;
+// Cycles whose quote check reopened a finding do not count against the budget; added
+// AFTER the MAX_CYCLE_BUDGET clamp so decideVerdict does not escalate the exempt cycle.
+const effectiveBudget = cycleBudget + exemptResult.value;
+log(`Review shape: ${SHAPE}${SHAPE === "verified" ? `; verifier model ${VERIFIER_MODEL}; per-blocker panels ${VERIFY_BLOCKERS_SOLO}; carried ${CARRIED.length}; exempt cycles ${exemptResult.value} (effective budget ${effectiveBudget})` : ""}.`);
 log(`Reviewer roster: [${ROLES.join(", ")}]; cycle budget ${cycleBudget}; cumulative cycles before this run ${cycleTotalBefore}; next feature ADR id ${nextAdrId}.`);
 if (budgetResult.clamped) {
   log(`cycle_budget requested ${JSON.stringify(A.cycle_budget)} exceeds the protocol ceiling — capped to ${MAX_CYCLE_BUDGET}.`);
@@ -559,8 +575,8 @@ function modelFor(role) {
 
 // ---------- schemas (structured agent output) ----------
 
-function concernsSchemaFor(role) {
-  return {
+function concernsSchemaFor(role, shape) {
+  const base = {
     type: "object",
     additionalProperties: false,
     required: ["role", "status", "concerns"],
@@ -582,6 +598,44 @@ function concernsSchemaFor(role) {
       },
     },
   };
+  if (shape !== "verified") return base;
+  // Verified shape: every finding carries an anchor and a test (a [minor] may use anchor
+  // kind "none"); delta cycles return closure claims for carried findings.
+  const item = base.properties.concerns.items;
+  item.required = ["id", "severity", "text", "anchor", "test"];
+  item.properties.anchor = {
+    type: "object",
+    additionalProperties: false,
+    required: ["kind"],
+    properties: {
+      kind: { type: "string", enum: ["quote", "absent", "none"] },
+      file: { type: "string" },
+      text: { type: "string" },
+      section: { type: "string" },
+      missing: { type: "string" },
+    },
+  };
+  item.properties.test = { type: "string" };
+  item.properties.ref = { type: "string" };
+  base.required = ["role", "status", "concerns", "closures"];
+  base.properties.closures = {
+    type: "array",
+    items: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "closure"],
+      properties: {
+        id: { type: "string" },
+        closure: {
+          type: "object",
+          additionalProperties: false,
+          required: ["file", "text"],
+          properties: { file: { type: "string" }, text: { type: "string" } },
+        },
+      },
+    },
+  };
+  return base;
 }
 
 const REFUTATION_SCHEMA = {
@@ -609,6 +663,35 @@ const REFUTATION_SCHEMA = {
               locator: { type: "string" },
             },
           },
+        },
+      },
+    },
+  },
+};
+
+const VERIFICATION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["verdicts"],
+  properties: {
+    verdicts: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "vote", "severity", "reason"],
+        properties: {
+          id: { type: "string" },
+          vote: { type: "string", enum: ["uphold", "refute", "confirm", "reject"] },
+          severity: { type: "string", enum: ["blocker", "major", "minor"] },
+          reason: { type: "string" },
+          quote: {
+            type: "object",
+            additionalProperties: false,
+            required: ["file", "text"],
+            properties: { file: { type: "string" }, text: { type: "string" } },
+          },
+          test_invalid: { type: "boolean" },
         },
       },
     },
@@ -645,12 +728,12 @@ phase("Fan-out review");
 
 const reviewerResults = await parallel(
   ROLES.map((role) => () =>
-    agent(reviewPrompt(role, feature, cycle, LENS[role]), {
+    agent(reviewPrompt(role, feature, cycle, LENS[role], SHAPE, CARRIED.filter((k) => k.raised_by === role)), {
       label: `review:${role}`,
       phase: "Fan-out review",
       agentType: "build-fleet:reviewer",
       ...(modelFor(role) ? { model: modelFor(role) } : {}),
-      schema: concernsSchemaFor(role),
+      schema: concernsSchemaFor(role, SHAPE),
     })
   )
 );
@@ -679,29 +762,114 @@ if (enforced.demoted.length > 0) {
   log(`Delta-severity enforcement demoted new major(s) to minor (not permitted on a delta cycle): ${enforced.demoted.join(", ")}.`);
 }
 
-// ---------- Phase 2: cross-examination ----------
+let surviving;
+let verification = null;
 
-phase("Cross-examination");
+if (SHAPE === "verified") {
+  // ---------- Phase 2 (verified): verification panel ----------
+  // Closure claims count only for carried findings the claiming reviewer raised.
+  const carriedById = {};
+  for (const k of CARRIED) carriedById[k.id] = k;
+  const closures = [];
+  for (const r of reviews) {
+    for (const cl of r.payload.closures || []) {
+      const k = cl && carriedById[cl.id];
+      if (!k || k.raised_by !== r.role || !cl.closure) {
+        log(`Closure claim ignored (not a carried finding raised by ${r.role}): ${cl && cl.id}.`);
+        continue;
+      }
+      closures.push({ id: k.id, severity: k.severity, raised_by: k.raised_by, text: k.text, closure: cl.closure });
+    }
+  }
+  const closureIds = closures.map((c) => c.id);
+  const offRoster = CARRIED.filter((k) => ROLES.indexOf(k.raised_by) === -1).map((k) => k.id);
+  if (offRoster.length > 0) log(`Carried findings whose raiser is not in the roster are written in ${ROLES[0]}'s block and stay open until their raiser closes them: ${offRoster.join(", ")}.`);
+  const dem = demoteUncheckable(materializeCarried(allConcerns.filter((c) => closureIds.indexOf(c.id) === -1).concat(closures), CARRIED, cycle, ROLES));
+  if (dem.demoted.length > 0) log(`Demoted to minor (no anchor or no test): ${dem.demoted.join(", ")}.`);
+  const findings = dem.concerns;
+  const toVerify = findings.filter((f) => !f.carried && !f.demoted && (f.closure || vrRank(f.severity) >= 1));
+  const verifyItem = (f) => f.closure
+    ? { id: f.id, kind: "closure", severity: f.severity, text: f.text, closure: f.closure }
+    : { id: f.id, kind: "finding", severity: f.severity, text: f.text, anchor: f.anchor, ref: f.ref || "", test: f.test };
+  const soloIds = VERIFY_BLOCKERS_SOLO ? toVerify.filter((f) => !f.closure && f.severity === "blocker").map((f) => f.id) : [];
+  const shared = toVerify.filter((f) => soloIds.indexOf(f.id) === -1).map(verifyItem);
 
-const xaResults = await parallel(
-  ROLES.map((role) => () =>
-    agent(crossExamPrompt(role, allConcerns, feature, cycle), {
-      label: `cross-exam:${role}`,
-      phase: "Cross-examination",
-      agentType: "build-fleet:reviewer",
-      ...(modelFor(role) ? { model: modelFor(role) } : {}),
-      schema: REFUTATION_SCHEMA,
-    })
-  )
-);
+  phase("Verification panel");
 
-const refutationMap = mergeRefutations(ROLES, xaResults);
+  const runPanel = (items, tag) =>
+    parallel([0, 1, 2].map((k) => () =>
+      agent(verifierPrompt(feature, cycle, rotateLeft(items, k)), {
+        label: `verify:${tag}:${k + 1}`,
+        phase: "Verification panel",
+        agentType: "build-fleet:reviewer",
+        model: VERIFIER_MODEL,
+        schema: VERIFICATION_SCHEMA,
+      })
+    ));
+  const returned = (ps) => (ps || []).filter((p) => p && Array.isArray(p.verdicts)).length;
+  const sharedPanels = shared.length > 0 ? await runPanel(shared, "panel") : [];
+  const soloPanels = {};
+  for (const id of soloIds) {
+    soloPanels[id] = await runPanel([verifyItem(toVerify.filter((f) => f.id === id)[0])], id);
+  }
+  const short = [];
+  if (shared.length > 0 && returned(sharedPanels) < 2) short.push("shared panel");
+  for (const id of soloIds) if (returned(soloPanels[id]) < 2) short.push(`panel for ${id}`);
+  if (short.length > 0) {
+    log(`Verifier panel incomplete (${short.join(", ")} returned fewer than 2 verdict sets). Cleaning up without advancing state.`);
+    const scribeResult = await applyScribe(cleanupEnvelope(feature, now, runId));
+    return {
+      verdict: "incomplete",
+      reason: "verifier-panel",
+      panels: short,
+      feature,
+      cycle,
+      scribe_apply: scribeResult.ok ? "applied" : "failed",
+      scribe_error: scribeResult.error,
+      note: "No REVIEW.md entries written; PHASE/CYCLE unchanged. Re-run /build-fleet:review.",
+    };
+  }
 
-// ---------- Phase 3: survival vote (pure JS) ----------
+  // ---------- Phase 3 (verified): vote (pure JS; the gate recomputes it) ----------
 
-phase("Survival vote");
+  phase("Vote");
 
-const surviving = applySurvivalVote(allConcerns, refutationMap);
+  surviving = findings.map((f) => applyVerifiedVote([f], soloIds.indexOf(f.id) !== -1 ? soloPanels[f.id] : sharedPanels)[0]);
+  verification = {
+    raised: findings.filter((f) => !f.carried && !f.closure).length,
+    verified: toVerify.length,
+    killed: surviving.filter((c) => c.killed).length,
+    closed: surviving.filter((c) => c.closed).length,
+    demoted: surviving.filter((c) => c.demoted).length,
+    carried: surviving.filter((c) => c.carried).length,
+    solo_panels: soloIds.length,
+  };
+  log(`Verification: ${verification.verified} judged, ${verification.killed} refuted, ${verification.closed} closures confirmed, ${verification.demoted} demoted, ${verification.carried} carried.`);
+} else {
+  // ---------- Phase 2: cross-examination ----------
+
+  phase("Cross-examination");
+
+  const xaResults = await parallel(
+    ROLES.map((role) => () =>
+      agent(crossExamPrompt(role, allConcerns, feature, cycle), {
+        label: `cross-exam:${role}`,
+        phase: "Cross-examination",
+        agentType: "build-fleet:reviewer",
+        ...(modelFor(role) ? { model: modelFor(role) } : {}),
+        schema: REFUTATION_SCHEMA,
+      })
+    )
+  );
+
+  const refutationMap = mergeRefutations(ROLES, xaResults);
+
+  // ---------- Phase 3: survival vote (pure JS) ----------
+
+  phase("Survival vote");
+
+  surviving = applySurvivalVote(allConcerns, refutationMap);
+}
 
 // ---------- Phase 4: disposition (architect, read-only; scribe writes the ADRs) ----------
 
@@ -715,7 +883,7 @@ let adrsWritten = 0;
 if (survivingMajors.length === 0) {
   log("No surviving majors — disposition leg skipped.");
 } else {
-  const exhausting = cycle >= cycleBudget;
+  const exhausting = cycle >= effectiveBudget;
   let dispo = null;
   try {
     dispo = await agent(dispositionPrompt(feature, cycle, survivingMajors, nextAdrId, exhausting), {
@@ -775,7 +943,7 @@ if (survivingMajors.length === 0) {
 }
 
 const ready = computeFinalizeReady(surviving, dispositionMap);
-const verdict = decideVerdict(ready.openBlockers.length, ready.openMajors.length, cycle, cycleBudget);
+const verdict = decideVerdict(ready.openBlockers.length, ready.openMajors.length, cycle, effectiveBudget);
 
 log(
   `Cycle ${cycle}: ${surviving.length} concerns, ${ready.openBlockers.length} open blockers, ${ready.openMajors.length} open majors → verdict=${verdict}, finalize_ready=${ready.finalize_ready}`
@@ -787,13 +955,15 @@ phase("Apply");
 
 const outputTokens = outputTokensSoFar();
 const envelope = buildEnvelope({
-  feature, cycle, cycleBudget, cycleTotalBefore, now, reviews, surviving, dispositionMap,
-  decisionsAppendix, ready, verdict, outputTokens,
+  feature, cycle, cycleBudget: effectiveBudget, cycleTotalBefore, now, reviews, surviving, dispositionMap,
+  decisionsAppendix, ready, verdict, outputTokens, shape: SHAPE,
 });
 const scribeResult = await applyScribe(envelope);
 
 return {
   verdict,
+  shape: SHAPE,
+  verification,
   finalize_ready: ready.finalize_ready,
   feature,
   cycle,
@@ -813,7 +983,7 @@ return {
 
 // ================= helpers =================
 
-function reviewPrompt(role, feature, cycle, lens) {
+function reviewPrompt(role, feature, cycle, lens, shape, carried) {
   const files = `Read these files yourself (you have Read/Grep/Glob and NOTHING that writes):
 - .sdd/${feature}/spec.md
 - .sdd/${feature}/acceptance.md
@@ -830,7 +1000,28 @@ arguing against the ADR by id.
 
 Do NOT write, edit, or create any file. Return only the structured object.`;
 
-  const cycleRules = cycle <= 1
+  const verified = shape === "verified";
+  const verifiedRules = !verified ? "" : `
+VERIFIED REVIEW. Every [blocker] and [major] must be checkable, or it is recorded as a [minor]:
+- anchor: EITHER {"kind":"quote","file":"spec.md"|"acceptance.md"|"DECISIONS.md"|"_product/DECISIONS.md","text":"<10–500 characters copied VERBATIM from that file: no paraphrase, no ellipsis>"}
+  OR {"kind":"absent","file":"spec.md","section":"<an existing heading of that file>","missing":"<what the spec should say there>"}.
+  A [minor] may use {"kind":"none"}.
+- test: one sentence naming a test that would FAIL if the finding is real.
+- ref: optional, e.g. "§Behavior, AC-3".
+Quotes are checked word for word against the files after this review; an invented quote demotes the finding.`;
+  const carriedRules = !(verified && carried && carried.length > 0) ? "" : `
+OPEN FINDINGS YOU RAISED, carried from the previous cycle. Handle EVERY one:
+${JSON.stringify(carried.map((k) => ({ id: k.id, severity: k.severity, text: k.text, ...(k.quote ? { quote: k.quote } : {}), ...(k.absent ? { absent: k.absent } : {}), why_open: k.why || null })), null, 2)}
+- Still open ⇒ leave it out of "concerns". It stays open exactly as recorded (severity, quote, test); re-listing it changes nothing.
+- Closed by the revised spec ⇒ return it in "closures" as {"id": "<id>", "closure": {"file": "<file>", "text": "<verbatim text of the revised spec that closes it>"}}.
+Only a closure the verifier panel confirms closes a carried finding.`;
+  const cycleRules = verified && cycle > 1
+    ? `This is cycle ${cycle}: a DELTA review. Two jobs, in order:
+1. CLOSURE: the carried findings listed below.
+2. NEW findings: [blocker] severity ONLY (correctness, security, data loss, or a contradiction
+   of spec/acceptance, including a regression introduced by a fix). You may add [minor] notes
+   (advisory). You may NOT raise a new [major]: the open-major set only shrinks after cycle 1.`
+    : cycle <= 1
     ? `This is cycle 1: a FULL review of the spec through your lens.`
     : `This is cycle ${cycle}: a DELTA review. Two jobs, in order:
 1. CLOSURE — for each of YOUR OWN findings from the previous cycle that carries "disposition: fix",
@@ -850,6 +1041,8 @@ ${lens}
 The severity rubric (blocker / major / minor) is in your instructions — use those exact words.
 
 ${cycleRules}
+${verifiedRules}
+${carriedRules}
 
 ${rules}
 
@@ -857,7 +1050,43 @@ Return the structured object:
 - role: "${role}"
 - status: "concerns-raised" if you hold any blocker/major, else "approved" (informational — the
   gate reads dispositions, not this line)
-- concerns: array of { id, severity, text }. Empty array + "approved" when you have nothing.`;
+${verified
+    ? `- concerns: array of { id, severity, text, anchor, test, ref? }. Empty array + "approved" when you have nothing.
+- closures: array of { id, closure: { file, text } }. Empty array when you claim no closure.`
+    : "- concerns: array of { id, severity, text }. Empty array + \"approved\" when you have nothing."}`;
+}
+
+function verifierPrompt(feature, cycle, items) {
+  return `You are a VERIFIER in a build-fleet spec review, cycle ${cycle}. Active feature: ${feature}.
+You did not raise these findings and you are not told who did. Judge each one ONLY against the files.
+
+Read these files yourself (you have Read/Grep/Glob and NOTHING that writes):
+- .sdd/${feature}/spec.md
+- .sdd/${feature}/acceptance.md
+- .sdd/${feature}/DECISIONS.md   (may not exist)
+- .sdd/_product/DECISIONS.md     (only for an ADR id a finding or the spec cites)
+Do NOT read REVIEW.md or REVIEW-archive.md. Do NOT write, edit, or create any file.
+
+For each item of kind "finding":
+- vote "refute" ONLY when the spec as written already answers the claim, and quote the text that answers it.
+  Otherwise vote "uphold". When unsure, uphold.
+- severity: blocker | major | minor, per the severity rubric in your instructions. A severity BELOW the
+  finding's own counts only with a quote of the text that makes it less serious and a reason of at least
+  40 characters; without them it counts as the finding's own severity.
+- test_invalid: true, with a reason, when the finding's test is vacuous or could not exercise the claim.
+  That is not a refutation.
+For each item of kind "closure": vote "confirm" when the quoted text of the revised spec really closes the
+finding, else "reject" with a reason.
+
+Every quote is {"file": "spec.md"|"acceptance.md"|"DECISIONS.md"|"_product/DECISIONS.md", "text": "<10–500
+characters copied VERBATIM from that file>"}. Quotes are checked word for word after this review; an
+invented quote voids your vote.
+
+Items (judge EVERY one, each on its own merits):
+${JSON.stringify(items, null, 2)}
+
+Return the structured object:
+- verdicts: array of { id, vote, severity, reason, quote?, test_invalid? }, exactly one per item.`;
 }
 
 function crossExamPrompt(role, allConcerns, feature, cycle) {
@@ -939,6 +1168,9 @@ function mergeConcerns(reviews) {
         severity: c.severity,
         raised_by: r.role,
         text: c.text,
+        ...(c.anchor ? { anchor: c.anchor } : {}),
+        ...(c.ref ? { ref: c.ref } : {}),
+        ...(typeof c.test === "string" ? { test: c.test } : {}),
         refuted: false,
         refuted_by: null,
         refutation_reason: null,
@@ -988,12 +1220,14 @@ function applySurvivalVote(concerns, refutationMap) {
   });
 }
 
-function buildEnvelope({ feature, cycle, cycleBudget, cycleTotalBefore, now, reviews, surviving, dispositionMap, decisionsAppendix, ready, verdict, outputTokens }) {
+function buildEnvelope({ feature, cycle, cycleBudget, cycleTotalBefore, now, reviews, surviving, dispositionMap, decisionsAppendix, ready, verdict, outputTokens, shape }) {
   const reviewEntries = reviews.map((r) => {
-    const own = surviving.filter((c) => c.raised_by === r.role);
+    const own = surviving.filter((c) => (c.host || c.raised_by) === r.role);
     const lines = [`## Cycle ${cycle} — ${r.role} — ${now}`];
+    if (shape === "verified") lines.push("shape: verified");
     for (const c of own) {
-      for (const l of formatFindingLines(c, dispositionMap)) lines.push(l);
+      const rendered = shape === "verified" ? formatVerifiedFindingLines(c, dispositionMap) : formatFindingLines(c, dispositionMap);
+      for (const l of rendered) lines.push(l);
     }
     lines.push(`status: ${r.payload.status || "concerns-raised"}`);
     return lines.join("\n");
