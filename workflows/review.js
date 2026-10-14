@@ -271,6 +271,208 @@ function formatFindingLines(c, dispositionMap) {
   }
   return lines;
 }
+// REVIEW_SHAPE and its settings (verified review). Absent ⇒ today's behaviour.
+const REVIEW_SHAPES = ["debate", "verified"];
+const VERIFIER_MODELS = ["opus", "sonnet", "haiku"];
+
+function normalizeShape(raw) {
+  if (raw === undefined || raw === null) return { shape: "debate", error: null };
+  if (REVIEW_SHAPES.indexOf(raw) === -1) return { shape: null, error: `shape: must be one of ${REVIEW_SHAPES.join(", ")}` };
+  return { shape: raw, error: null };
+}
+
+function normalizeVerifierModel(raw) {
+  if (raw === undefined || raw === null) return { model: "sonnet", error: null };
+  if (VERIFIER_MODELS.indexOf(raw) === -1) return { model: null, error: `verifier_model: must be one of ${VERIFIER_MODELS.join(", ")}` };
+  return { model: raw, error: null };
+}
+
+function normalizeFlag(raw, name) {
+  if (raw === undefined || raw === null) return { value: false, error: null };
+  if (raw === true || raw === "true") return { value: true, error: null };
+  if (raw === false || raw === "false") return { value: false, error: null };
+  return { value: null, error: `${name}: must be true or false` };
+}
+
+// Cycles of this review phase whose quote check reopened a finding (scripts/review-carry.sh);
+// they do not count against the cycle budget.
+function normalizeExemptCycles(raw) {
+  if (raw === undefined || raw === null) return { value: 0, error: null };
+  const n = typeof raw === "string" ? parseInt(raw, 10) : raw;
+  if (typeof n !== "number" || Number.isNaN(n) || !Number.isInteger(n) || n < 0)
+    return { value: null, error: "exempt_cycles: must be an integer >= 0" };
+  return { value: n, error: null };
+}
+
+// The previous verified cycle's open set (finalize-gate.sh --report .open), carried forward.
+function normalizeCarried(raw, shape) {
+  if (raw === undefined || raw === null) return { carried: [], error: null };
+  if (shape !== "verified") return { carried: null, error: "carried: only valid with shape verified" };
+  if (!Array.isArray(raw)) return { carried: null, error: "carried: must be an array of finding objects" };
+  for (const k of raw) {
+    if (!k || typeof k.id !== "string" || typeof k.raised_by !== "string" || ["blocker", "major"].indexOf(k.severity) === -1)
+      return { carried: null, error: "carried: each entry needs id, raised_by and severity blocker|major" };
+  }
+  return { carried: raw.slice(), error: null };
+}
+
+// --- VERIFIED-RULES START — REVIEW_SHAPE: verified. JS twin of scripts/lib/verified-review.jq;
+// scripts/verified-vote-parity.test.sh renders findings with formatVerifiedFindingLines and
+// checks the jq rules reach the same outcome. Pure: no log()/agent()/args/budget.
+const VR_SEV = ["minor", "major", "blocker"];
+function vrRank(s) { return s === "blocker" ? 2 : s === "major" ? 1 : s === "minor" ? 0 : -1; }
+
+// A verdict's evidence counts: a quote {file,text} and a reason of at least 40 characters.
+// (Whether the quote is real is checked after apply, by scripts/quote-check.sh.)
+function vrEvidence(v) {
+  return !!v && typeof v === "object" && !!v.quote && typeof v.quote === "object" &&
+    typeof v.quote.file === "string" && v.quote.file.length > 0 &&
+    typeof v.quote.text === "string" && v.quote.text.length > 0 &&
+    typeof v.reason === "string" && v.reason.length >= 40;
+}
+
+// The schema requires anchor + test on every finding; a blocker/major whose anchor is
+// kind "none" (or whose quote/section is empty) or whose test is empty is demoted to minor.
+// Carried findings and closure claims are left alone: their evidence is the record's.
+function demoteUncheckable(concerns) {
+  const demoted = [];
+  const out = (concerns || []).map((c) => {
+    if (vrRank(c.severity) < 1 || c.carried || c.closure) return c;
+    const a = c.anchor || {};
+    const anchorOk = (a.kind === "quote" && typeof a.text === "string" && a.text.trim() !== "" && typeof a.file === "string" && a.file !== "") ||
+      (a.kind === "absent" && typeof a.section === "string" && a.section.trim() !== "" && typeof a.file === "string" && a.file !== "");
+    const testOk = typeof c.test === "string" && c.test.trim() !== "";
+    if (anchorOk && testOk) return c;
+    const reason = anchorOk ? "no-test" : "no-anchor";
+    demoted.push(c.id);
+    return { ...c, demoted: { reason } };
+  });
+  return { concerns: out, demoted };
+}
+
+// Verifier k sees the list rotated left by k (deterministic; the runtime has no randomness).
+function rotateLeft(list, k) {
+  const n = (list || []).length;
+  if (n === 0) return [];
+  const s = ((k % n) + n) % n;
+  return list.slice(s).concat(list.slice(0, s));
+}
+
+// One finding (with .verdicts = [{v, vote, severity, reason?, quote?, test_invalid?}]) →
+// {final, killed, closed, demoted_reason}. Mirrors vr_outcome with no failed quotes.
+function verifiedOutcome(f) {
+  const orig = vrRank(f.severity);
+  const vs = (f.verdicts || []).filter((v) => v && typeof v === "object");
+  const n = vs.length;
+  if (f.carried) return { final: f.severity, killed: false, closed: false, demoted_reason: null };
+  if (f.closure) {
+    const c = vs.filter((v) => v.vote === "confirm").length;
+    return { final: f.severity, killed: false, closed: n >= 2 && c * 2 > n, demoted_reason: null };
+  }
+  if (orig < 1) return { final: "minor", killed: false, closed: false, demoted_reason: null };
+  const r = vs.filter((v) => v.vote === "refute" && vrEvidence(v)).length;
+  const ranks = vs.map((v) => { const s = vrRank(v.severity); return s >= 0 && s < orig && vrEvidence(v) ? s : orig; }).sort((a, b) => a - b);
+  const med = n < 2 ? orig : ranks[Math.floor(n / 2)];
+  const ti = vs.filter((v) => v.test_invalid === true).length;
+  const dem = f.demoted && typeof f.demoted === "object" ? (f.demoted.reason || "demoted")
+    : n >= 2 && ti * 2 > n ? "test-invalid" : null;
+  return { final: dem ? "minor" : VR_SEV[Math.min(med, orig)], killed: r >= 2, closed: false, demoted_reason: dem };
+}
+
+// Attach each verifier's verdict to its finding, numbered v = 1..3 in panel order.
+// panels: [{verdicts:[{id,…}]}|null, …] (null = verifier failed). Returns findings with
+// .verdicts filled and the outcome merged in; `refuted` = killed or closed (so the
+// existing disposition/finalize helpers apply unchanged).
+function applyVerifiedVote(findings, panels) {
+  const byId = {};
+  (panels || []).forEach((p, i) => {
+    if (!p || !Array.isArray(p.verdicts)) return;
+    for (const v of p.verdicts) {
+      if (!v || typeof v.id !== "string") continue;
+      const { id, ...rest } = v;
+      (byId[id] ||= []).push({ v: i + 1, ...rest });
+    }
+  });
+  return (findings || []).map((f) => {
+    const verdicts = f.carried || vrRank(f.severity) < 1 ? [] : (byId[f.id] || []);
+    const withV = { ...f, verdicts };
+    const o = verifiedOutcome(withV);
+    const demoted = withV.demoted || (o.demoted_reason ? { reason: o.demoted_reason } : undefined);
+    return { ...withV, ...o, ...(demoted ? { demoted } : {}), severity: o.final, severity_raised: f.severity, refuted: o.killed || o.closed };
+  });
+}
+
+// Carried findings (from finalize-gate --report) stay open until a confirmed closure.
+// A reviewer's re-listing of one is replaced by the carried record (original severity,
+// text, anchor, ref and test; reason "re-listed"), so re-listing can never demote,
+// re-verify or drop it; one the reviewer left out is added (reason "not-addressed").
+// from_cycle keeps the cycle the finding was first carried from. A finding whose raiser
+// is not in <roles> is written in roles[0]'s block (`host`): it stays open, and only its
+// raiser can close it. Closure claims (entries with `closure`) pass through. Returns the
+// full list, each id once.
+function materializeCarried(concerns, carried, cycle, roles) {
+  const byId = {};
+  for (const k of carried || []) if (k && typeof k.id === "string") byId[k.id] = k;
+  const record = (k, reason) => ({
+    id: k.id, severity: k.severity, raised_by: k.raised_by, text: k.text,
+    anchor: k.quote ? { kind: "quote", ...k.quote } : k.absent ? { kind: "absent", ...k.absent } : { kind: "none" },
+    ref: k.ref || "", test: k.test || "",
+    carried: { from_cycle: k.carried && Number.isInteger(k.carried.from_cycle) ? k.carried.from_cycle : cycle - 1, reason },
+    ...(Array.isArray(roles) && roles.length > 0 && roles.indexOf(k.raised_by) === -1 ? { host: roles[0] } : {}),
+  });
+  const seen = {};
+  const out = [];
+  for (const c of concerns || []) {
+    if (!c) continue;
+    if (c.closure) { seen[c.id] = true; out.push(c); continue; }
+    if (byId[c.id]) {
+      if (!seen[c.id]) out.push(record(byId[c.id], "re-listed"));
+      seen[c.id] = true;
+      continue;
+    }
+    out.push(c);
+  }
+  for (const k of carried || []) {
+    if (!k || typeof k.id !== "string" || seen[k.id]) continue;
+    seen[k.id] = true;
+    out.push(record(k, "not-addressed"));
+  }
+  return out;
+}
+
+// REVIEW.md lines for one verified finding. The header keeps the RAISED severity; the
+// gate recomputes the final one from the verdict lines.
+function formatVerifiedFindingLines(c, dispositionMap) {
+  const j = (o) => JSON.stringify(o);
+  const lines = [`- [${c.severity_raised || c.severity}] (${c.id}) ${flattenText(c.text)}`];
+  const a = c.anchor || {};
+  if (a.kind === "quote") lines.push(`  quote: ${j({ file: a.file, text: flattenText(a.text) })}`);
+  else if (a.kind === "absent") lines.push(`  absent: ${j({ file: a.file, section: flattenText(a.section), missing: flattenText(a.missing) })}`);
+  if (c.ref) lines.push(`  ref: ${flattenText(Array.isArray(c.ref) ? c.ref.join(", ") : c.ref)}`);
+  if (c.test) lines.push(`  test: ${flattenText(c.test)}`);
+  if (c.closure) lines.push(`  closure: ${j({ file: c.closure.file, text: flattenText(c.closure.text) })}`);
+  for (const v of c.verdicts || []) {
+    const out = { v: v.v, vote: v.vote, severity: v.severity };
+    if (v.reason) out.reason = flattenText(v.reason);
+    if (v.quote) out.quote = { file: v.quote.file, text: flattenText(v.quote.text) };
+    if (v.test_invalid === true) out.test_invalid = true;
+    lines.push(`  verdict: ${j(out)}`);
+  }
+  if (c.carried) lines.push(`  carried: ${j(c.carried)}`);
+  if (c.demoted) lines.push(`  demoted: ${j(c.demoted)}`);
+  if (c.verdicts && c.verdicts.length > 0) {
+    const n = c.verdicts.length;
+    const summary = c.closure ? `closure ${c.closed ? "confirmed" : "rejected"} (${c.verdicts.filter((v) => v.vote === "confirm").length}/${n})`
+      : c.killed ? `refuted ${c.verdicts.filter((v) => v.vote === "refute").length}/${n}` : `upheld, severity ${c.final}`;
+    lines.push(`  verified: ${summary}`);
+  }
+  if (!c.refuted && c.final === "major") {
+    const d = dispositionMap[c.id];
+    lines.push(d && d.action === "adr" ? `  disposition: adr ADR-${d.adr_id}` : "  disposition: fix");
+  }
+  return lines;
+}
+// --- VERIFIED-RULES END ---
 // --- LAYER1-PURE-HELPERS END ---
 
 // --- LENS START — reviewer lenses, injected into the read-only reviewer agent ---
