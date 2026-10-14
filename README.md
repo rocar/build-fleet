@@ -754,7 +754,7 @@ session per working tree; parallel clones are not serialized against each other.
 | Hook | Effect |
 |---|---|
 | `block-source-before-finalized` | Blocks all non-`.sdd/` writes until `spec.md` is FINALIZED (bug lane: non-`.sdd/`, non-`tests/` writes until the diagnosis is CONFIRMED). |
-| `guard-bash-writes` | Blocks shell-level source writes (`>`/`>>`, `tee`, `sed -i`, `patch`, `cp`/`mv` destinations) during the same locked phases — Bash is not an escape hatch around the write gates. NotebookEdit is covered by the file gates. |
+| `guard-bash-writes` | Blocks shell-level source writes (`>`/`>>`, `tee`, `sed -i`, `patch`, `cp`/`mv` destinations) during the same locked phases — Bash is not an escape hatch around the write gates. In every phase, it also refuses those writes to the event log (`EVENTS.jsonl`). NotebookEdit is covered by the file gates. |
 | `restrict-reviewer-writes` | Confines writes to `.sdd/<active>/` during REVIEW / CHANGE_REVIEW. |
 | `validate-spec-status` | Rejects a `spec.md` missing its STATUS line or required sections. |
 | `validate-backlog-status` | Rejects a `_product/backlog.md` missing its `PRODUCT:` header, STATUS line, or phase headings. |

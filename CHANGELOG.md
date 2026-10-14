@@ -25,9 +25,10 @@ only (never across clones).
   word and records the result in `.sdd/<slug>/EVENTS.jsonl`; a quote that is not found voids its vote.
 - The finalize gate recomputes verified votes, refuses `quote-check-missing` and
   `spec-changed-since-review`, `review-changed-since-check` (REVIEW.md edited after its quotes were
-  checked) and `verified-eval-failed`, and gains `--report`. One verifier counts once per finding,
-  whatever it returns.
-- Event log essentials: `log_event`, and a guard that keeps agents from writing the log.
+  checked) and `verified-eval-failed`, and gains `--report`. Only the three numbered panel verifiers
+  vote, each once per finding, whatever it returns.
+- Event log essentials: `log_event`, and guards that keep agents from writing the log, through the file
+  tools or through Bash.
 
 ### Compatibility
 - Nothing changes unless `REVIEW_SHAPE: verified` is set. Existing REVIEW.md files parse unchanged.

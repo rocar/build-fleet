@@ -364,7 +364,9 @@ function rotateLeft(list, k) {
 // {final, killed, closed, demoted_reason}. Mirrors vr_outcome with no failed quotes.
 function verifiedOutcome(f) {
   const orig = vrRank(f.severity);
-  const vs = (f.verdicts || []).filter((v) => v && typeof v === "object");
+  // Only a panel verifier (v = 1, 2 or 3) votes, once (applyVerifiedVote numbers them).
+  const seenV = {};
+  const vs = (f.verdicts || []).filter((v) => v && typeof v === "object" && (v.v === 1 || v.v === 2 || v.v === 3) && !seenV[v.v] && (seenV[v.v] = true));
   const n = vs.length;
   if (f.carried) return { final: f.severity, killed: false, closed: false, demoted_reason: null };
   if (f.closure) {

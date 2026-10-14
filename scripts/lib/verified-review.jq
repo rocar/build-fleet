@@ -45,12 +45,13 @@ def vr_evidence($fails; $id):
 def vr_outcome($fails):
   . as $f
   | ($f.severity | vr_rank) as $orig
-  # One verdict per verifier: a repeated "v" keeps its first line (one voter, one vote).
-  | (reduce (($f.verdicts // [])[] | select(type == "object" and ((.invalid // false) | not))) as $x
+  # One verdict per verifier: only a panel verifier (v = 1, 2 or 3) votes, and a
+  # repeated "v" keeps its first line (one voter, one vote). A line with no v, or a v
+  # outside the panel, is not a vote.
+  | (reduce (($f.verdicts // [])[] | select(type == "object" and ((.invalid // false) | not))
+             | select(.v == 1 or .v == 2 or .v == 3)) as $x
        ({seen: {}, out: []};
-        if ($x.v | type) == "number" then
-          ($x.v | tostring) as $k | if .seen[$k] then . else .seen[$k] = true | .out += [$x] end
-        else .out += [$x] end) | .out) as $vs
+        ($x.v | tostring) as $k | if .seen[$k] then . else .seen[$k] = true | .out += [$x] end) | .out) as $vs
   | ($vs | length) as $n
   | if ($f.carried != null) then
       $f + {final: $f.severity, killed: false, closed: false, demoted_reason: null, reopened_closure: false}

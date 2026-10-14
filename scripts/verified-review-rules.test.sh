@@ -36,6 +36,29 @@ t "kill-on-two-valid-refutes" "$H
 $(up 1 major)
 $(rf 2 minor)
 $(rf 3 minor)" "$OUT" '[{"id":"qa-c1-1","final":"minor","killed":true}]'
+# A verdict counts only from a numbered verifier (v = 1, 2 or 3): hand-written lines
+# with no v, or a v outside the panel, never vote — they can neither kill nor demote.
+nv() { printf '  verdict: {"vote":"refute","severity":"%s","reason":"%s","quote":%s}' "$1" "$R" "$Q"; }
+t "unkeyed-verdicts-never-kill" "$H
+- [blocker] (qa-c1-1) c
+$(nv minor)
+$(nv minor)
+$(up 3 blocker)" "$OUT" '[{"id":"qa-c1-1","final":"blocker","killed":false}]'
+t "out-of-panel-v-never-kills" "$H
+- [blocker] (qa-c1-1) c
+$(rf 7 minor)
+$(rf 8 minor)
+$(up 3 blocker)" "$OUT" '[{"id":"qa-c1-1","final":"blocker","killed":false}]'
+t "out-of-panel-v-never-demotes" "$H
+- [major] (qa-c1-1) c
+$(up 1 major)
+$(lo 4 minor)
+$(lo 5 minor)" "$OUT" '[{"id":"qa-c1-1","final":"major","killed":false}]'
+t "out-of-panel-closure-confirms-never-close" "$H
+- [major] (qa-c1-1) c
+  closure: {\"file\":\"spec.md\",\"text\":\"Retries are capped at 3 attempts\"}
+  verdict: {\"v\":4,\"vote\":\"confirm\",\"severity\":\"major\",\"reason\":\"closed\"}
+  verdict: {\"vote\":\"confirm\",\"severity\":\"major\",\"reason\":\"closed\"}" '[$fs[] | vr_outcome([]) | {id, closed}]' '[{"id":"qa-c1-1","closed":false}]'
 t "one-refute-is-not-a-veto" "$H
 - [blocker] (qa-c1-1) c
 $(rf 1 minor)

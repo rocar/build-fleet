@@ -53,6 +53,7 @@ const panels = [
   { verdicts: [{ id: "qa-c1-1", vote: "refute", severity: "minor", reason: R, quote: Q }] },
 ];
 let [c] = applyVerifiedVote([f], panels);
+check("outcome-unnumbered-verdicts-never-kill", (() => { const o = verifiedOutcome({ id: "qa-c1-1", severity: "blocker", verdicts: [{ vote: "refute", severity: "minor", reason: R, quote: Q }, { v: 7, vote: "refute", severity: "minor", reason: R, quote: Q }, { v: 3, vote: "uphold", severity: "blocker" }] }); return !o.killed && o.final === "blocker"; })());
 check("vote-kill", c.killed && c.refuted && c.verdicts.length === 3 && eq(c.verdicts.map((v) => v.v), [1, 2, 3]));
 [c] = applyVerifiedVote([f], [panels[0], panels[1], null]);
 check("vote-one-refute-of-two-survives", !c.killed && c.severity === "major" && eq(c.verdicts.map((v) => v.v), [1, 2]));

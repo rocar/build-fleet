@@ -282,10 +282,13 @@ For verified blocks the gate:
 
 Added after the final code review (2026-10-14): the gate reads the current cycle's verified
 blocks by heading, not by roster (a role added with `--roles` still counts); it counts one
-verdict per verifier per finding (a repeated line keeps its first); it refuses
+verdict per verifier per finding (a repeated line keeps its first; only a verdict numbered
+`v` 1, 2 or 3 votes, so a line with no `v` or another number is not a vote); it refuses
 `review-changed-since-check` when the cycle's verified blocks differ from what the quote check
 hashed (`blocks_sha256` in the event); and it refuses `verified-eval-failed` rather than read a
-failed evaluation as "no open findings".
+failed evaluation as "no open findings". Added after the cross-model review (2026-10-14):
+`guard-bash-writes.sh` refuses Bash writes to the event log (`>`/`>>`, `tee`, `sed -i`,
+`cp`/`mv`/`install`) in every phase, locked or not, as `guard-event-log.sh` does for Write/Edit.
 
 `review.js` still returns `finalize_ready`; for the verified shape it is provisional, and
 `/build-fleet:status` and `/build-fleet:finalize` show the gate's answer (`--report`,

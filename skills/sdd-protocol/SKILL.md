@@ -400,8 +400,9 @@ Registered in `hooks/hooks.json`; scripts (each with a committed test harness) i
 2. The Bash escape hatch is guarded: while source is locked, Bash commands matching
    write-to-source patterns (`>`/`>>` redirection, `tee`, `sed -i`, `patch`,
    `cp`/`mv`/`install` destinations) outside `.sdd/` and `tests/` are blocked —
-   conservative pattern matching; the Write/Edit gates remain the contract.
-   *(guard-bash-writes, PreToolUse Bash.)*
+   conservative pattern matching; the Write/Edit gates remain the contract. In every
+   phase, the same patterns are refused when they target the event log
+   (`.sdd/<slug>/EVENTS.jsonl`, `.sdd/_events.jsonl`). *(guard-bash-writes, PreToolUse Bash.)*
 3. During REVIEW and CHANGE_REVIEW, ALL writes are confined to `.sdd/<active>/` on
    non-workflow paths. On workflow REVIEW, reviewers run as the read-only
    `reviewer` agent (Read/Grep/Glob — the runtime's `agent()` has no tools option,
