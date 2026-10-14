@@ -12,7 +12,6 @@
 #        BUILD_FLEET_FINALIZE_GATE (test seam; default scripts/finalize-gate.sh)
 # bash 3.2 + BSD/GNU compatible. Requires jq (absent ⇒ unknown-state).
 set -uo pipefail
-export LC_ALL=C
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GATE="${BUILD_FLEET_FINALIZE_GATE:-$HERE/finalize-gate.sh}"
@@ -57,7 +56,7 @@ num(){ case "$1" in ''|*[!0-9]*) printf 0 ;; *) printf '%s' "$1" ;; esac; }
 slugify(){
   local base s i
   base=$(printf '%s' "$1" | awk '{ for (i = 1; i <= NF && i <= 6; i++) printf "%s ", $i }' \
-    | tr 'A-Z' 'a-z' | tr -cs 'a-z0-9' '-' | sed 's/^-*//; s/-*$//' | cut -c1-40 | sed 's/-*$//')
+    | LC_ALL=C tr 'A-Z' 'a-z' | LC_ALL=C tr -cs 'a-z0-9' '-' | sed 's/^-*//; s/-*$//' | LC_ALL=C cut -c1-40 | sed 's/-*$//')
   [ -n "$base" ] || return 0
   s="$base"; i=2
   while [ -e ".sdd/$s" ]; do s="$base-$i"; i=$((i + 1)); done

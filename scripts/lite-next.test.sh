@@ -280,6 +280,24 @@ mkdir -p "$P/src/deep"
 out="$(cd "$P/src/deep" && env -u CLAUDE_PROJECT_DIR bash "$ROUTER" build 2>&1)"
 if printf '%s' "$out" | grep -qF '"stop":"built"'; then pass=$((pass+1)); echo "ok   subdir-finds-project"; else fail=$((fail+1)); echo "FAIL subdir-finds-project got[$out]"; fi
 
+# the router must not force its C locale onto the finalize gate (UTF-8 block headings)
+proj; feature f DRAFT <<'EOF2'
+PHASE: REVIEW
+CYCLE: 1
+EOF2
+touch -t 202601010000 "$P/.sdd/f/spec.md"; printf 'x\n' > "$P/.sdd/f/REVIEW.md"; touch -t 202601010100 "$P/.sdd/f/REVIEW.md"
+cat > "$P/gate.sh" <<'EOF2'
+#!/usr/bin/env bash
+if [ "${LC_ALL:-}" = C ]; then
+  echo 'BUILD_FLEET_FINALIZE_REPORT: {"pass":false,"spec_changed":false,"reasons":["missing-architect"],"open":[]}'
+else
+  echo 'BUILD_FLEET_FINALIZE_REPORT: {"pass":false,"spec_changed":false,"reasons":["majors-open"],"open":[{"id":"a1"}]}'
+fi
+EOF2
+saved_lc="${LC_ALL-}"; export LC_ALL=en_US.UTF-8
+check gate-keeps-caller-locale '"step":"revise"' start
+if [ -n "$saved_lc" ]; then export LC_ALL="$saved_lc"; else unset LC_ALL; fi
+
 # ---- status ----
 proj; check status-nothing '"stop":"nothing-to-do"' status
 proj; product PLAN_REVIEW; check status-plan-ready '"stop":"plan-ready"' status

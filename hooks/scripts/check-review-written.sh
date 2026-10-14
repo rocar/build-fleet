@@ -84,7 +84,7 @@ fi
 # Accept en-dash, em-dash, or hyphen between fields in the heading. ${heading} is
 # phase-specific ("Cycle" | "Change-Cycle"), so a stale spec-review "## Cycle N"
 # block can never satisfy a CHANGE_REVIEW "## Change-Cycle N" check (and vice versa).
-if ! grep -Eq "^##[[:space:]]+${heading}[[:space:]]+${cycle}[[:space:]]+[—–-][[:space:]]+${agent_short}[[:space:]]+[—–-]" "$review_file"; then
+if ! grep -Eq "^##[[:space:]]+${heading}[[:space:]]+${cycle}[[:space:]]+(—|–|-)[[:space:]]+${agent_short}[[:space:]]+(—|–|-)" "$review_file"; then
   echo "build-fleet: ${agent_short} stopped without appending its ${heading} ${cycle} block to REVIEW.md." >&2
   echo "Expected a heading matching: ## ${heading} ${cycle} — ${agent_short} — <iso8601>" >&2
   exit 2

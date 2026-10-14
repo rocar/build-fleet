@@ -51,6 +51,9 @@ only (never across clones).
 - `park`, `resolve-escalation`, `plan-finalize` — their behavior moved into `status`, unchanged.
 
 ### Fixed
+- The review gates (`finalize-gate`, `change-review-gate`, the `check-review-written` hook) missed every
+  `## Cycle N — <role> —` heading when run in a C locale: the `[—–-]` bracket matched one byte of the
+  three-byte em dash. Headings now match in every locale.
 - `workflows/plan-review.js` did not parse (backticks inside a template literal, since 0.9.0), so
   the product-plan review could not load.
 

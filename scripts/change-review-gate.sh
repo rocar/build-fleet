@@ -64,7 +64,7 @@ add() { eval "$1=\"\${$1}\${$1:+\$'\\n'}\$2\""; }
 # ---- pass one: scan every roster block, record blockers and per-id major states ----
 for role in $roles; do
   [ -f "$review" ] || { add reasons "missing-${role}"; continue; }
-  start=$({ grep -nE "^##[[:space:]]+Change-Cycle[[:space:]]+${cycle}[[:space:]]+[—–-][[:space:]]+${role}[[:space:]]+[—–-]" "$review" || true; } | tail -1 | cut -d: -f1)
+  start=$({ grep -nE "^##[[:space:]]+Change-Cycle[[:space:]]+${cycle}[[:space:]]+(—|–|-)[[:space:]]+${role}[[:space:]]+(—|–|-)" "$review" || true; } | tail -1 | cut -d: -f1)
   if [ -z "$start" ]; then add reasons "missing-${role}"; continue; fi
   next=$({ tail -n +"$((start+1))" "$review" | grep -n '^## ' || true; } | head -1 | cut -d: -f1)
   if [ -n "$next" ]; then end=$((start+next-1)); else end=$(grep -c '' "$review" || true); fi   # grep -c '' counts an unterminated last line; wc -l does not
