@@ -327,6 +327,9 @@ made by subagents inside a workflow run (the scribe's marker release). The dashb
 rests on the same assumption. If it fails, the fallback is the gate refusing
 `quote-check-missing`, and the design must move the check before this ships.
 
+Verified 2026-10-14 (Claude Code 2.1.299): a plugin PostToolUse(Write)
+hook received the workflow subagent's empty Write of `.workflow-in-flight`.
+
 ### 3.7 Agents and skills
 
 - `skills/review-rubric/SKILL.md` and its mirrors in `agents/architect.md`, `agents/qa.md`,
