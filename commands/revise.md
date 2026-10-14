@@ -1,6 +1,6 @@
 ---
 description: Hand the product-owner exactly the open review items to close
-allowed-tools: Read, Task
+allowed-tools: Read, Task, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh":*)
 ---
 
 # /build-fleet:revise
@@ -24,7 +24,14 @@ It never edits `.sdd/` itself; the product-owner writes `spec.md` / `acceptance.
    — a human resolves it first.
 
 3. **Extract the open items.** Read `CYCLE` and `REVIEW_ROLES` (default
-   `architect, qa, coder`). In `.sdd/<slug>/REVIEW.md`, take the **last** block per
+   `architect, qa, coder`).
+   **Verified cycle** (the newest `## Cycle <CYCLE>` blocks have `shape: verified` as their second
+   line): run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh" "<slug>" --report` and take the
+   open items from its `open` array. Render each as `- [<severity>] (<id>) <text>`, appending
+   ` — reopened: a quote that closed it was not found in the spec` when `why` is
+   `reopened-closure`, and ` — carried from an earlier cycle` when `why` is `carried` or
+   `carried-open`; `major-without-adr` items are not handed to the PO (the gate reports them).
+   Skip the REVIEW.md extraction below. **Debate cycle:** In `.sdd/<slug>/REVIEW.md`, take the **last** block per
    roster role headed `## Cycle <CYCLE> — <role> —`. From those blocks collect:
    - every `- [blocker] (<id>) <text>` line that is open: a `[blocker]` line is open
      unless a `refuted-by:` continuation follows it (any indented continuation lines

@@ -14,6 +14,26 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.11.0] — 2026-10-14
+
+### Added
+- **Verified review** (`REVIEW_SHAPE: verified`, opt-in; `debate` stays the default): findings carry a
+  verbatim spec quote (or a named absence) and a failing test; a panel of three fresh verifiers judges
+  each one; two quote-backed refutations kill a finding, one never does; severity is the median vote,
+  lowered only with quoted evidence; open findings carry forward between cycles.
+- `scripts/quote-check.sh`, run by a hook when the review's scribe finishes, checks every quote word for
+  word and records the result in `.sdd/<slug>/EVENTS.jsonl`; a quote that is not found voids its vote.
+- The finalize gate recomputes verified votes, refuses `quote-check-missing` and
+  `spec-changed-since-review`, `review-changed-since-check` (REVIEW.md edited after its quotes were
+  checked) and `verified-eval-failed`, and gains `--report`. Only the three numbered panel verifiers
+  vote, each once per finding, whatever it returns.
+- Event log essentials: `log_event`, and guards that keep agents from writing the log, through the file
+  tools or through Bash.
+
+### Compatibility
+- Nothing changes unless `REVIEW_SHAPE: verified` is set. Existing REVIEW.md files parse unchanged.
+  `SDD_SCHEMA` stays 1. `.sdd/<slug>/EVENTS.jsonl` is new and committed with the rest of `.sdd/`.
+
 ## [0.10.1] — 2026-10-11
 
 Documentation and prompt fixes from a review of the 0.10.0 surface. One of them changes behavior.

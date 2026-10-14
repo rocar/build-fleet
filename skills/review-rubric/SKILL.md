@@ -28,6 +28,15 @@ Use the exact strings `[blocker]`, `[major]`, `[minor]` — including the
 square brackets — as item prefixes in REVIEW.md. The finalize gate uses a
 literal substring search.
 
+<!-- verified-rule:start -->
+In a verified review (`REVIEW_SHAPE: verified`), a `[blocker]` or `[major]` carries an anchor and a test,
+or it is recorded as a `[minor]`. The anchor is a quote of 10–500 characters copied verbatim from
+`spec.md`, `acceptance.md`, `DECISIONS.md` or `_product/DECISIONS.md`, or a named absence (the file, an
+existing section heading, and what is missing). The test is one sentence naming a test that would fail
+if the finding is real. Quotes are checked word for word after the review: a finding whose anchor quote
+is not found is demoted, and a verifier's vote whose quote is not found does not count.
+<!-- verified-rule:end -->
+
 ## REVIEW.md entry shape
 
 ```markdown
@@ -107,6 +116,26 @@ finding the next reviewer should re-raise by id — same content, elevated to
   later cycle simply does not re-raise it.
 - **`status:` is informational.** The finalize gate reads `[blocker]` lines and
   `disposition:` / `refuted-by:` lines (`scripts/finalize-gate.sh`).
+
+## Verified review
+
+When `REVIEW_SHAPE: verified` is set, the cross-examination and survival vote are replaced:
+
+- **A panel of three fresh verifiers** judges every blocker and major, and every closure claim, without
+  seeing who raised it, the reviewer's reasoning, or each other. Each returns `uphold`/`refute`
+  (closures: `confirm`/`reject`), a severity, a reason, and a quote when refuting or lowering severity.
+- **A finding is killed by two valid refutations** (quote + a reason of at least 40 characters). One
+  refutation is never enough.
+- **Severity is the median vote**, capped at the raised severity; a lower vote counts only with quoted
+  evidence. A majority `test_invalid` (the named test could not exercise the claim) demotes to minor.
+- **Quotes are checked after the review** (`scripts/quote-check.sh`); the finalize gate recomputes
+  every vote from the recorded verdicts and that check. A quote that is not found voids its vote; a
+  finding that loses its kill this way is reopened, and that cycle does not count against the budget.
+- **Open findings carry forward**: an open finding of the previous cycle is closed only by a quoted
+  closure the panel confirms; otherwise it is carried unchanged (`carried:` line), whether or not its
+  reviewer re-lists it.
+- **Limit:** the quote check catches invented quotes, not a real quote used to argue a wrong point; the
+  majority vote is the defence against that.
 
 ## Hard rules
 

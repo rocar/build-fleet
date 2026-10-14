@@ -179,3 +179,41 @@ path_in_tests() {
     *) return 1 ;;
   esac
 }
+
+# --- Event log (build-fleet/event@1) ---
+
+# Append one event line to .sdd/<slug>/EVENTS.jsonl, or .sdd/_events.jsonl when the
+# slug is empty. $2 is a JSON object merged into {v, ts, slug}. Logging NEVER changes
+# a caller's decision: every failure (no jq, bad payload, unwritable file) is noted on
+# stderr and swallowed — the one deliberate exception to "hooks fail closed".
+# Usage: log_event <slug> '<json-object>'
+log_event() {
+  local slug="$1" extra="${2:-}" file ts line
+  [ -n "$extra" ] || extra='{}'
+  if [ -n "$slug" ]; then
+    case "$slug" in */*|..|.|-*) echo "build-fleet: log_event: bad slug '$slug'; event dropped" >&2; return 0 ;; esac
+    file=".sdd/${slug}/EVENTS.jsonl"
+  else
+    file=".sdd/_events.jsonl"
+  fi
+  command -v jq >/dev/null 2>&1 || { echo "build-fleet: log_event: jq not found; event dropped" >&2; return 0; }
+  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  line=$(jq -cn --arg ts "$ts" --arg slug "$slug" --argjson extra "$extra" '{v: 1, ts: $ts, slug: $slug} + $extra' 2>/dev/null) \
+    || { echo "build-fleet: log_event: bad event payload; event dropped" >&2; return 0; }
+  { printf '%s\n' "$line" >> "$file"; } 2>/dev/null \
+    || { echo "build-fleet: log_event: cannot append to ${file}; event dropped" >&2; return 0; }
+  return 0
+}
+
+# Echo the events of one kind/source from .sdd/<slug>/EVENTS.jsonl as compact JSON
+# lines, skipping malformed lines. Usage: read_events <slug> <source>
+read_events() {
+  local f=".sdd/$1/EVENTS.jsonl"
+  [ -f "$f" ] || return 0
+  jq -cR --arg src "$2" 'fromjson? // empty | select(type == "object" and .source == $src)' "$f" 2>/dev/null || true
+}
+
+# sha256 of stdin, hex only. GNU sha256sum, else BSD/macOS shasum.
+sha256_stdin() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -d' ' -f1
+}

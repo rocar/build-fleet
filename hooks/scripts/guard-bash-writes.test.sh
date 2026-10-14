@@ -83,6 +83,22 @@ rc=0; ( cd "$L" && printf '{"tool_input":{}}' | CLAUDE_PROJECT_DIR="$L" bash "$H
 if [ "$rc" -eq 0 ]; then pass=$((pass+1)); printf 'ok   %-40s rc=0\n' "no-command-payload-allowed"
 else fail=$((fail+1)); printf 'FAIL %-40s want=0 got=%s\n' "no-command-payload-allowed" "$rc"; fi
 
+# --- the append-only event log: Bash writes refused in EVERY state (locked, unlocked,
+# no active item); reads stay allowed ---
+for P in "$L" "$U" "$N"; do
+  n=$(basename "$P")
+  check "events-append-refused-$n" "$P" "echo '{\"source\":\"script:quote-check\"}' >> .sdd/feat/EVENTS.jsonl" 2
+  check "events-project-log-refused-$n" "$P" 'echo x >> .sdd/_events.jsonl' 2
+  check "events-quoted-target-refused-$n" "$P" 'printf x > "$CLAUDE_PROJECT_DIR/.sdd/feat/EVENTS.jsonl"' 2
+  check "events-bare-name-refused-$n" "$P" 'cd .sdd/feat && echo x >> EVENTS.jsonl' 2
+  check "events-tee-refused-$n" "$P" 'echo x | tee -a .sdd/feat/EVENTS.jsonl' 2
+  check "events-cp-refused-$n" "$P" 'cp /tmp/forged .sdd/feat/EVENTS.jsonl' 2
+  check "events-sed-inplace-refused-$n" "$P" "sed -i '' 's/fail/pass/' .sdd/feat/EVENTS.jsonl" 2
+  check "events-read-allowed-$n" "$P" 'jq -c . .sdd/feat/EVENTS.jsonl | tail -3' 0
+  check "events-grep-allowed-$n" "$P" 'grep quote-check .sdd/feat/EVENTS.jsonl > /tmp/qc.txt' 0
+done
+check "events-other-dir-allowed" "$U" 'echo x >> logs/EVENTS.jsonl' 0
+
 echo "-----"
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]

@@ -356,6 +356,39 @@ documented, per the 2026-06-09 audit's own staging advice.
 
 ---
 
+## v0.6–v0.10 — shipped
+
+Gate hardening, the generate-then-pin workflow lane, proportionate review (roster and cycle
+budget by tier and risk) and the devops-defers-to-gate patch. See CHANGELOG.md for each release.
+
+## v0.11 — verified review (shipped 2026-10-14, opt-in)
+
+What landed: `REVIEW_SHAPE: verified` replaces the debate's cross-examination and survival vote
+with a panel of three fresh verifiers. Findings carry a verbatim spec quote (or a named absence)
+and a failing test. Two quote-backed refutations kill a finding; one never does. Severity is
+the median vote, lowered only with quoted evidence. A hook checks every quote word for word
+when the review's scribe finishes and records the result in `.sdd/<slug>/EVENTS.jsonl`; the
+finalize gate recomputes the vote from the recorded verdicts and refuses on a missing check or
+a spec changed since review. Open findings carry forward between cycles. Debate stays the
+default.
+
+Open: the measurement that decides whether verified review becomes the default. It compares
+four arms on planted-defect specs: today's debate, a single reviewer, verified review, and
+verified review with verifiers on a different model. The bar: verified review must find more
+verified real defects per token than the single reviewer. The measurement protocol (with its
+planted-defect answer key) is still to be written.
+
+## Next — the approved order (roadmap review, 2026-10-14)
+
+1. **Lite** profile (with a drift gate): the smallest useful build-fleet.
+2. **Prove the review:** the four-arm measurement above, and audited test-first.
+3. **Dashboard and receipt:** a local dashboard that shows specs, findings, citations and
+   decisions and how they link; a receipt on every PR; Agent Trace output.
+4. **Launch:** a GitHub Action as the entry point.
+5. Later: live control of a running session from the dashboard.
+
+Each step gets its own spec, plan and approval.
+
 ## Durable principles (apply to every version)
 
 - **Spec is the contract.** No implementation begins until a spec is FINALIZED.

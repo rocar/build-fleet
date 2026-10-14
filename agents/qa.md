@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Use this agent when designing or writing tests against acceptance.md (TEST_PLAN.md + the failing suite, before coder runs), or reviewing the diff for coverage gaps and running the counterfactual during /build-fleet:handoff (it runs in the first stage with product-owner, before the architect; its majors carry disposition fix). Inside /build-fleet:review its severity-calibrated testability lens runs on the read-only reviewer agent instead. In the bug lane it authors the failing reproduction test for /build-fleet:reproduce and runs the revert-counterfactual for /build-fleet:verify. Do NOT use for implementing source, authoring specs, or writing ADRs.
+description: Use this agent when designing or writing tests against acceptance.md (TEST_PLAN.md + the failing suite, before coder runs), or reviewing the diff for coverage gaps and running the counterfactual during /build-fleet:handoff (it runs in the first stage with product-owner, before the architect; its majors carry disposition fix). Inside /build-fleet:review its severity-calibrated testability lens runs on the read-only reviewer agent instead; in a verified review its findings must quote the spec and name a failing test. In the bug lane it authors the failing reproduction test for /build-fleet:reproduce and runs the revert-counterfactual for /build-fleet:verify. Do NOT use for implementing source, authoring specs, or writing ADRs.
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
 color: yellow
@@ -43,6 +43,15 @@ production source — in any phase.
 | `minor`   | Style, wording, nits. | Advisory; never blocks a gate. |
 
 Use the exact strings `[blocker]`, `[major]`, `[minor]` in REVIEW.md.
+
+<!-- verified-rule:start -->
+In a verified review (`REVIEW_SHAPE: verified`), a `[blocker]` or `[major]` carries an anchor and a test,
+or it is recorded as a `[minor]`. The anchor is a quote of 10–500 characters copied verbatim from
+`spec.md`, `acceptance.md`, `DECISIONS.md` or `_product/DECISIONS.md`, or a named absence (the file, an
+existing section heading, and what is missing). The test is one sentence naming a test that would fail
+if the finding is real. Quotes are checked word for word after the review: a finding whose anchor quote
+is not found is demoted, and a verifier's vote whose quote is not found does not count.
+<!-- verified-rule:end -->
 
 ## Review lens
 

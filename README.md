@@ -170,9 +170,10 @@ either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field). The
 Plus deterministic shared scripts under `scripts/` (the backlog resolver, the
 intent-block extractor, the product-memory splice, the status snapshot, the
 atomic ACTIVE-lock acquirer, the finalize and change-review gates, the REVIEW.md
-rotation, the ADR index, plus the workflow determinism-lint and pinner that
+rotation, the ADR index, the verified review's quote check and carry (`quote-check.sh`,
+`review-carry.sh`), plus the workflow determinism-lint and pinner that
 govern the generate-then-pin lane — each with its own test harness), seven craft
-skills, twelve gate-enforcing hooks, and the shared memory layer under `.sdd/`.
+skills, fourteen gate-enforcing hooks, and the shared memory layer under `.sdd/`.
 
 ---
 
@@ -437,7 +438,10 @@ Four phases run as Claude Code **dynamic workflows** (JS scripts under
   **cross-examination** → **survival vote** → architect **disposition** of surviving
   majors (`adr` or `fix`) → scribe applies the verdict, `finalize_ready` and the
   ADRs. Between cycles `/build-fleet:revise` hands the PO exactly the open items;
-  REVIEW.md is rotated to the previous cycle at dispatch.
+  REVIEW.md is rotated to the previous cycle at dispatch. Optional verified review
+  (`REVIEW_SHAPE: verified`): fresh verifiers judge every finding, a finding dies only on
+  two quote-backed refutations, and every quote is checked against the spec before the
+  gate counts it.
 - **`/build-fleet:plan-review` → `workflows/plan-review.js`.** The product
   counterpart — product-owner/architect/qa **interrogate** the plan. **Forked, not
   parameterized:** no cross-examination, no survival vote, no auto-escalation. It
@@ -750,7 +754,7 @@ session per working tree; parallel clones are not serialized against each other.
 | Hook | Effect |
 |---|---|
 | `block-source-before-finalized` | Blocks all non-`.sdd/` writes until `spec.md` is FINALIZED (bug lane: non-`.sdd/`, non-`tests/` writes until the diagnosis is CONFIRMED). |
-| `guard-bash-writes` | Blocks shell-level source writes (`>`/`>>`, `tee`, `sed -i`, `patch`, `cp`/`mv` destinations) during the same locked phases — Bash is not an escape hatch around the write gates. NotebookEdit is covered by the file gates. |
+| `guard-bash-writes` | Blocks shell-level source writes (`>`/`>>`, `tee`, `sed -i`, `patch`, `cp`/`mv` destinations) during the same locked phases — Bash is not an escape hatch around the write gates. In every phase, it also refuses those writes to the event log (`EVENTS.jsonl`). NotebookEdit is covered by the file gates. |
 | `restrict-reviewer-writes` | Confines writes to `.sdd/<active>/` during REVIEW / CHANGE_REVIEW. |
 | `validate-spec-status` | Rejects a `spec.md` missing its STATUS line or required sections. |
 | `validate-backlog-status` | Rejects a `_product/backlog.md` missing its `PRODUCT:` header, STATUS line, or phase headings. |

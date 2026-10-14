@@ -1,7 +1,7 @@
 ---
 description: Report the active item's phase, cycles, and concerns
 model: haiku
-allowed-tools: Read, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/status-snapshot.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/next-feature.sh":*)
+allowed-tools: Read, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/status-snapshot.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/next-feature.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh":*)
 ---
 
 # /build-fleet:status
@@ -62,7 +62,8 @@ Snapshot (`build-fleet/status-snapshot@1`):
 
 3. **Read `.sdd/<active>/spec.md` first line.** Print the STATUS value.
 
-4. **Summarize the most recent REVIEW.md cycle.** If PHASE is in spec-review
+4. **Summarize the most recent REVIEW.md cycle.** If `REVIEW_SHAPE: verified` is set and the newest cycle blocks are verified, run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh" "<active>" --report` and print: the shape; open blockers and majors by id with their `why`; `spec_changed` when true ("the spec changed after it was reviewed — run /build-fleet:review"); and, from the last `script:quote-check` line of `.sdd/<active>/EVENTS.jsonl`, `checked` and `failures` (a failed quote means a reviewer or verifier cited text the spec does not contain).
+   If PHASE is in spec-review
    territory, find the LAST block per roster role tagged with the current
    `CYCLE` (a same-numbered earlier block — e.g. after the 0.8→0.9 migration
    reset — is superseded); if PHASE is in change-review territory, find every

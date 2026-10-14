@@ -12,6 +12,10 @@
 #   - `cp` / `mv` / `install` destinations
 # …whenever the resolved target is outside .sdd/ and tests/ (scratch space
 # /dev/*, /tmp/*, $TMPDIR stays usable).
+# In EVERY state (locked or not, active item or none) the same patterns are
+# refused when they target the append-only event log (.sdd/<slug>/EVENTS.jsonl,
+# .sdd/_events.jsonl): only build-fleet's scripts write it (guard-event-log.sh
+# covers Write/Edit; this covers Bash). Reading it stays allowed.
 #
 # This is deliberately CONSERVATIVE pattern matching, not a shell parser:
 #   - false-ALLOW is acceptable: exotic quoting, eval, $(...) indirection, or
@@ -34,16 +38,17 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 require_jq
 
 input=$(cat)
+cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
+[ -n "$cmd" ] || exit 0
 slug=$(resolve_active)
 
-# No active item → nothing is locked. Bootstrap-friendly.
-[ -n "$slug" ] || exit 0
-
 # Determine whether source is locked — mirrors the Write/Edit gate pair so the
-# two surfaces always agree.
-lane=$(resolve_lane "$slug")
+# two surfaces always agree. No active item → nothing is locked.
+lane=""
 locked=0
-if [ "$lane" = "bug" ]; then
+[ -z "$slug" ] || lane=$(resolve_lane "$slug")
+if [ -z "$slug" ]; then :
+elif [ "$lane" = "bug" ]; then
   # Bug lane: source unlocks on CONFIRMED *and* an existing reproducing test
   # (block-source-before-finalized AND require-reproducing-test combined).
   dstatus=$(read_diagnosis_status "$slug")
@@ -53,16 +58,41 @@ else
   status=$(read_spec_status "$slug")
   [ "$status" = "FINALIZED" ] || locked=1
 fi
-[ "$locked" -eq 1 ] || exit 0
-
-cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
-[ -n "$cmd" ] || exit 0
+# Unlocked and the event log not named anywhere → nothing to check.
+case "$cmd" in
+  *EVENTS.jsonl*|*_events.jsonl*) ;;
+  *) [ "$locked" -eq 1 ] || exit 0 ;;
+esac
 
 # Block with feedback the model can act on. $1 = the offending target.
 block() {
   echo "build-fleet: Bash write to '${1}' blocked — the active ${lane} '${slug}' is source-locked. Use the Write/Edit tools instead so the SDD gates can adjudicate (.sdd/ and tests/ remain writable)." >&2
   echo "Refused command: ${cmd}" >&2
   exit 2
+}
+
+block_events() {
+  echo "build-fleet: Bash write to '${1}' refused — it is the append-only event log; only build-fleet's scripts write it. Agents never edit it." >&2
+  echo "Refused command: ${cmd}" >&2
+  exit 2
+}
+
+# Return 0 when a write target is the event log: an EVENTS.jsonl/_events.jsonl
+# under .sdd/, or the bare name (written from inside .sdd/<slug>).
+is_event_log() {
+  case "$(basename "$1")" in EVENTS.jsonl|_events.jsonl) ;; *) return 1 ;; esac
+  case "$1" in */*) ;; *) return 0 ;; esac
+  case "$1" in .sdd/*|*/.sdd/*) return 0 ;; esac
+  path_in_sdd "$1"
+}
+
+# A write target: refused if it is the event log, else checked against the
+# source lock (only while locked).
+check_target() {
+  if is_event_log "$1"; then block_events "$1"; fi
+  [ "$locked" -eq 1 ] || return 0
+  target_is_safe "$1" || block "$1"
+  return 0
 }
 
 # Return 0 when a write target is harmless while locked: fd duplications and
@@ -90,7 +120,7 @@ qt=$( { printf '%s' "$cmd" | grep -oE '>>?[[:space:]]*("[^"]+"|'"'"'[^'"'"']+'"'
 if [ -n "$qt" ]; then
   while IFS= read -r t; do
     [ -n "$t" ] || continue
-    target_is_safe "$t" || block "$t"
+    check_target "$t"
   done <<< "$qt"
 fi
 
@@ -103,7 +133,7 @@ ut=$( { printf '%s' "$stripped" | grep -oE '[0-9]*>>?[[:space:]]*[^[:space:];|&<
 if [ -n "$ut" ]; then
   while IFS= read -r t; do
     [ -n "$t" ] || continue
-    target_is_safe "$t" || block "$t"
+    check_target "$t"
   done <<< "$ut"
 fi
 
@@ -128,7 +158,7 @@ check_segment() {
       # every non-flag argument is a write target
       for a in "$@"; do
         case "$a" in -*) continue ;; esac
-        target_is_safe "$a" || block "$a"
+        check_target "$a"
       done
       ;;
     cp|mv|install)
@@ -139,7 +169,7 @@ check_segment() {
         case "$a" in -*) ;; *) dest="$a" ;; esac
       done
       if [ -n "$dest" ]; then
-        target_is_safe "$dest" || block "$dest"
+        check_target "$dest"
       fi
       ;;
     sed)
@@ -153,11 +183,11 @@ check_segment() {
       for a in "$@"; do
         case "$a" in -*) continue ;; esac
         if [ "$first_seen" -eq 0 ]; then first_seen=1; continue; fi
-        target_is_safe "$a" || block "$a"
+        check_target "$a"
       done
       ;;
     patch)
-      block "(patch target — taken from the diff body)"
+      [ "$locked" -eq 0 ] || block "(patch target — taken from the diff body)"
       ;;
   esac
   return 0
