@@ -93,6 +93,10 @@ eq "feat-status"        "$(q "$o" '.active.status')"      "FINALIZED"
 eq "feat-cycle"         "$(q "$o" '.active.cycle')"       "1"
 eq "feat-change_cycle"  "$(q "$o" '.active.change_cycle')" "0"
 eq "feat-escalated"     "$(q "$o" '.active.escalated')"   "false"
+eq "feat-review-shape-default" "$(q "$o" '.active.review_shape')" "debate"
+printf 'REVIEW_SHAPE: verified\n' >> "$p/.sdd/auth/PROGRESS.md"
+o="$(cd "$p" && bash "$SNAP")"
+eq "feat-review-shape-verified" "$(q "$o" '.active.review_shape')" "verified"
 
 # ---- 4. escalated feature --------------------------------------------------
 printf 'phase: BUILD\ncycle 3 exhausted\n' > "$p/.sdd/auth/ESCALATION.md"

@@ -1,7 +1,7 @@
 ---
 description: Run the adversarial spec-review workflow
-argument-hint: "[--roles <r1,r2,...>] [--cycle-budget <1-3>] [--override-cost]"
-allowed-tools: Read, Write, Workflow, Bash(date:*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-rotate.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/adr-index.sh":*)
+argument-hint: "[--roles <r1,r2,...>] [--cycle-budget <1-3>] [--shape debate|verified] [--verifier-model opus|sonnet|haiku] [--verify-blockers-solo] [--override-cost]"
+allowed-tools: Read, Write, Workflow, Bash(date:*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-rotate.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/adr-index.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-carry.sh":*)
 ---
 
 # /build-fleet:review
@@ -36,10 +36,29 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
    **The reviewer roster and the cycle budget are configurable** (default roster `architect, qa, coder`; default budget `3`). Resolve each from two sources — **a per-run flag wins over the durable PROGRESS.md default**:
    - **roster**: `--roles <r1,r2,...>` in `$ARGUMENTS` → else `REVIEW_ROLES:` in PROGRESS.md → else unset. A roster is a comma-separated, ≥2-element subset of `architect, qa, coder, product-owner`.
    - **budget**: `--cycle-budget <n>` flag → else `REVIEW_CYCLE_BUDGET:` in PROGRESS.md → else `3`. Call the resolved integer `effective_budget` (treat unset as `3`); clamp it to `1..3` for the precondition below — the workflow re-clamps anything above the 3-cycle ceiling.
+   - **shape**: `--shape <debate|verified>` → else `REVIEW_SHAPE:` in PROGRESS.md → else unset (the workflow uses `debate`).
+   - **verifier model**: `--verifier-model <opus|sonnet|haiku>` → else `VERIFIER_MODEL:` → else unset (`sonnet`).
+   - **per-blocker panels**: `--verify-blockers-solo` → else `VERIFY_BLOCKERS_SOLO: true` → else unset.
+
+   **Carry.** Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-carry.sh" "<slug>"` and relay its
+   `BUILD_FLEET_REVIEW_CARRY:` line. When `previous_shape` is `verified`, the open set is its
+   `carried` array (`open_count` items) and `effective_budget` becomes
+   `effective_budget + exempt_cycles`, added after the clamp: a cycle whose quote check reopened
+   a finding does not count against the budget. Otherwise the open set is read from REVIEW.md
+   as below. If the script exits without a `BUILD_FLEET_REVIEW_CARRY:` line, refuse before
+   dispatch: `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"carry-unavailable"}`,
+   show its stderr, and say: the last cycle's open findings could not be read; run
+   `/build-fleet:status` and re-run review once the gate's report works.
+
+   **Shape is fixed per review phase.** When `previous_shape` is `debate` or `verified` and the
+   resolved shape (flag, else PROGRESS.md, else `debate`) differs from it, refuse before dispatch:
+   `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"shape-changed-mid-feature","previous":"<previous_shape>","requested":"<shape>"}`
+   and say: switching shape mid-review would drop the open findings the other shape recorded;
+   finish this review phase in its shape, or change `REVIEW_SHAPE` only at cycle 1.
 
    The **workflow is the authoritative validator**: pass the resolved values straight through (step 9) and let `review.js` reject a malformed roster/budget via its `invalid-args` path — do **not** re-implement the allowed-role list or bounds here (that would drift). Do **not** write these into PROGRESS.md; a flag override applies to this run only and is recorded by the config signal line in step 8.
 
-   **Cycle-budget precondition.** The workflow escalates **on** the cycle that exhausts `effective_budget`: if open blockers or `fix`-dispositioned majors remain at `CYCLE == effective_budget`, that run writes ESCALATION.md and sets `PHASE: ESCALATED` (there is no separate "next cycle" — the exhausting cycle with open blockers or `fix` majors *is* the escalation). This refusal is a belt-and-suspenders guard for the edge where `CYCLE` is already `>= effective_budget` without a recorded escalation: if `CYCLE >= effective_budget` AND the most recent REVIEW.md cycle still has open `[blocker]` items or `disposition: fix` majors, refuse — a further run can only escalate, and the workflow owns that write. Refuse with: `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cycle-budget-exhausted","cycle":<n>,"cycle_budget":<effective_budget>}` — resolve blockers in spec.md or accept the escalation.
+   **Cycle-budget precondition.** The workflow escalates **on** the cycle that exhausts `effective_budget`: if open blockers or `fix`-dispositioned majors remain at `CYCLE == effective_budget`, that run writes ESCALATION.md and sets `PHASE: ESCALATED` (there is no separate "next cycle" — the exhausting cycle with open blockers or `fix` majors *is* the escalation). This refusal is a belt-and-suspenders guard for the edge where `CYCLE` is already `>= effective_budget` without a recorded escalation: if `CYCLE >= effective_budget` AND the open set is non-empty (verified: `open_count` > 0; debate: open `[blocker]` items or `disposition: fix` majors in the most recent REVIEW.md cycle), refuse — a further run can only escalate, and the workflow owns that write. Refuse with: `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"cycle-budget-exhausted","cycle":<n>,"cycle_budget":<effective_budget>}` — resolve blockers in spec.md or accept the escalation.
 
    **Cumulative-cycle precondition (v0.9).** Read `CYCLE_TOTAL` (absent ⇒ use `CYCLE`)
    and `CYCLE_TOTAL_MAX` (absent ⇒ `6`; `0` disables). `CYCLE_TOTAL` never resets —
@@ -94,12 +113,12 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
    Then emit exactly one **review-config** line recording the effective roster + budget and where each came from — this is what makes a flag override (which is not persisted) auditable in the run log:
 
    ```
-   BUILD_FLEET_REVIEW_CONFIG: {"feature":"<slug>","cycle":<N>,"roles":<["..."] | "default">,"cycle_budget":<n | "default">,"roles_source":"flag"|"progress"|"default","budget_source":"flag"|"progress"|"default","cycle_total":<n>,"next_adr_id":<n>,"override_cost":<true|false>}
+   BUILD_FLEET_REVIEW_CONFIG: {"feature":"<slug>","cycle":<N>,"roles":<["..."] | "default">,"cycle_budget":<n | "default">,"roles_source":"flag"|"progress"|"default","budget_source":"flag"|"progress"|"default","shape":<"debate"|"verified"|"default">,"exempt_cycles":<n>,"cycle_total":<n>,"next_adr_id":<n>,"override_cost":<true|false>}
    ```
 
 9. **Invoke the Workflow tool.** Call `Workflow` with:
    - `scriptPath`: `${CLAUDE_PLUGIN_ROOT}/workflows/review.js`
-   - `args`: `{ "feature": "<slug>", "cycle": <new_cycle>, "now": "<now>", "run_id": "<run id from step 7>", "cycle_total": <cycle_total from 6c>, "next_adr_id": <next_adr_id from 6c> }` — **plus** `"roles": [<resolved roster>]` and/or `"cycle_budget": <resolved int>` ONLY when they were resolved from a flag or a `REVIEW_*` PROGRESS.md field in step 5. **Omit those two keys entirely when unset** so the workflow applies its own default.
+   - `args`: `{ "feature": "<slug>", "cycle": <new_cycle>, "now": "<now>", "run_id": "<run id from step 7>", "cycle_total": <cycle_total from 6c>, "next_adr_id": <next_adr_id from 6c> }` — **plus** `"roles": [<resolved roster>]` and/or `"cycle_budget": <resolved int>` ONLY when they were resolved from a flag or a `REVIEW_*` PROGRESS.md field in step 5. **Omit those two keys entirely when unset** so the workflow applies its own default. Plus "shape", "verifier_model" and "verify_blockers_solo" ONLY when resolved from a flag or PROGRESS.md. When the resolved shape is "verified" AND the carry line's previous_shape is "verified", also pass "carried": <its carried array, verbatim> and "exempt_cycles": <its exempt_cycles>. Omit every unset key.
 
    The `now` is the one you computed with `date -u` in step 7 (the script cannot call `Date`); the workflow refuses to run without it. The Workflow tool is async-launched: it returns immediately with a `runId`, `taskId`, and `transcriptDir`.
 
@@ -129,9 +148,11 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
       - `incomplete` / `invalid-args` → a transient agent fault or bad dispatch args;
         PHASE/CYCLE are unchanged and nothing was written — re-run `/build-fleet:review`
         (or fix the dispatch args). `incomplete` with `reason: disposition-incomplete` means
-        the architect leg missed a major — re-run.
+        the architect leg missed a major — re-run. `reason: verifier-panel` means fewer than two
+        verifiers returned a usable verdict set — re-run.
       Note `verdict: clean` means zero surviving BLOCKERS and is NOT finalize-readiness;
       `finalize_ready` is.
+    - **Verified shape:** the quote check runs when the scribe finishes; the workflow's `finalize_ready` is provisional — `/build-fleet:status` and `/build-fleet:finalize` show the gate's answer.
     - **Scribe-apply failure is a hard failure.** If the completed run's return object carries `scribe_apply: "failed"`, the scribe could not write state even after a retry: REVIEW.md/PROGRESS.md did **not** land and the marker may remain (release it if its content matches your run id). Whoever reads that result (you, `/build-fleet:status`, or an orchestrator) must report the run as failed with its `scribe_error` — never treat the verdict as applied or advance to the next command.
 
 ## What this command does NOT do

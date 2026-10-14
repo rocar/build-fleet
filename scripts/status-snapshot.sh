@@ -42,6 +42,7 @@
 #       "status":"FINALIZED"|null,           # spec STATUS, or diagnosis STATUS for bugs
 #       "cycle":N|null,"change_cycle":N|null,# feature lane
 #       "sev":"sev1"|null,"fix_cycle":N|null,# bug lane
+#       "review_shape":"debate"|"verified",   # feature lane: REVIEW_SHAPE, default debate
 #       "escalated":true|false
 #     }|null
 #   }
@@ -187,15 +188,18 @@ if [ -n "$slug" ] && [ -d ".sdd/${slug}" ]; then
     status="$(read_spec_status "$slug")"
     cycle="$(read_progress_field "$slug" CYCLE)"
     change_cycle="$(read_progress_field "$slug" CHANGE_CYCLE)"
+    review_shape="$(read_progress_field "$slug" REVIEW_SHAPE)"
+    [ -n "$review_shape" ] || review_shape=debate
     active_json="$(jq -n \
       --arg slug "$slug" --arg lane "$lane" --arg phase "$phase" \
       --arg status "$status" --arg cycle "$cycle" --arg change_cycle "$change_cycle" \
-      --argjson escalated "$escalated" \
+      --arg review_shape "$review_shape" --argjson escalated "$escalated" \
       '{slug:$slug, lane:$lane,
         phase: (if $phase  == "" then null else $phase  end),
         status:(if $status == "" then null else $status end),
         cycle:        (if $cycle        == "" then null else ($cycle|tonumber? // $cycle)               end),
         change_cycle: (if $change_cycle == "" then null else ($change_cycle|tonumber? // $change_cycle) end),
+        review_shape:$review_shape,
         escalated:$escalated}')"
   fi
 fi

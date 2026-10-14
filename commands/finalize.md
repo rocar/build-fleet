@@ -102,6 +102,8 @@ cycle.
    - `open-blockers` — current cycle has open `[blocker]` items
    - `majors-open` — `[major]` items dispositioned `fix` (or carrying no disposition line)
    - `majors-without-adr` — `[major]` items whose `disposition: adr ADR-N` cites an ADR absent from DECISIONS.md
+   - `quote-check-missing` — a verified review cycle has no quote-check result (the check runs when the review's scribe finishes; it needs jq and the plugin's hooks enabled) — re-run `/build-fleet:review`
+   - `spec-changed-since-review` — spec.md, acceptance.md or an existing DECISIONS.md entry changed after this cycle was reviewed (the STATUS line and appended ADRs do not count) — re-run `/build-fleet:review` so the change is reviewed
    - `not-approved` — **no longer emitted since v0.9** (status lines are informational); kept in the grammar for older orchestrators
 
    Then the structured list (human-readable):
