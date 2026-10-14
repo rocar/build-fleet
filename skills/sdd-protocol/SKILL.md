@@ -70,6 +70,7 @@ Two deeper references live alongside this file:
     PROGRESS.md          # orchestrator. Phase + cycle state (schema below).
     SKILL_MANIFEST.md    # orchestrator (from classifier). OPTIONAL. Per-role domain skills to load at BUILD.
     ESCALATION.md        # exists only when a gate has exhausted its cycles.
+    EVENTS.jsonl         # build-fleet scripts only. Append-only event log (gate decisions, quote checks). Agents never write it.
   <bug>/                 # bug lane: diagnosis.md replaces spec.md (see references/bug-lane.md).
 ```
 
@@ -138,6 +139,9 @@ BUILD_MODE: standard | deep-build   # selects /build-fleet:build's orchestration
 RISK: low | elevated                 # set by the classifier at /build-fleet:new-feature (reversibility, blast radius, the never-trivial list). `pending` until it runs. With TIER it selects the seeded review roster and budget.
 REVIEW_ROLES: <csv>         # optional — /build-fleet:review roster (>=2 of architect,qa,coder,product-owner). Seeded by new-feature from TIER + RISK (table in commands/new-feature.md step 7; architect,qa,coder for every standard and large feature); absent ⇒ architect,qa,coder. A --roles flag overrides per-run.
 REVIEW_CYCLE_BUDGET: <int>  # optional — /build-fleet:review escalation budget (1..3, clamped to the ceiling). Seeded with the roster (3 for standard and large; 2 on the trivial row); absent ⇒ 3. A --cycle-budget flag overrides per-run.
+REVIEW_SHAPE: debate | verified   # optional — /build-fleet:review shape; absent ⇒ debate. --shape overrides per run.
+VERIFIER_MODEL: opus | sonnet | haiku   # optional — verified shape's panel model; absent ⇒ sonnet.
+VERIFY_BLOCKERS_SOLO: true | false      # optional — verified shape: one 3-verifier panel per blocker; absent ⇒ false.
 BUILD_CYCLE_BUDGET: <int>   # optional — deep-build escalation budget (1..3, clamped). Default 3. A --cycle-budget flag overrides per-run.
 CYCLE_TOTAL: <int>          # cumulative spec-review cycles, scribe-written, NEVER reset (not by resolve-escalation, not by park)
 CYCLE_TOTAL_MAX: <int>      # /build-fleet:review refuses to dispatch when CYCLE_TOTAL_MAX is not 0 and CYCLE_TOTAL >= CYCLE_TOTAL_MAX (default 6; 0 disables)
@@ -198,6 +202,8 @@ until a later cycle simply does not re-raise it. Every surviving `[major]` carri
 a `disposition:` continuation line written by the review workflow's architect leg
 — `fix` (open: the PO must close it) or `adr ADR-K` (accepted: closed by that
 feature ADR). `status:` is informational since v0.9.
+
+In the verified shape (REVIEW_SHAPE: verified) each block's second line is "shape: verified" and blockers and majors carry quote:/absent:, test:, verdict: and verified: lines (format: the review-rubric skill and docs/history/2026-10-14-verified-review.md §3.2). The finalize gate recomputes the vote from the verdict lines and the cycle's quote-check event in .sdd/<slug>/EVENTS.jsonl; refuted-by: is not used.
 
 In workflow REVIEW the reviewer subagents return structured concerns payloads; the
 workflow merges them into the canonical entries above and the `scribe` appends them.

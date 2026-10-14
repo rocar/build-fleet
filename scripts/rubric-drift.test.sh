@@ -74,6 +74,19 @@ for f in "${files[@]}"; do
   fi
 done
 
+# The verified-review rule is mirrored the same way, between these markers.
+extract_verified() {
+  awk '/<!-- verified-rule:start -->/{g=1;next} /<!-- verified-rule:end -->/{g=0} g' "$1" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//'
+}
+vref=$(extract_verified "$ref_file")
+if [ -z "$vref" ]; then printf 'FAIL %-44s no verified-rule block in %s\n' "verified-anchor-present-in-skill" "$ref_file"; fail=$((fail+1))
+else printf 'ok   %-44s\n' "verified-anchor-present-in-skill"; pass=$((pass+1)); fi
+for f in "${files[@]}"; do
+  [ "$f" = "$ref_file" ] && continue
+  name="verified-rule-matches-$(basename "$f")"
+  if [ "$(extract_verified "$f")" = "$vref" ] && [ -n "$vref" ]; then printf 'ok   %-44s\n' "$name"; pass=$((pass+1))
+  else printf 'FAIL %-44s drifted from %s\n' "$name" "$ref_file"; fail=$((fail+1)); fi
+done
 echo "-----"
 echo "passed=$pass failed=$fail"
 [ "$fail" -eq 0 ]
