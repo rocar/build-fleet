@@ -29,7 +29,7 @@ There is no non-workflow fallback for REVIEW. If the runtime is missing, refuse 
 
 3. **Check phase.** Read `.sdd/<slug>/PROGRESS.md`. If `PHASE` is not `SPEC` or `REVIEW`, refuse (`{"command":"review","code":2,"reason":"wrong-phase","phase":"<PHASE>"}`).
 
-4. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"review","code":2,"reason":"escalation-present"}`) — tell the user to read it and resolve it with `/build-fleet:resolve-escalation <decision>` (or park the feature).
+4. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"review","code":2,"reason":"escalation-present"}`) — tell the user to read it and resolve it with `/build-fleet:status resolve <decision>` (or park the feature).
 
 5. **Resolve the review config, then check the cycle budget.**
 

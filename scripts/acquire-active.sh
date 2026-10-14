@@ -22,7 +22,7 @@
 # there is NO stale-lock auto-expiry: staleness is the CALLER'S judgment.
 # `status` exposes owner/slug/held-since so a human or orchestrator can decide
 # whether a holder is dead and release deliberately (release <slug>, or
-# /build-fleet:park for the full sanctioned path).
+# /build-fleet:status park for the full sanctioned path).
 #
 # Scope: the lock serializes acquisition WITHIN one working tree. build-fleet
 # assumes one orchestrator session per worktree; two clones of the same repo
@@ -78,7 +78,7 @@ active_slug() {
 emit_conflict() { # <requested-slug> <active-slug> <owner> <held-since>
   printf 'BUILD_FLEET_ACTIVE_CONFLICT: {"requested":"%s","active":"%s","owner":"%s","held_since":"%s"}\n' \
     "$(json_str "$1")" "$(json_str "$2")" "$(json_str "$3")" "$(json_str "$4")"
-  echo "acquire-active.sh: .sdd/ACTIVE is held — owner '${3}', slug '${2}', since '${4}'. Not acquired. (Stale? A human decides: release '${2}' or /build-fleet:park.)" >&2
+  echo "acquire-active.sh: .sdd/ACTIVE is held — owner '${3}', slug '${2}', since '${4}'. Not acquired. (Stale? A human decides: release '${2}' or /build-fleet:status park.)" >&2
 }
 
 mode="${1:-}"

@@ -21,7 +21,7 @@ Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`).
    Read `.sdd/<slug>/PROGRESS.md`; `LANE` must be `bug` (else refuse — use the forward commands).
 
 2. **Check ESCALATION.** If `.sdd/<slug>/ESCALATION.md` exists → refuse
-   (`{"command":"fix","code":2,"reason":"escalation-present"}`) — `/build-fleet:resolve-escalation` is the unblock path.
+   (`{"command":"fix","code":2,"reason":"escalation-present"}`) — `/build-fleet:status resolve` is the unblock path.
 
 3. **The gate — determine the path.** Read `PHASE` + `SEV` from PROGRESS.md and the
    `diagnosis.md` STATUS:

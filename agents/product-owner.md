@@ -74,7 +74,7 @@ When the orchestrator runs `/build-fleet:new-product`, you additionally own:
 
 You do **not** own `.sdd/_product/STACK.md` or `.sdd/_product/DECISIONS.md` — those
 are the architect's. Leave `vision.md` and `backlog.md` at `STATUS: DRAFT` — the
-`/build-fleet:plan-finalize` ratification gate is the only thing that flips a
+`/build-fleet:status ratify` ratification gate is the only thing that flips a
 product STATUS; do not invent a transition.
 
 **Consuming the inherited intent (during `/build-fleet:new-feature`).** When

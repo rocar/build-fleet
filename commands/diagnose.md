@@ -36,8 +36,8 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
 
 4. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists → refuse
    (`{"command":"diagnose","code":2,"reason":"escalation-present"}`); tell the user to read it
-   and either resolve it with `/build-fleet:resolve-escalation <decision>` (revising the
-   hypothesis) or abandon the bug with `/build-fleet:park <reason>`.
+   and either resolve it with `/build-fleet:status resolve <decision>` (revising the
+   hypothesis) or abandon the bug with `/build-fleet:status park <reason>`.
 
 5. **Gate on a recorded hypothesis.** Read `.sdd/<slug>/diagnosis.md`. The
    `## Root-cause hypothesis`, `## Blast radius`, and `## Fix strategy` sections must each be

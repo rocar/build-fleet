@@ -228,7 +228,7 @@ prerequisites, none optional:**
   `workflows/plan-review.js` (forked; **interrogation, not survival-vote** — roles
   `[product-owner, architect, qa]` surface `question|risk|gap` findings, consolidated
   by pure JS, nothing auto-killed, never auto-escalates); `/build-fleet:plan-review` +
-  `/build-fleet:plan-finalize`; product `PROGRESS` `PHASE` + `CYCLE` fields seeded by
+  `/build-fleet:status ratify`; product `PROGRESS` `PHASE` + `CYCLE` fields seeded by
   `/new-product`; `validate-backlog-status.sh` (keys on `_product/backlog.md`; PRODUCT +
   STATUS + ≥1 phase heading). **Locked decisions:**
   - **PLAN_FINALIZE = explicit `ratify` arg.** Bare call is a **dry-run** (prints report +
@@ -245,7 +245,7 @@ prerequisites, none optional:**
   one-liner, **binding** stack, conventions) — **non-clobbering** (only the marked region
   is ever rewritten; an existing hand-authored CLAUDE.md keeps all its content) +
   **idempotent** (markers present → replace in place; absent → append at EOF; no file →
-  create). One algorithm in the `sdd-protocol` skill, two callers: `/build-fleet:plan-finalize`
+  create). One algorithm in the `sdd-protocol` skill, two callers: `/build-fleet:status ratify`
   generates best-effort on the ratify-flip; new `/build-fleet:product-memory` is the
   standalone regen/recover path. **Block-source caveat handled, not bypassed:** `./CLAUDE.md`
   is outside `.sdd/`, so generation is **pre-checked + deferred** (not forced) when an active

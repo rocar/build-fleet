@@ -44,7 +44,7 @@ spec STATUS contract.
      BUILD_FLEET_REFUSE: {"command":"new-feature","code":2,"reason":"active-feature-conflict","active":"<held slug>"}
      ```
      Tell the user the active slug, how to inspect it (`/build-fleet:status`),
-     and that `/build-fleet:park` is the sanctioned preemption path. Stop.
+     and that `/build-fleet:status park` is the sanctioned preemption path. Stop.
 
 2. **Scaffold `.sdd/<slug>/`** with the empty files the protocol expects:
    - `spec.md` — start with the STATUS line `STATUS: DRAFT` and the required

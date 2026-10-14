@@ -87,7 +87,7 @@ commands whose `allowed-tools` include `Workflow` (`/build-fleet:review`,
 | CHANGE_REVIEW | static | `/build-fleet:handoff` → 3× parallel `Task` reviewers + `Task` coder/devops |
 | Bug lane — triage / reproduce / fix / verify / ship-fix | static | commands + `Task` |
 | Bug lane — DIAGNOSE | **dynamic** | `workflows/diagnose.js` |
-| Product — PLAN, PLAN_FINALIZE | static | `/build-fleet:new-product`, `/build-fleet:plan-finalize` + scripts |
+| Product — PLAN, PLAN_FINALIZE | static | `/build-fleet:new-product`, `/build-fleet:status ratify` + scripts |
 | Product — PLAN_REVIEW | **dynamic** | `workflows/plan-review.js` |
 | DEVELOPING — advance | static | `/build-fleet:handoff` steps 12a–d + `scripts/next-feature.sh` |
 | All hard gates | static | `hooks/scripts/*` (PreToolUse / PostToolUse / SubagentStop / Stop) |
@@ -344,7 +344,7 @@ the run as **failed** (state did not land, marker may remain) — never advance.
 | `clean` | `true` | `PHASE:REVIEW`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` (+approving/refuted entries), `DECISIONS.md` (any `adr` dispositions) | `/build-fleet:finalize` → `/build-fleet:build` |
 | `clean` | `false` | `PHASE:REVIEW`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` (open `fix` major(s)), `DECISIONS.md` (any `adr` dispositions) | `/build-fleet:revise` (hands the PO exactly the open items) → `/build-fleet:review` |
 | `revise` | `false` | `PHASE:REVIEW`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` (surviving blockers) | `/build-fleet:revise` → `/build-fleet:review` |
-| `escalate` | `false` | `PHASE:ESCALATED`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` + `ESCALATION.md` (blockers **and** open majors) | human: `/build-fleet:resolve-escalation` or `/build-fleet:park` |
+| `escalate` | `false` | `PHASE:ESCALATED`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` + `ESCALATION.md` (blockers **and** open majors) | human: `/build-fleet:status resolve` or `/build-fleet:status park` |
 | `incomplete` / `invalid-args` | — | **unchanged** | none (marker released) | re-run `/build-fleet:review` (transient fault, bad args, or `disposition-incomplete`) |
 
 Cycle accounting: **one workflow run = one cycle**, against the per-escalation
@@ -353,7 +353,7 @@ disposition rounds do **not** bump that counter (`SKILL.md`, Operating principle
 The cycle that *exhausts* the budget with surviving blockers or open `fix` majors
 **is** the escalation — there is no separate 4th cycle. **v0.9 adds a second,
 cumulative counter**, `CYCLE_TOTAL`: every review cycle this feature has ever run,
-never reset — not by `/build-fleet:resolve-escalation`, not by `/build-fleet:park`.
+never reset — not by `/build-fleet:status resolve`, not by `/build-fleet:status park`.
 `/build-fleet:review` refuses to dispatch, before spending anything, when
 `CYCLE_TOTAL_MAX` is not `0` and `CYCLE_TOTAL ≥ CYCLE_TOTAL_MAX`
 (`cycle-total-exhausted`) — a backstop above the per-escalation budget, aimed at a

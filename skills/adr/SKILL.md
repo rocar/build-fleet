@@ -82,10 +82,10 @@ explain) do **not** bind features.
 **Promotion rule:** `PROVISIONAL → accepted` happens only when the strategy
 is ratified — at plan-review/plan-finalize (the human un-tags the forward
 entries, re-runs `/build-fleet:plan-review`, and ratifies with
-`/build-fleet:plan-finalize`), or by an explicit human edit promoting the
+`/build-fleet:status ratify`), or by an explicit human edit promoting the
 ADR. The architect records the promotion as an edit of that ADR's `Status:`
 line by the human's instruction (or a new superseding ADR); the
-`/build-fleet:plan-finalize` gate itself **never** promotes a PROVISIONAL
+`/build-fleet:status ratify` gate itself **never** promotes a PROVISIONAL
 ADR. `PROVISIONAL` is meaningless on a feature-scope ADR — feature decisions
 are made inside reviewed cycles and land as `accepted`.
 

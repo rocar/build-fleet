@@ -92,16 +92,15 @@ Findings may carry `split_into` (proposed sibling slugs) rendered as a
 lens flags an intent implying more than ~15 criteria as an over-scope `[major]`
 that must name its split.
 
-### PLAN_FINALIZE (`/build-fleet:plan-finalize`) — the ratification gate
+### PLAN_FINALIZE (`/build-fleet:status ratify`) — the ratification gate
 
 A product plan is **ratified, never auto-decided**, so this gate **never auto-passes —
 even with zero findings**:
 
-- *Bare* `/build-fleet:plan-finalize` is a **dry-run**: it prints the latest
-  interrogation report + open `[blocker]` count and **halts**. In headless mode
-  (`claude -p`) this is the whole safety story — and the command additionally carries
-  `disable-model-invocation: true`, so the model cannot ratify on its own.
-- `ratify` flips state **iff** zero open blocker-severity findings; open blockers → refuse.
+- *Bare* `/build-fleet:status` is the **dry run**: when the plan awaits ratification it
+  prints the latest interrogation report + open `[blocker]` count and **halts**. `status`
+  carries `disable-model-invocation: true`, so the model cannot ratify on its own.
+- `/build-fleet:status ratify` flips state **iff** zero open blocker-severity findings; open blockers → refuse.
 - `ratify force` flips over open blockers, recording them as consciously accepted.
 - `ratify` also refuses (`split-unresolved`) while a latest-cycle `split-into:` slug
   is neither a backlog row nor refused by a product ADR citing the finding id;
@@ -130,7 +129,7 @@ not a feature-creation block.
 
 On ratification, build-fleet seeds the repo's Claude memory with the ratified product
 so **any** Claude Code session (not just build-fleet commands) inherits the vision +
-**binding** stack. One algorithm, two callers: `/build-fleet:plan-finalize` triggers
+**binding** stack. One algorithm, two callers: `/build-fleet:status ratify` triggers
 it on the ratify-flip (best-effort), and `/build-fleet:product-memory` is the
 standalone (re)generation path (refresh after editing the plan, or recover a deferred
 write).
@@ -303,7 +302,7 @@ it).
 - `restrict-reviewer-writes` confines **all** writes to `.sdd/<active>/` while the
   active feature's `PHASE` is `REVIEW` or `CHANGE_REVIEW` (phase-based, not
   role-based). Therefore `/build-fleet:new-product`, `/build-fleet:plan-review`, and
-  `/build-fleet:plan-finalize` all **refuse to run** while a feature is in those two
+  `/build-fleet:status ratify` all **refuse to run** while a feature is in those two
   phases — the product foundation is not reshaped mid-review, and the product scribe
   could not write `.sdd/_product/` anyway. The interrogator roles also overlap the
   feature-reviewer set, so a mid-review feature would mis-fire `check-review-written`.

@@ -273,7 +273,7 @@ place rather than appending at EOF.
 /build-fleet:plan-review
 
 # 3. ratify it (human gate) → unlocks the DEVELOPING loop + writes product memory
-/build-fleet:plan-finalize ratify
+/build-fleet:status ratify
 
 # 4. start the next backlog feature (or run /new-feature <slug> directly)
 /build-fleet:next-feature        # resolves it; then:
@@ -544,7 +544,7 @@ execution.
 |---|---|---|
 | `/build-fleet:new-product <slug>` | PLAN | Scaffolds `.sdd/_product/`; PO drafts vision + phased backlog (with intents); architect ratifies (greenfield) or infers (brownfield) the stack. |
 | `/build-fleet:plan-review` | PLAN_REVIEW | Runs the interrogation workflow over the plan. Accepts `--roles` (else `PLAN_REVIEW_ROLES`). |
-| `/build-fleet:plan-finalize [ratify [force]]` | PLAN_FINALIZE → DEVELOPING | Ratification gate. Bare = dry-run + halt; `ratify` flips to DEVELOPING + writes product memory; `ratify force` overrides open blockers. |
+| `/build-fleet:status ratify [force]` | PLAN_FINALIZE → DEVELOPING | Ratification gate. Bare `status` = dry-run + halt; `ratify` flips to DEVELOPING + writes product memory; `ratify force` overrides open blockers. |
 | `/build-fleet:product-memory` | — | (Re)generates the `CLAUDE.md` product block (non-clobbering, idempotent). |
 | `/build-fleet:next-feature` | — | Resolves + gates the next unblocked backlog feature; emits a dispatch signal (does not auto-start). |
 
@@ -561,8 +561,8 @@ execution.
 | `/build-fleet:deep-build` | BUILD | Directly dispatches the fan-out build workflow (normally invoked for you by `/build-fleet:build`); also the iteration entry point. Accepts `--cycle-budget` (else `BUILD_CYCLE_BUDGET`). |
 | `/build-fleet:handoff` | CHANGE_REVIEW → HANDOFF | product-owner + qa review the diff, then architect (who may accept a peer's major by ADR); exits on the deterministic change-review gate; refuses if tests are missing/failing. On pass devops ships, the backlog flips, and the loop advances. |
 | `/build-fleet:status` | — | Prints active feature state (including TIER, RISK and the review roster), open concerns, cycle counts, the product backlog, and the next unblocked feature. **Bug-lane aware:** `LANE: bug` → phase / `SEV` / `diagnosis.md` STATUS / cycles. |
-| `/build-fleet:park <reason>` | any → PARKED | **Human-only** (not model-invocable). Records the parked state in PROGRESS.md and frees `.sdd/ACTIVE` — the sanctioned sev0-preemption path. Workspace stays intact. |
-| `/build-fleet:resolve-escalation [<slug>] <decision>` | ESCALATED → pre-escalation phase | **Human-only** (not model-invocable). Archives ESCALATION.md into REVIEW.md (append-only), resets the exhausted cycle counter, restores the phase. |
+| `/build-fleet:status park <reason>` | any → PARKED | **Human-only** (not model-invocable). Records the parked state in PROGRESS.md and frees `.sdd/ACTIVE` — the sanctioned sev0-preemption path. Workspace stays intact. |
+| `/build-fleet:status resolve [<slug>] <decision>` | ESCALATED → pre-escalation phase | **Human-only** (not model-invocable). Archives ESCALATION.md into REVIEW.md (append-only), resets the exhausted cycle counter, restores the phase. |
 
 **Bug lane:**
 

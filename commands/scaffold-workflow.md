@@ -41,7 +41,7 @@ running `/<name>` afterward does.
    scaffold-workflow authors an out-of-band project workflow; running it mid-feature/bug would
    collide with the reviewer-write confinement and reviewer-stop hooks, and a pin write to
    `.claude/workflows/` (outside `.sdd/`) is blocked while an item is source-locked. Tell the user
-   to finish the active item or `/build-fleet:park` it first. With nothing in flight, all of that
+   to finish the active item or `/build-fleet:status park` it first. With nothing in flight, all of that
    is moot — proceed to **Draft** or **Ratify**.
 
 ## Draft

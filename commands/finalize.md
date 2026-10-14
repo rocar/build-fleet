@@ -62,7 +62,7 @@ cycle.
 
 3. **Check ESCALATION.md.** If `.sdd/<active>/ESCALATION.md` exists, refuse —
    the feature is escalated and only a human can unblock it
-   (`/build-fleet:resolve-escalation` is the sanctioned path).
+   (`/build-fleet:status resolve` is the sanctioned path).
 
 4. **Run the gate script.** The gate is deterministic (v0.9) — never evaluate REVIEW.md
    in prose. Run:

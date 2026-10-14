@@ -25,5 +25,17 @@ hits=$(/usr/bin/grep -rlE '/build-fleet:(build|fix)([^-a-z]|$)' $internal \
 if [ -z "$hits" ]; then ok "no internal file names the old step names"
 else no "no internal file names the old step names" "$(echo $hits)"; fi
 
+# --- the three decisions live in status ---
+for c in park resolve-escalation plan-finalize; do
+  if [ -f "$ROOT/commands/$c.md" ]; then no "$c deleted" "commands/$c.md still exists"; else ok "$c deleted"; fi
+done
+stale=$(/usr/bin/grep -rlE '/build-fleet:(park|resolve-escalation|plan-finalize)([^-a-z]|$)' "$ROOT" \
+  --exclude-dir=.git --exclude-dir=history --exclude-dir=.sdd --exclude-dir=.superpowers --exclude=CHANGELOG.md --exclude=lite-surface.test.sh 2>/dev/null || true)
+if [ -z "$stale" ]; then ok "no file names a deleted command"; else no "no file names a deleted command" "$(echo $stale)"; fi
+for form in 'park <reason>' 'resolve' 'ratify'; do
+  if /usr/bin/grep -qF "$form" "$ROOT/commands/status.md"; then ok "status has $form"; else no "status has $form" "missing"; fi
+done
+if fm "$ROOT/commands/status.md" | /usr/bin/grep -q '^model:'; then no "status has no model pin" "model: still set"; else ok "status has no model pin"; fi
+
 echo "lite-surface: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

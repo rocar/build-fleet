@@ -49,7 +49,7 @@ safe.
 `/build-fleet:new-feature`). It refuses while `.sdd/ACTIVE` is non-empty — **a bug
 and a forward feature share the single `.sdd/ACTIVE` lock** (one item in flight, the
 simplest correct rule; there is no second `ACTIVE_BUG` lane, so a sev0 cannot preempt
-a mid-flight feature — the human parks the feature first with `/build-fleet:park`).
+a mid-flight feature — the human parks the feature first with `/build-fleet:status park`).
 On a clean lock it:
 
 1. derives a kebab-case `bug-<…>` slug and acquires the in-flight lock
@@ -185,5 +185,5 @@ Three gate commands carry a confirmed bug to a shipped fix, completing the lane:
 
 `/build-fleet:status` is bug-lane-aware (`LANE: bug` → prints phase / `SEV` /
 `diagnosis.md` STATUS / `CYCLE` / `FIX_CYCLE`). An escalated bug is unblocked with
-`/build-fleet:resolve-escalation <decision>` or abandoned with
-`/build-fleet:park <reason>`.
+`/build-fleet:status resolve <decision>` or abandoned with
+`/build-fleet:status park <reason>`.

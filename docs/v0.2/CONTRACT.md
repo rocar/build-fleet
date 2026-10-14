@@ -549,7 +549,7 @@ values (the scribe handles them uniformly via `workspace_dir`):
   `feature` carries the **product slug** (used for `SCRIBE_OK` + any ESCALATION title).
 - `verdict`: `"interrogated"` — informational only. Plan-review holds **no survival
   vote**, so `surviving_concerns` is always `[]` and the `verdict` never gates anything;
-  the human ratifies at `/build-fleet:plan-finalize`.
+  the human ratifies at `/build-fleet:status ratify`.
 - `escalation_payload`: **always `null`** — plan-review never auto-escalates. A missing
   interrogator payload halts the run *without writing any envelope* (the workflow returns
   `verdict:"incomplete"` and the command surfaces it); only a human writes

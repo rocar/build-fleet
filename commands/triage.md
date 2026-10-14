@@ -40,7 +40,7 @@ empty, refuse — you cannot triage without a symptom. Emit `BUILD_FLEET_REFUSE`
      BUILD_FLEET_REFUSE: {"command":"triage","reason":"item-in-flight","active":"<slug>"}
      ```
      Stop. (A sev0 cannot preempt a mid-flight feature here; the human parks the feature
-     first with `/build-fleet:park <reason>` — the sanctioned preemption path — then re-runs
+     first with `/build-fleet:status park <reason>` — the sanctioned preemption path — then re-runs
      the triage.)
 
 3. **Scaffold `.sdd/<bug-slug>/`** — exactly two files (the bug lane has **no** `spec.md`,

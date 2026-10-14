@@ -166,7 +166,7 @@ and `FIX_CYCLE` (verify→fix bounces), plus `FIX_DONE_CYCLE` (the `FIX_CYCLE` w
 `apply-fix` completed; `verify` is next while it equals `FIX_CYCLE`) — plus the same `SDD_SCHEMA: 1` stamp. The
 product tier's `_product/PROGRESS.md` is stamped too.
 
-`/build-fleet:park` sets `PHASE: PARKED` on either lane and appends a
+`/build-fleet:status park` sets `PHASE: PARKED` on either lane and appends a
 `PARKED: <iso8601> — was PHASE <prev> — <reason>` line; resuming is a deliberate
 human edit.
 
@@ -454,11 +454,11 @@ first-class outcome, not a failure — the human decides how to break the deadlo
 
 Two human-driven commands operate on stuck state:
 
-- **`/build-fleet:resolve-escalation <decision>`** — archives ESCALATION.md into
+- **`/build-fleet:status resolve <decision>`** — archives ESCALATION.md into
   REVIEW.md (append-only), deletes ESCALATION.md, resets the exhausted cycle
   counter (never `CYCLE_TOTAL`), restores the pre-escalation phase, and records the
   human decision. The sanctioned unblock path.
-- **`/build-fleet:park <reason>`** — records the parked state in PROGRESS.md and
+- **`/build-fleet:status park <reason>`** — records the parked state in PROGRESS.md and
   releases the in-flight lock via `acquire-active.sh release` (e.g. so a sev0 bug
   can be triaged mid-feature). Nothing is deleted; resuming is a deliberate human
   act (re-acquire the lock, restore the pre-park PHASE).

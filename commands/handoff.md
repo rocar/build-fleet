@@ -6,7 +6,7 @@ allowed-tools: Read, Write, Edit, Bash, Task
 <!-- Deliberately model-invocable (audit §3.22 evaluated): handoff is dispatched
      by the orchestrator inside the DEVELOPING loop, and its devops leg only
      advances on an explicit BUILD_FLEET_DEVOPS_OK signal — the human gates live
-     at /build-fleet:finalize and /build-fleet:plan-finalize, not here. -->
+     at /build-fleet:finalize and /build-fleet:status ratify, not here. -->
 
 # /build-fleet:handoff
 

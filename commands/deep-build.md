@@ -38,7 +38,7 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
 
 4. **Check tests-first prerequisite.** List files under `tests/`. If empty or absent, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"no-failing-tests","detail":"run /build-fleet:implement first so qa drafts the suite (tests-first ordering)"}`.
 
-5. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"deep-build","code":2,"reason":"escalation-present"}`) — `/build-fleet:resolve-escalation` is the unblock path.
+5. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"deep-build","code":2,"reason":"escalation-present"}`) — `/build-fleet:status resolve` is the unblock path.
 
 6. **Resolve the cycle budget, then check it.** The BUILD escalation budget is configurable (default 3). Resolve it — **a per-run flag wins over the durable default**: `--cycle-budget <n>` in `$ARGUMENTS` → else `BUILD_CYCLE_BUDGET:` in `.sdd/<slug>/PROGRESS.md` → else `3`. Call the resolved integer `effective_budget` (treat unset as `3`); clamp it to `1..3` (the workflow re-clamps anything above the ceiling). The **workflow is the authoritative validator** — pass the resolved value through (step 11) and let `deep-build.js` reject a malformed budget via its `invalid-args` path; do **not** persist `BUILD_CYCLE_BUDGET` (a flag override is per-run).
 

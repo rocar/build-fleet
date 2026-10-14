@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/product-memory-splice.sh — deterministic product-memory block splice
 # (audit §3.29). Replaces the model-driven Edit splice in /build-fleet:product-memory
-# and /build-fleet:plan-finalize step 7b with a tested, non-clobbering script.
+# and /build-fleet:status ratify step 7b with a tested, non-clobbering script.
 #
 # The target is the user-owned repo-root CLAUDE.md. Only the region between the
 # build-fleet markers is ever rewritten; everything outside is preserved

@@ -33,7 +33,7 @@ this orchestration owns its own preconditions.
 
 3. **Check ESCALATION.md.** If `.sdd/<slug>/ESCALATION.md` exists, refuse
    (`{"code":2,"reason":"escalation-present"}`) —
-   `/build-fleet:resolve-escalation` is the sanctioned unblock path.
+   `/build-fleet:status resolve` is the sanctioned unblock path.
 
 4. **Re-run guard (the orchestration is NOT idempotent).** If
    `.sdd/<slug>/IMPL_NOTES.md` already records BUILD activity, or a qa-authored

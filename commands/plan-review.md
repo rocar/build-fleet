@@ -16,7 +16,7 @@ interrogation, consolidation, and state-mutation-via-scribe.
 **This is interrogation, not a verdict.** Unlike `/build-fleet:review`, plan-review
 holds **no survival vote** and **never auto-escalates**. It surfaces questions,
 risks, and gaps for a human to weigh, sets `PHASE: PLAN_REVIEW`, and stops. Strategy
-is ratified at `/build-fleet:plan-finalize`, not auto-decided here.
+is ratified at `/build-fleet:status ratify`, not auto-decided here.
 
 ## Workflow runtime requirement
 
@@ -127,7 +127,7 @@ workflows — there is no non-workflow fallback.
     - On completion, `.sdd/_product/REVIEW.md` holds the interrogation report and
       `PHASE` becomes `PLAN_REVIEW`.
     - Next: read the report, revise vision/backlog/STACK as needed and re-run
-      `/build-fleet:plan-review`, or ratify with `/build-fleet:plan-finalize`.
+      `/build-fleet:plan-review`, or ratify with `/build-fleet:status ratify`.
     - A verdict of `incomplete` / `invalid-args` means a transient agent fault or bad
       dispatch args: PHASE/CYCLE are unchanged, no report was written — re-run
       `/build-fleet:plan-review` (or fix the dispatch args).
@@ -136,7 +136,7 @@ workflows — there is no non-workflow fallback.
       retry: the interrogation report and PROGRESS did **not** land and the marker may
       remain (release it if its content matches your run id). Whoever reads that result
       must report the run as failed with its `scribe_error` — never treat the
-      interrogation as recorded or proceed to `/build-fleet:plan-finalize` on its basis.
+      interrogation as recorded or proceed to `/build-fleet:status ratify` on its basis.
 
 ## What this command does NOT do
 
@@ -145,7 +145,7 @@ workflows — there is no non-workflow fallback.
 - Does not append to `_product/REVIEW.md` — the workflow's scribe does.
 - Does not write `_product/ESCALATION.md` — plan-review never auto-escalates. Only a
   human halts a plan.
-- Does not vote, refute, or auto-pass. Ratification is `/build-fleet:plan-finalize`.
+- Does not vote, refute, or auto-pass. Ratification is `/build-fleet:status ratify`.
 - Does not persist `PLAN_REVIEW_ROLES`. The durable default lives in `_product/PROGRESS.md` (set out-of-band — the scribe preserves unknown fields across its writes); a `--roles` flag overrides it for this run only.
 
 ## Refusal contract (machine-readable)

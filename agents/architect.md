@@ -52,7 +52,7 @@ When the orchestrator runs `/build-fleet:new-product`, you additionally own:
 The orchestrator scaffolds these files before delegating; fill them with `Edit`
 (you have no `Write`). There is no gate on this drafting — author STACK.md and
 the product ADRs directly; the plan is interrogated later at
-`/build-fleet:plan-review` and ratified at `/build-fleet:plan-finalize`.
+`/build-fleet:plan-review` and ratified at `/build-fleet:status ratify`.
 
 **Greenfield vs brownfield (the orchestrator tells you which):**
 - *Greenfield* — ratify a stack-of-record from the product description and the

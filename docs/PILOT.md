@@ -86,7 +86,7 @@ there — it is far cheaper than at any later gate.
 **If the document spans phases or reads like a PRD, it is a backlog, not a feature.**
 Use the product tier instead: `/build-fleet:new-product <slug>` (on an existing
 codebase the architect *infers* your real stack as the binding baseline) →
-`/build-fleet:plan-review` → `/build-fleet:plan-finalize ratify` (a human gate that
+`/build-fleet:plan-review` → `/build-fleet:status ratify` (a human gate that
 never auto-passes) → then run each backlog row through the feature loop above.
 
 ## 5. How the outcome gets verified against the spec
@@ -117,12 +117,12 @@ gate. The full record (`spec.md` → `acceptance.md` → `TEST_PLAN.md` →
 - **Escalation is designed behavior, not failure.** Review is capped at 3 cycles; if
   blockers survive, the workflow writes `ESCALATION.md`, sets `PHASE: ESCALATED`,
   and refuses further review until a human runs
-  `/build-fleet:resolve-escalation <decision>` — which is archived append-only.
+  `/build-fleet:status resolve <decision>` — which is archived append-only.
 - **Decide what "ship" means up front.** At `/handoff` the devops role wires CI and
   writes release notes. For a pilot, state in-session that shipping means *open a PR
   only*.
 - **One item in flight, one session per working tree.** `.sdd/ACTIVE` is a lock;
-  `/build-fleet:park <reason>` is the sanctioned way to preempt it.
+  `/build-fleet:status park <reason>` is the sanctioned way to preempt it.
 - **Scope the first feature deliberately.** Standard tier is the sweet spot: real
   enough to need a spec, small enough to finish in one session. Trivial features
   skip `/review` entirely; genuinely large ones fan out to the deep-build workflow
