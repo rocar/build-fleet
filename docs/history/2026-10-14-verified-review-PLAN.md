@@ -22,7 +22,7 @@
 - **Lenses are double-maintained** (`lens-drift.test.sh`): this plan does not touch any `## Review lens` text or the `LENS` block.
 - **Severity table is quadruple-maintained** (`rubric-drift.test.sh`): never edit the `| Severity |` table. Task 11 adds a second drift-checked block (the verified rule) to the same four files.
 - **Any agent whose body changes gets a refreshed `description:`** (reviewer, architect, qa); exact text in Task 11.
-- **Signal lines are the machine contract.** New lines: `BUILD_FLEET_QUOTE_CHECK`, `BUILD_FLEET_FINALIZE_REPORT`, `BUILD_FLEET_REVIEW_CARRY`. New refusal reasons on `BUILD_FLEET_FINALIZE_GATE`: `quote-check-missing`, `spec-changed-since-review`. New workflow `incomplete` reason: `verifier-panel`. Never document an exit-code table.
+- **Signal lines are the machine contract.** New lines: `BUILD_FLEET_QUOTE_CHECK`, `BUILD_FLEET_FINALIZE_REPORT`, `BUILD_FLEET_REVIEW_CARRY`. New refusal reasons on `BUILD_FLEET_FINALIZE_GATE`: `quote-check-missing`, `spec-changed-since-review`; on `/build-fleet:review`: `shape-changed-mid-feature`. New workflow `incomplete` reason: `verifier-panel`. Never document an exit-code table.
 - **No milestone jargon in user-facing text** (command and agent bodies say what happens, never "since 0.12").
 - **Commit messages** end with:
   ```
@@ -39,6 +39,7 @@
 5. **`/status` shows verified state through `finalize-gate.sh --report`;** `status-snapshot.sh` gains only `active.review_shape` (spec §3.6's summary counts are read from the report and the event by `/status`, not added to the snapshot schema).
 6. **A carried finding whose raiser left the roster** is not re-listed by the workflow (no block to write it in); the gate's `carried-open` safety net keeps it open for one cycle and `review-carry.sh` carries it again from the report.
 7. **No fallback path to handle.** Spec §3.6 says "the no-workflow fallback path always runs `debate`"; `commands/review.md` has no non-workflow review path (it refuses with `workflow-runtime-unavailable`), so nothing is built for it.
+8. **`commands/finalize.md` changes** (spec §3.6 says it is unchanged): it narrates the two new refusal reasons, so a refusal is never unexplained (the 0.10.1 lesson). Its gate call is unchanged.
 
 ## Review Focus
 
@@ -74,7 +75,8 @@ Inputs the spec implies but no other task's tests pin, most likely to bite first
 | `scripts/verified-review-e2e.test.sh` (new) | Rendered lines → hook → quote check → gate → carry | 9 |
 | `commands/review.md`, `commands/revise.md`, `commands/status.md`, `scripts/status-snapshot.sh` (+test) | Settings, carry, budget, revise from the report, status | 10 |
 | `skills/review-rubric/SKILL.md`, `agents/{architect,qa,reviewer}.md`, `scripts/rubric-drift.test.sh`, `skills/sdd-protocol/SKILL.md` | Mirrored verified rule; reviewer verify mode; descriptions; protocol docs | 11 |
-| `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `.claude-plugin/plugin.json`, `ROADMAP.md` | Release prep | 13 |
+| `commands/finalize.md` | Narrate the two new refusal reasons | 10 |
+| `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `.claude-plugin/plugin.json`, `ROADMAP.md`, `docs/v0.2/CONTRACT.md`, `docs/loops.md` | Release prep, contract docs | 13 |
 
 Tasks 2–7 are bash/jq and independent of the workflow; Task 8 depends on nothing; Task 9 depends on 8 and (for its e2e suite) on 3–7. **Task 1's spike gates everything:** if plugin hooks do not fire for the scribe inside a workflow run, stop and return to the spec.
 
@@ -514,6 +516,8 @@ t "check-bounds" "$H" \
   "[{file:\"spec.md\",text:\"retries\"}, {file:\"spec.md\",text:(\"x\" * 501)}] | map(vr_check($DOCS))" '[false,false]'
 t "check-allowlist" "$H" \
   "[{file:\"../spec.md\",text:\"The client retries\"}, {file:\"notes.md\",text:\"The client retries\"}] | map(vr_check($DOCS))" '[false,false]'
+t "check-workspace-paths-mapped" "$H" \
+  "[{file:\".sdd/feat/spec.md\",text:\"The client retries\"}, {file:\"./spec.md\",text:\"The client retries\"}, {file:\".sdd/_product/DECISIONS.md\",text:\"The client retries\"}] | map(vr_check($DOCS))" '[true,true,false]'
 t "check-absent-section" "$H" \
   "[{file:\"spec.md\",section:\"Behavior\"}, {file:\"spec.md\",section:\"§3.1 Behavior\"}, {file:\"spec.md\",section:\"Security\"}] | map(vr_check($DOCS))" '[true,true,false]'
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]
@@ -622,10 +626,18 @@ def vr_quotes:
       (($f.verdicts // [])[] | select(type == "object" and (.quote | type) == "object")
         | {id: $f.id, where: "verdict", v: .v, file: .quote.file, text: .quote.text}) ];
 
+# A cited file name as the quote sources are keyed: models often write the workspace
+# path (".sdd/<slug>/spec.md", ".sdd/_product/DECISIONS.md"); map those to the keys.
+def vr_file:
+  tostring | sub("^\\./"; "")
+  | if test("^\\.sdd/_product/") then sub("^\\.sdd/"; "")
+    elif test("^\\.sdd/[^/]+/") then sub("^\\.sdd/[^/]+/"; "")
+    else . end;
+
 # One quote item → true when it passes. $docs: {"spec.md": "<raw>", ...} — only
 # allow-listed files that exist are present.
 def vr_check($docs):
-  (.file // "" | tostring) as $file
+  (.file // "" | vr_file) as $file
   | ($docs[$file] // null) as $raw
   | if $raw == null then false
     elif (.section != null) then
@@ -740,7 +752,7 @@ fingerprint_matches() {
 - [ ] **Step 5: Run green, then the suite**
 
 Run: `bash scripts/verified-review-rules.test.sh | tail -1; bash scripts/run-tests.sh 2>&1 | tail -1`
-Expected: `passed=23 failed=0`; `suites: 33, failed: 0`.
+Expected: `passed=24 failed=0`; `suites: 33, failed: 0`.
 
 - [ ] **Step 6: Commit**
 
@@ -2504,6 +2516,12 @@ Run: `bash scripts/status-snapshot.test.sh | tail -1` → `passed=50 failed=0`.
       `effective_budget + exempt_cycles`, added after the clamp: a cycle whose quote check reopened
       a finding does not count against the budget. Otherwise the open set is read from REVIEW.md
       as below.
+
+      **Shape is fixed per review phase.** When `previous_shape` is `debate` or `verified` and the
+      resolved shape (flag, else PROGRESS.md, else `debate`) differs from it, refuse before dispatch:
+      `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"shape-changed-mid-feature","previous":"<previous_shape>","requested":"<shape>"}`
+      and say: switching shape mid-review would drop the open findings the other shape recorded;
+      finish this review phase in its shape, or change `REVIEW_SHAPE` only at cycle 1.
    ```
 3. In the **Cycle-budget precondition**, replace `the most recent REVIEW.md cycle still has open `[blocker]` items or `disposition: fix` majors` with `the open set is non-empty (verified: `open_count` > 0; debate: open `[blocker]` items or `disposition: fix` majors in the most recent REVIEW.md cycle)`.
 4. Step 8's review-config line: add `"shape":<"debate"|"verified"|"default">,"exempt_cycles":<n>` after `"budget_source"`.
@@ -2529,11 +2547,19 @@ Run: `bash scripts/status-snapshot.test.sh | tail -1` → `passed=50 failed=0`.
 1. Frontmatter: append `, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh":*)` to `allowed-tools`.
 2. In step 4 ("Summarize the most recent REVIEW.md cycle"), add at its start: `If `REVIEW_SHAPE: verified` is set and the newest cycle blocks are verified, run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh" "<active>" --report` and print: the shape; open blockers and majors by id with their `why`; `spec_changed` when true ("the spec changed after it was reviewed — run /build-fleet:review"); and, from the last `script:quote-check` line of `.sdd/<active>/EVENTS.jsonl`, `checked` and `failures` (a failed quote means a reviewer or verifier cited text the spec does not contain).`
 
-- [ ] **Step 6: Suite and commit**
+- [ ] **Step 6: `commands/finalize.md` (Ruling 8)**
+
+In the `Reason codes (from the gate script; combine as needed):` list, after the `majors-without-adr` bullet, add:
+```
+   - `quote-check-missing` — a verified review cycle has no quote-check result (the check runs when the review's scribe finishes; it needs jq and the plugin's hooks enabled) — re-run `/build-fleet:review`
+   - `spec-changed-since-review` — spec.md, acceptance.md or an existing DECISIONS.md entry changed after this cycle was reviewed (the STATUS line and appended ADRs do not count) — re-run `/build-fleet:review` so the change is reviewed
+```
+
+- [ ] **Step 7: Suite and commit**
 
 Run: `bash scripts/run-tests.sh 2>&1 | tail -1` → `suites: 40, failed: 0`.
 ```bash
-git add commands/review.md commands/revise.md commands/status.md scripts/status-snapshot.sh scripts/status-snapshot.test.sh
+git add commands/review.md commands/revise.md commands/status.md commands/finalize.md scripts/status-snapshot.sh scripts/status-snapshot.test.sh
 git commit -m "feat(commands): review passes verified settings and the carried open set; revise and status read the gate report
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -2568,7 +2594,7 @@ Run: `bash scripts/rubric-drift.test.sh | tail -1` → `passed=7 failed=4` (the 
 
 - [ ] **Step 2: Add the block to all four files**
 
-Insert this block, byte-identical, in each file immediately after the paragraph that follows the severity table (the "Use these exact strings" paragraph in `skills/review-rubric/SKILL.md`, `agents/architect.md` and `agents/reviewer.md`; in `agents/qa.md`, directly after the table's last row):
+Insert this block, byte-identical, in each file, after a blank line, immediately after the paragraph that follows the severity table: the "Use these exact strings" paragraph in `skills/review-rubric/SKILL.md`, `agents/architect.md` and `agents/reviewer.md`. `agents/qa.md` has no such paragraph: put the block after a blank line following the table's last row, so the comment does not land inside the table.
 ```
 <!-- verified-rule:start -->
 In a verified review (`REVIEW_SHAPE: verified`), a `[blocker]` or `[major]` carries an anchor and a test,
@@ -2693,7 +2719,7 @@ sed -n '/^## Cycle 1/,$p' .sdd/upload-retries/REVIEW.md | head -60     # shape: 
 jq -c 'select(.source == "script:quote-check") | {checked, failures, revived, exempt}' .sdd/upload-retries/EVENTS.jsonl
 bash ~/build-fleet-0.12/scripts/finalize-gate.sh upload-retries --report | sed 's/^[A-Z_]*: //' | jq '{shape, reasons, open: [.open[] | {id, why}]}'
 ```
-Expected: one quote-check event exists (the hook fired); `shape` is `verified`; every `verdict:` line parses (`jq` raised no error). Record in the ledger: findings raised, refuted, demoted; quote failures and whether they came from verifiers (paraphrase) or reviewers.
+Expected: one quote-check event exists (the hook fired); `shape` is `verified`; every `verdict:` line parses (`jq` raised no error); the run did not end `incomplete` because a reviewer omitted the `closures` array on cycle 1 (the schema requires it; if it did, make `closures` optional in `concernsSchemaFor` and default it to `[]` in the verified branch, with a harness case). Record in the ledger: findings raised, refuted, demoted; quote failures and whether they came from verifiers (paraphrase) or reviewers.
 
 - [ ] **Step 4: Decide**
 
@@ -2741,15 +2767,20 @@ Add at the top:
   `SDD_SCHEMA` stays 1. `.sdd/<slug>/EVENTS.jsonl` is new and committed with the rest of `.sdd/`.
 ```
 
-- [ ] **Step 5: `plugin.json` and `ROADMAP.md`**
+- [ ] **Step 5: Contract docs**
+
+- `docs/v0.2/CONTRACT.md` §8, in the "Success paths emit their command-specific signal" sentence, add `BUILD_FLEET_QUOTE_CHECK`, `BUILD_FLEET_FINALIZE_REPORT` and `BUILD_FLEET_REVIEW_CARRY`; after it add: `The finalize gate refuses with two further reasons in a verified review: quote-check-missing and spec-changed-since-review. /build-fleet:review refuses shape-changed-mid-feature.` In §6's workflow return object, add `shape` ("debate"|"verified"), `verification` (`{raised, verified, killed, closed, demoted, carried, solo_panels}` or null) and the `incomplete` reason `verifier-panel`.
+- `docs/loops.md`: in the REVIEW internal row (line 22), change the stages cell to `fan-out → cross-examination → survival vote (debate) or verification panel → quote-backed vote (verified) → disposition → apply`.
+
+- [ ] **Step 6: `plugin.json` and `ROADMAP.md`**
 
 Set `"version": "<VERSION>"` in `.claude-plugin/plugin.json`. Append to `ROADMAP.md` a section for this release (what landed, the open measurement) and the approved roadmap order from the roadmap review (lite, prove the review, dashboard and receipt, launch).
 
-- [ ] **Step 6: Suite, commit, and stop**
+- [ ] **Step 7: Suite, commit, and stop**
 
 ```bash
 bash scripts/run-tests.sh 2>&1 | tail -1     # suites: 40, failed: 0
-git add CLAUDE.md README.md CHANGELOG.md .claude-plugin/plugin.json ROADMAP.md
+git add CLAUDE.md README.md CHANGELOG.md .claude-plugin/plugin.json ROADMAP.md docs/v0.2/CONTRACT.md docs/loops.md
 git commit -m "release: v<VERSION> — verified review (opt-in)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
