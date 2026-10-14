@@ -1,7 +1,7 @@
 # Verified review — design
 
 **Date:** 2026-10-14
-**Status:** draft for review (design approved section by section in brainstorming); amended after an independent Gemini review (§9); implementation plan follows approval
+**Status:** draft for review (design approved section by section in brainstorming); amended after two independent Gemini reviews (§9); implementation plan follows approval
 **Ships as:** part of build-fleet v0.12.0, with the gate event log (Part A of
 `2026-10-14-dashboard.md`), which the quote check records into.
 **Supersedes:** nothing. Adds a second spec-review shape, `verified`, beside today's
@@ -40,10 +40,10 @@ evidence). The fixes below move the review fully onto the verification side.
 | D4 | **Findings must be checkable:** an anchor (verbatim quote, or a named absence) and a test that would fail, required by the lens schema for blockers and majors. A finding that still lacks them is demoted to minor, visibly. | Makes the rubric's existing rule, a major only if a test could fail, mechanical. |
 | D5 | **Kill on ≥ 2 valid refutations.** | A vote, not a veto. |
 | D6 | **Severity can be lowered by the panel, never raised, and lowering needs the same evidence as a refutation.** | Corrects over-reporting without a new escalation loop, and without a quote-free back door around D5. |
-| D7 | **Quotes are checked by a PostToolUse hook when the scribe writes REVIEW.md**, and the result is recorded as an event. | The workflow runtime has no filesystem, and `/review` returns before the workflow finishes, so no command is present at apply time. The hook is deterministic bash and runs before anyone can revise the spec. |
+| D7 | **Quotes are checked by a PostToolUse hook on the scribe's final write**, the release of `.workflow-in-flight`, and the result is recorded as an event. | The workflow runtime has no filesystem, and `/review` returns before the workflow finishes, so no command is present at apply time. The marker release is the scribe's last action, after REVIEW.md and DECISIONS.md are complete, and before anyone can revise the spec. |
 | D8 | **The finalize gate is the authority** for the verified shape: it recomputes the vote from recorded verdicts and the quote-check event. | The deterministic layer decides; the workflow's answer is provisional. |
 | D9 | **Reuse the read-only `reviewer` agent** in a verify mode. | No ninth agent, no new tool allowlist. |
-| D10 | **Open findings carry forward.** Every open finding of a verified cycle must reappear in the next one, open or with a confirmed closure; silence keeps it open. | Delta reviewers and the gate look only at the latest cycle; without this, a finding revived by the quote check would vanish. |
+| D10 | **Open findings carry forward, in writing.** Every open finding of a verified cycle is written into the next cycle's block: re-listed by its reviewer, closed with a confirmed closure, or re-listed by `review.js` with a `carried:` line when the reviewer left it out. | Delta reviewers, the gate and rotation all look only at the latest cycles; a finding that is only implied would vanish once rotation archives the cycle that raised it. |
 
 ## 3. Design
 
@@ -61,7 +61,10 @@ evidence). The fixes below move the review fully onto the verification side.
 In the verified shape the lens schema **requires** `anchor` and `test` on every blocker and
 major, so a reviewer cannot omit them. As a fallback (an empty `test`, or an `anchor` with an
 empty `text`), the script **demotes** the finding to minor, logs it, and the scribe writes a
-visible `demoted:` line under it. Minors are never verified.
+visible `demoted:` line under it. Minors are never verified. (A demotion caused later by a
+failed anchor quote cannot be written into the block, which already exists; it is shown by
+the quote-check event, `/status`, the gate report and the dashboard, and in the next cycle's
+carried entry.)
 
 The lens prompt gains this grammar in the verified shape only. The `LENS` text injected
 from each role agent is unchanged, so `scripts/lens-drift.test.sh` keeps passing.
@@ -92,8 +95,11 @@ status: concerns-raised
 - Every quote, anywhere, has the one shape `{"file":…,"text":…}`: in `quote:` and `closure:`
   lines it is the whole value; in a `verdict:` line it is the `quote` member.
 - A verdict may carry `"test_invalid":true` (§3.3).
-- `demoted: {"reason":"no-anchor"|"no-test"|"test-invalid"|"anchor-quote-failed"}` records a
-  demotion to minor.
+- `demoted: {"reason":"no-anchor"|"no-test"|"test-invalid"}` records a demotion the workflow
+  decided. Demotions from a failed quote are recorded in the quote-check event (§3.4).
+- `carried: {"from_cycle":N,"reason":"not-addressed"}` marks a finding `review.js` re-listed
+  because its reviewer left it out of a delta cycle (D10). It keeps its original `quote:`,
+  `ref:`, `test:` and `disposition:` lines and gets no new verdicts.
 - `verified:` is a human summary; every parser ignores it and recomputes.
 - Delta-cycle closure claims re-list the finding with its original id and add
   `closure: {"file":"spec.md","text":"…"}`, followed by the panel's `verdict:` lines with
@@ -108,7 +114,8 @@ status: concerns-raised
 prompt. The panel runs after the fan-out barrier; its 3 members run in parallel.
 
 **Input per verifier.** It reads `spec.md`, `acceptance.md` and `DECISIONS.md` itself, and
-receives the blocker and major findings as `{id, severity, text, anchor, ref, test}`.
+receives the blocker and major findings as `{id, severity, text, anchor, ref, test}`, and in
+a delta cycle the closure claims as `{id, text, closure}`.
 It does **not** receive `raised_by`, the reviewer's reasoning, or other verifiers' output.
 Verifier `k` (0-based) receives the list rotated left by `k` positions, so no finding is
 always judged first; rotation is deterministic because the runtime provides no randomness.
@@ -145,15 +152,22 @@ makes the finding less serious. When unsure, uphold at the finding's own severit
   ends `incomplete` with `reason: verifier-panel` and writes no review state (the scribe only
   releases the marker), the same handling as `disposition-incomplete`.
 
-**Delta cycles (cycle ≥ 2).** The reviewer's closure list is every **open** finding of the
-previous verified cycle that it raised: blockers, `fix` majors, and findings the quote check
-revived (D10; the ids come from the previous cycle's quote-check event, passed by `/review`
-as the `carried` arg). For each, it either re-lists it as still open, with its original id and
-severity, or claims closure with a `closure` quote of the revised spec text. The panel votes
-`confirm`/`reject` on each closure; a closure holds when a majority confirms and its quote
-passes §3.4. A rejected or failed closure keeps the finding open. New blockers raised in a
-delta cycle are verified like any new finding. The delta rule and the disposition leg are
-otherwise unchanged.
+**Delta cycles (cycle ≥ 2).** `/review` passes the previous verified cycle's **open set** as
+the `carried` arg: full finding objects `{id, raised_by, severity, text, anchor, ref, test,
+disposition?}` for every open blocker, `fix` major and revived finding, read from
+`finalize-gate.sh --report`. Each reviewer's prompt lists the carried findings it raised.
+For each, it either re-lists it as still open (original id and severity), or claims closure
+with a `closure` quote of the revised spec text. The panel votes `confirm`/`reject` on each
+closure; a closure holds when a majority confirms (and, at the gate, its quote passes §3.4).
+A rejected closure keeps the finding open. After the fan-out, `review.js` re-lists every
+carried finding its reviewer neither re-listed nor claimed closed, with a `carried:` line;
+carried findings are not re-verified. New blockers raised in a delta cycle are verified like
+any new finding.
+
+**What reaches disposition and `finalize_ready`.** Findings whose closure holds are removed
+from `surviving` before the disposition leg and before `finalize_ready` is computed. Re-listed
+and carried findings stay in `surviving` and go through the disposition leg as re-raised
+findings do today. The delta rule is otherwise unchanged.
 
 **Settings.**
 
@@ -175,14 +189,19 @@ the measurement's arm 3.
 ### 3.4 The quote check
 
 **`scripts/quote-check.sh <slug> --cycle N`** is run by a new PostToolUse hook,
-`hooks/scripts/check-review-quotes.sh`, matched on Write/Edit of `.sdd/<slug>/REVIEW.md`.
-The scribe writes REVIEW.md while applying the workflow's envelope, so the check runs at
-apply time, against the spec exactly as reviewed. `/review` cannot do this: it launches the
-workflow asynchronously and returns at once. The hook **ignores `.workflow-in-flight`** (the
-scribe writes inside a workflow run), runs only when the newest cycle block for the active
-item carries `shape: verified`, and is **idempotent**: each run appends a fresh event, and the
-latest event for a cycle is authoritative. The script is bash 3.2 and GNU compatible,
-anchors at the project root, requires jq, and rejects `..`.
+`hooks/scripts/check-review-quotes.sh`, matched on a Write of `.sdd/<slug>/.workflow-in-flight`
+with empty content: the scribe's release of the marker, which is its **final** action, after
+every REVIEW.md block and every DECISIONS.md append has landed. The check therefore runs once
+per apply, against the spec exactly as reviewed. `/review` cannot do this: it launches the
+workflow asynchronously and returns at once. A hook on REVIEW.md itself would fire after each
+role's block (the scribe appends one `Edit` per block) and see a partial cycle.
+
+The hook runs the check only when the newest cycle block in REVIEW.md is for PROGRESS.md's
+current `CYCLE` and carries `shape: verified`; otherwise it does nothing (an `incomplete` run,
+another workflow's marker release, or `/review`'s own release of a dead run's marker). It is
+**idempotent**: each run appends a fresh event, and the latest event for a cycle is
+authoritative. The script is bash 3.2 and GNU compatible, anchors at the project root,
+requires jq, and rejects `..`.
 
 - It collects every quote in cycle N's verified blocks: finding anchors (`quote:`),
   refutation quotes (`verdict:` with `quote`), and closure quotes (`closure:`).
@@ -199,8 +218,12 @@ anchors at the project root, requires jq, and rejects `..`.
   in the named file.
 - It appends **one `gate` event** to `.sdd/<slug>/EVENTS.jsonl`:
   `source: script:quote-check`, `decision: pass|fail`, `cycle: N`, the sha256 of each file
-  it read, `checked` (count), `failures` — each `{id, where: "anchor"|"verdict"|"closure", v?}` —
-  and `revived`, the ids whose kill or closure no longer holds once failed quotes are removed.
+  read (for `spec.md` and `acceptance.md`, computed **without the `STATUS:` line**, which
+  finalize rewrites), `checked` (count), `failures` — each
+  `{id, where: "anchor"|"verdict"|"closure", v?}` — `revived`, the ids whose kill no longer
+  holds or whose lowered severity is restored once failed quotes are removed, and `exempt`,
+  true when any id is in `revived` **because of a verifier's quote** (a refutation or a
+  lower-severity vote).
 - It prints `BUILD_FLEET_QUOTE_CHECK: {"slug":…,"cycle":N,"checked":…,"failed":…}`.
 
 **Effect of a failed quote:**
@@ -208,14 +231,18 @@ anchors at the project root, requires jq, and rejects `..`.
 | Failed quote | Effect |
 |---|---|
 | finding anchor | the finding is demoted to minor (`anchor-quote-failed`, applied by the gate) |
-| refutation, or a lower-severity vote | that vote is invalid; the vote is recomputed; a finding whose kill drops below 2 valid refutations revives as open, and is listed in `revived`. It carries forward (D10): the gate counts it open, `/revise` hands it to the PO, and the next delta cycle must close it. |
-| closure | the closure is invalid; the finding stays open |
+| refutation, or a lower-severity vote | that vote is invalid; the vote is recomputed; a finding whose kill drops below 2 valid refutations revives as open, and a lowered severity is restored; both are listed in `revived`, and the event is `exempt`. The finding carries forward (D10): the gate counts it open, `/revise` hands it to the PO, and the next cycle's block carries it. |
+| closure | the closure is invalid; the finding stays open; not `exempt` (the quote is the reviewer's) |
 
-**On the budget-exhausting cycle.** A revived finding is the verifiers' fault, not the
-spec's. So a cycle whose latest quote-check event lists any `revived` id **does not count
-against `REVIEW_CYCLE_BUDGET`**: `/review` reads that event at dispatch and allows one more
-cycle. `CYCLE_TOTAL_MAX` still applies, so the extension is bounded, and reaching it
-escalates as today. No command needs to write state outside the workflow.
+**On the budget-exhausting cycle.** A finding revived by a verifier's invented quote is the
+panel's fault, not the spec's. So a cycle whose latest quote-check event is `exempt` **does
+not count against `REVIEW_CYCLE_BUDGET`**. A failed anchor or closure quote earns no
+exemption: those quotes are the reviewer's, and exempting them would reward fabrication.
+`/review` counts the exempt cycles of the current review phase and passes `exempt_cycles`;
+both `/review`'s own budget precondition and `review.js` use **budget + exempt_cycles** as the
+effective budget (`review.js` adds it after the `MAX_CYCLE_BUDGET` clamp, so `decideVerdict`
+does not escalate the extra cycle). `CYCLE_TOTAL_MAX` still applies, so the extension is
+bounded, and reaching it escalates as today. No command writes state outside the workflow.
 
 **Stated limit.** The check catches invented quotes. It does not catch a real quote used to
 argue a wrong point; the majority vote is the defense against that. `docs` and
@@ -230,17 +257,20 @@ feature that changed shape mid-way, or a REVIEW.md from before 0.12) parse corre
 For verified blocks the gate:
 1. parses `quote:`/`absent:`/`verdict:`/`closure:` lines with jq; a malformed JSON line
    counts as an invalid verdict (it can never kill);
-2. applies the cycle's quote-check event; **no event for a verified cycle ⇒ refuse with
-   `quote-check-missing`**;
+2. applies the cycle's latest quote-check event; **no event for a verified cycle ⇒ refuse
+   with `quote-check-missing`**; and if `spec.md` or `acceptance.md`, hashed without the
+   `STATUS:` line, no longer matches the event ⇒ refuse with `spec-changed-since-review`
+   (the spec changed after it was reviewed);
 3. recomputes demotions, kills, severities and closures with the §3.3 rules; a re-listed
    finding whose closure holds is **closed**, and is not counted under step 4;
-4. applies **carry-forward** (D10): every finding open at the end of the previous verified
-   cycle (blockers, `fix` majors, and the previous event's `revived` ids) that the current
-   cycle neither re-lists nor closes is **counted open**, reason `carried-open`;
+4. counts every entry with a `carried:` line as open, and, as a safety net for D10, counts
+   any finding open at the end of the previous verified cycle that the current cycle neither
+   lists nor closes as open, reason `carried-open`;
 5. applies today's rule: no open blockers; no majors dispositioned `fix` or undispositioned.
 
 `review.js` still returns `finalize_ready`; for the verified shape it is provisional, and
-`/review` prints the gate's `--report` result (dashboard spec §3.4) after the quote check.
+`/build-fleet:status` and `/build-fleet:finalize` show the gate's answer (`--report`,
+dashboard spec §3.4) once the quote check has run.
 When every quote passes, the two agree by construction: `review.js` applies the same rules, including carry-forward from its `carried` arg (tested in §5).
 
 ### 3.6 `review.js` and the commands
@@ -256,15 +286,20 @@ Fan-out review ──┬─ debate:   Cross-examination → Survival vote ──
   writes `ESCALATION.md`.
 - `@cost-ceiling` stays at its current value until 0.12 measures the verified shape; it is
   then set to the larger of the two shapes.
-- `commands/review.md`: resolves the three settings and passes them through; at dispatch
-  it reads the previous cycle's latest quote-check event (for the budget exemption, §3.4)
-  and passes its open and `revived` ids as the `carried` arg, read from
-  `finalize-gate.sh --report` (added to its allowed tools). It never writes state. The
-  no-workflow fallback path always runs `debate` and says so.
-- `commands/revise.md` hands the PO the gate's open set, which now includes revived and
-  carried findings. `commands/finalize.md` is unchanged: it runs the gate.
-- `hooks/hooks.json` registers `check-review-quotes.sh` under PostToolUse
-  `Write|Edit` (the only registration point).
+- `commands/review.md`: resolves the three settings and passes them through. **Only when the
+  previous cycle is verified**, it also passes `carried` (the open set from
+  `finalize-gate.sh --report`) and `exempt_cycles` (from the phase's quote-check events), and
+  applies budget + `exempt_cycles` in its own budget precondition. `finalize-gate.sh` is added
+  to its allowed tools. It never writes state. For a debate-shape feature neither arg is
+  passed. The no-workflow fallback path always runs `debate` and says so.
+- `commands/revise.md` gains `Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh":*)`.
+  For a verified cycle it hands the PO the open set from `finalize-gate.sh --report` (which
+  includes revived and carried findings) instead of scanning for `refuted-by:`; for a debate
+  cycle it is unchanged. `commands/finalize.md` is unchanged: it runs the gate.
+- `hooks/hooks.json` registers `check-review-quotes.sh` under PostToolUse `Write` (the only
+  registration point); the script itself filters for the marker path and empty content.
+- **Depends on Part A of the dashboard spec**, which ships in the same release: the event log
+  (`EVENTS.jsonl`, `log_event`) and `finalize-gate.sh --report`.
 - `scripts/status-snapshot.sh` and `/build-fleet:status` show `review_shape` and, for a
   verified cycle, a summary: raised, upheld, refuted, quotes failed. Additive to
   `status-snapshot@1`.
@@ -275,7 +310,7 @@ scribe writes what the envelope gives it, including the `shape:` and `demoted:` 
 body is unchanged.
 
 **An assumption the plan must verify first:** plugin PostToolUse hooks fire for tool calls
-made by subagents inside a workflow run (the scribe). The dashboard spec's `record-phase.sh`
+made by subagents inside a workflow run (the scribe's marker release). The dashboard spec's `record-phase.sh`
 rests on the same assumption. If it fails, the fallback is the gate refusing
 `quote-check-missing`, and the design must move the check before this ships.
 
@@ -316,11 +351,14 @@ rests on the same assumption. If it fails, the fallback is the gate refusing
 - `test_invalid` majority demotes; a minority does not.
 - Demotion of a blocker/major without anchor or test.
 - Rotation by verifier index is deterministic.
-- Delta: closure confirm/reject; carried ids appear in each raiser's closure list; new
-  blockers verified.
+- Delta: closure confirm/reject; verifiers receive the closure quote; carried findings appear
+  in each raiser's prompt; a carried finding the reviewer omits is re-listed with `carried:`;
+  closed findings are excluded from disposition and `finalize_ready`; new blockers verified.
+- Budget: with `exempt_cycles: 1` and budget 3, cycle 4 does not escalate unless findings
+  stay open after it; `exempt_cycles` is added after the clamp.
 - Lens and verification schemas accept good and reject bad payloads.
-- Args: `shape`, `verifier_model`, `verify_blockers_solo`, `carried` validated; bad values ⇒
-  `invalid-args`.
+- Args: `shape`, `verifier_model`, `verify_blockers_solo`, `carried`, `exempt_cycles`
+  validated; bad values ⇒ `invalid-args`; absent ⇒ today's behaviour.
 - Lens schema rejects a blocker or major without `anchor` or `test`; the fallback writes
   `demoted:`.
 
@@ -329,12 +367,14 @@ rests on the same assumption. If it fails, the fallback is the gate refusing
 - Bounds 10–500; a spec's own `...` matches; an elided quote fails.
 - File allowlist, including `.sdd/_product/DECISIONS.md`; `..` and other files refused;
   `absent:` passes only when the named section heading exists.
-- One event per run, with file hashes, failures and `revived`; re-running is idempotent and
+- One event per run, with file hashes (without `STATUS:`), failures, `revived` and `exempt`;
+  `exempt` is false when only anchor or closure quotes failed; re-running is idempotent and
   the latest event wins; signal line printed.
 
-**`check-review-quotes.sh` hook harness:** fires on a REVIEW.md write whose newest block is
-verified, including with `.workflow-in-flight` present; does nothing for a debate block or
-another file; never changes the write's outcome.
+**`check-review-quotes.sh` hook harness:** fires on an empty Write of `.workflow-in-flight`
+when the newest REVIEW.md block is the current cycle and verified; does nothing on a REVIEW.md
+write, a non-empty marker write, a debate block, a stale cycle or another file; never changes
+the write's outcome.
 
 **`finalize-gate.sh` harness** (failing case first for each):
 - Vote recomputed from `verdict:` lines; malformed line ⇒ invalid verdict.
@@ -343,8 +383,13 @@ another file; never changes the write's outcome.
 - Verified block with no quote-check event ⇒ `quote-check-missing`.
 - A failed lower-severity quote restores the original severity.
 - A re-listed finding with a confirmed, quote-checked closure is closed (not `majors-open`).
-- Carry-forward: a finding open in cycle N and absent from cycle N+1 is `carried-open`; a
-  revived id from N's event is open in N+1 until closed.
+- Carry-forward: a `carried:` entry is open; a finding open in cycle N and absent from N+1
+  is `carried-open`; a revived id from N's event is open in N+1 until closed; after rotation
+  archives cycle N, a carried finding is still found in N+1's block.
+- `spec-changed-since-review`: an edit to `spec.md` after the review refuses; the finalize
+  `STATUS:` flip alone does not.
+- `/revise` with a verified cycle hands the PO the report's open set, including revived and
+  carried findings; a debate cycle is handled as today.
 - Shape is detected only from `shape: verified`; a debate line containing the word
   "verdict:" stays debate.
 - Mixed debate/verified blocks parse.
@@ -411,4 +456,24 @@ Reconciled against the code; amendments applied in this revision.
 | Per-blocker panels may trip the cost guard | Plausible, unshown. Noted (§3.3). |
 | Demoting unanchored blockers is dangerous | Kept: fields are now schema-required, so demotion is a visible fallback. |
 | A same-model panel shares blind spots | Kept: measured by arms 3 and 4b. |
+
+### Second review (Gemini 3.8 Flash, 2026-10-14)
+
+Nine first-round fixes confirmed sound. New findings, reconciled against the code:
+
+| Finding | Outcome |
+|---|---|
+| Budget exemption cannot work: `review.js` clamps the budget to 3 and `decideVerdict` escalates at `cycle >= budget` | Confirmed. `exempt_cycles` added after the clamp, also in `/review`'s precondition (§3.4). |
+| Findings carried "by silence" vanish once rotation archives the raising cycle | Confirmed. Carried findings are now written into the next block with `carried:` (D10, §3.3). |
+| Confirmed closures still reach disposition and `finalize_ready` in `review.js` | Confirmed. Removed from `surviving` first (§3.3). |
+| Hook on REVIEW.md fires on a partial cycle | Confirmed (one `Edit` per block). Trigger moved to the scribe's final marker release (D7, §3.4). |
+| Hook races DECISIONS.md appends | False: ADRs drafted in a run postdate every quote in it. Moot with the new trigger. |
+| Fabricated closure quotes earn a budget exemption | Confirmed. Only verifier-quote revivals are `exempt`. |
+| Verifiers are not given the closure quote | Confirmed. Added to their input. |
+| `/revise` cannot read verified blocks | Confirmed (`Read, Task`; scans `refuted-by:`). Gains the gate's `--report` (§3.6). |
+| `demoted:` cannot be written for failed anchor quotes | Confirmed. Recorded in the event and surfaced elsewhere (§3.1, §3.2). |
+| Restored severities not tracked | Confirmed. Included in `revived`. |
+| Gate never compares recorded hashes | Confirmed, and a gap today too. `spec-changed-since-review` (§3.5). |
+| `finalize-gate.sh --report` does not exist | False as a defect: Part A of the dashboard spec adds it in the same release; dependency now explicit. |
+| `carried` breaks the debate shape | Mostly false; wording tightened: passed only after a verified cycle. |
 
