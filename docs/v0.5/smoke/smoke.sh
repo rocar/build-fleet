@@ -65,8 +65,11 @@ SEV: sev1
 CYCLE: 0
 FIX_CYCLE: 0
 UPDATED: 2026-06-05T00:00:00Z
+${2:-}
 EOF
 }
+# the lite router's choice for `fix` at the current stage
+lite(){ CLAUDE_PROJECT_DIR="$work" bash "$PLUGIN/scripts/lite-next.sh" fix | sed -n 's/.*"step":"\([^"]*\)".*/\1/p; s/.*"stop":"\([^"]*\)".*/stop:\1/p'; }
 
 echo "Planted-bug smoke test — $SLUG"
 echo "(plugin: $PLUGIN)"
@@ -79,6 +82,7 @@ printf '%s\n' "$SLUG" > .sdd/ACTIVE
 diag REPORTED
 progress REPORT
 echo "[REPORT]"
+check "router: REPORT → reproduce" "$(lite)" reproduce
 check "validate-diagnosis accepts the REPORTED scaffold" "$(validate_diag)" 0
 check "source write BLOCKED pre-CONFIRMED" "$(gate pagination.py)" BLOCKED
 
@@ -88,6 +92,8 @@ check "writing the reproduction under tests/ is ALLOWED" "$(gate tests/test_pagi
 cp "$FIX/repro_check.py" tests/test_pagination.py
 check "the reproduction is RED against the bug" "$(red_green)" RED
 diag REPRODUCING
+progress REPRODUCE
+check "router: no hypothesis → action" "$(lite)" action:hypothesis
 check "validate-diagnosis accepts REPRODUCING" "$(validate_diag)" 0
 check "source still BLOCKED (test exists, not yet CONFIRMED)" "$(gate pagination.py)" BLOCKED
 
@@ -95,6 +101,11 @@ check "source still BLOCKED (test exists, not yet CONFIRMED)" "$(gate pagination
 echo "[DIAGNOSE]"
 diag DIAGNOSED
 progress DIAGNOSE
+sed -i.bak '/^## Root-cause hypothesis$/a\
+HYPOTHESIS_CYCLE: 1
+' ".sdd/$SLUG/diagnosis.md" && rm -f ".sdd/$SLUG/diagnosis.md.bak"
+check "validate-diagnosis accepts HYPOTHESIS_CYCLE" "$(validate_diag)" 0
+check "router: hypothesis 1 → diagnose" "$(lite)" diagnose
 check "validate-diagnosis accepts DIAGNOSED" "$(validate_diag)" 0
 check "source still BLOCKED at DIAGNOSED" "$(gate pagination.py)" BLOCKED
 
@@ -102,10 +113,13 @@ check "source still BLOCKED at DIAGNOSED" "$(gate pagination.py)" BLOCKED
 echo "[FIX]"
 diag CONFIRMED
 progress FIX
+check "router: FIX → apply-fix" "$(lite)" apply-fix
 check "validate-diagnosis accepts CONFIRMED" "$(validate_diag)" 0
 check "source write now ALLOWED (CONFIRMED + reproducing test)" "$(gate pagination.py)" ALLOWED
 cp "$FIX/pagination.fixed.py" pagination.py
 check "the fix turns the reproduction GREEN" "$(red_green)" GREEN
+progress FIX "FIX_DONE_CYCLE: 0"
+check "router: fix done → verify" "$(lite)" verify
 
 # ---------- VERIFY (the counterfactual — red if the fix is reverted) ----------
 echo "[VERIFY]"
@@ -115,10 +129,12 @@ cp "$FIX/pagination.fixed.py" pagination.py
 check "restored fix → GREEN" "$(red_green)" GREEN
 diag FIXED
 progress HANDOFF
+check "router: HANDOFF → ship-fix" "$(lite)" ship-fix
 
 # ---------- HANDOFF (/ship-fix clears the lock) ----------
 echo "[HANDOFF]"
 : > .sdd/ACTIVE
+check "router: shipped → nothing-to-do" "$(lite)" stop:nothing-to-do
 check ".sdd/ACTIVE is cleared on ship" "$(cat .sdd/ACTIVE)" ""
 check "with no active item, source writes are ALLOWED again" "$(gate pagination.py)" ALLOWED
 
