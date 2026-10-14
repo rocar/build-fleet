@@ -1,6 +1,55 @@
 # CONTRACT.md — v0.2 workflow ↔ command-layer contract
 
-STATUS: M0 OUTPUT (+ Phase 6 empirical corrections appended below)
+STATUS: M0 OUTPUT (+ Phase 6 empirical corrections appended below; the lite surface added in 0.12.0)
+
+## The lite surface (current — read this first)
+
+Since 0.12.0, a person or a headless caller uses five commands. Every other command
+is a hidden step (`user-invocable: false`): the lite commands run it through the Skill
+tool, and it cannot be typed. The sections after this one describe those steps'
+own contract (workflow envelopes, return objects, refusal lines), which still holds.
+
+| Command | Does | Stops at |
+|---|---|---|
+| `/build-fleet:start [idea \| --product "<vision>"]` | Scaffolds a feature (or takes the next backlog feature), asks the clarifying questions, drafts the spec, reviews and revises it until clean or escalated. With `--product`, scaffolds and reviews the product plan. | Spec ready; plan ready for ratification; another item in flight; escalation. |
+| `/build-fleet:build` | Finalizes the spec, then runs the tests-first build (standard or parallel, per the classifier's `BUILD_MODE`). | Build done; escalation; a refusal. |
+| `/build-fleet:ship` | Runs change review, the coder fix loop, and hands off to devops. | Devops' OK or refusal; escalation. |
+| `/build-fleet:fix <symptom>` | Runs the whole bug lane: triage, reproduce, hypothesis, diagnose, apply-fix, verify, ship-fix. | Devops' OK; escalation; a refused diagnosis that needs a human. |
+| `/build-fleet:status [park <reason> \| resolve <decision> \| ratify [force]]` | Bare: reports state and the next command (read-only). With a decision: applies it. | — |
+
+`build`, `ship` and `status` are human-only (`disable-model-invocation: true`): a model
+cannot invoke them, but a headless caller types them as the user, so
+`claude -p "/build-fleet:build"` works. `claude -p "/build-fleet:review"` and every other
+hidden step no longer work; drive the lite commands instead.
+
+### Signal lines
+
+The router, `scripts/lite-next.sh <start|build|ship|fix|status> [args…]`, prints one line:
+
+```
+BUILD_FLEET_LITE_NEXT: {"step":"<hidden command | action:hypothesis>","args":"<s>","why":"<s>"}
+BUILD_FLEET_LITE_NEXT: {"stop":"<reason>","next":"/build-fleet:<cmd …>","why":"<s>"}
+```
+
+Every lite run ends with exactly one line:
+
+```
+BUILD_FLEET_LITE_DONE: {"stop":"<reason>","next":"/build-fleet:<cmd …>"}
+```
+
+`next` is omitted when nothing follows; a `step-refused` or `no-progress` stop also
+carries `"step":"<name>"`, and the refusing step's own `BUILD_FLEET_*` line is relayed
+verbatim before it.
+
+Stop reasons: `spec-ready`, `plan-ready`, `built`, `shipped`, `item-in-flight`, `parked`,
+`escalated`, `step-refused`, `no-progress`, `step-cap`, `unknown-state`, `nothing-to-do`,
+`spec-not-ready`, `not-built`; and `status`, used only by `lite-next.sh status` when the
+next move is a step.
+
+The routing table lives in `scripts/lite-next.sh` and is specified in
+`docs/history/2026-10-15-lite.md` §3.3; `scripts/lite-next.test.sh` pins one case per row.
+
+---
 
 ## Phase 6 FINAL: install validation — GAP CLOSED (2026-05-30)
 
@@ -641,9 +690,10 @@ workflow script, parsed by the command layer before dispatch:
 
 ### Caller responsibilities (Hermes-style orchestrator)
 
-1. **Dispatch.** Invoke the command:
+1. **Dispatch.** Invoke a lite command (hidden steps cannot be typed since 0.12.0 —
+   see "The lite surface" above):
    ```bash
-   claude -p '/build-fleet:review' \
+   claude -p '/build-fleet:start' \
      --allowedTools "Workflow,Read,Edit,Write,Bash,Agent" \
      --output-format json
    ```
@@ -677,7 +727,7 @@ Every refusal emits exactly one `BUILD_FLEET_*REFUSE*:` line whose JSON carries:
 | `reason` | kebab-case slug (e.g. `no-active-feature`, `cycle-budget-exhausted`, `workflow-runtime-unavailable`) |
 
 Success paths emit their command-specific signal (`BUILD_FLEET_WORKFLOW_LAUNCHED`,
-`BUILD_FLEET_FINALIZE_PASS`, `BUILD_FLEET_PLAN_FINALIZE_PASS`, `BUILD_FLEET_CHANGE_REVIEW_GATE`,
+`BUILD_FLEET_FINALIZE_PASS`, `BUILD_FLEET_PLAN_FINALIZE_PASS` (from `status ratify`), `BUILD_FLEET_CHANGE_REVIEW_GATE`,
 `BUILD_FLEET_REVIEW_DEFAULTS`, `BUILD_FLEET_QUOTE_CHECK`, `BUILD_FLEET_FINALIZE_REPORT`,
 `BUILD_FLEET_REVIEW_CARRY`, …). The finalize gate refuses with four further reasons in a verified review:
 quote-check-missing, spec-changed-since-review, review-changed-since-check and verified-eval-failed. /build-fleet:review refuses shape-changed-mid-feature

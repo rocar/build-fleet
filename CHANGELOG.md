@@ -9,10 +9,56 @@ build-fleet's machine surface is versioned: scaffolded `.sdd/` state files carry
 `BUILD_FLEET_*` signal-line grammar is at version 1. Any release that changes the `.sdd/` schema
 or the signal grammar adds a **Compatibility** line to its entry below, describing the change and
 any migration; additive changes keep the version, breaking changes bump it. **Finish or park
-(`/build-fleet:park`) in-flight items before a major upgrade** — mid-flight `.sdd/` state is not
+(`/build-fleet:status park <reason>`) in-flight items before a major upgrade** — mid-flight `.sdd/` state is not
 migrated automatically. build-fleet assumes a single driver per working tree: one orchestrator
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
+
+## [Unreleased] — 0.12.0 (lite)
+
+### Added
+- **Five user commands** — `/build-fleet:start [idea | --product "<vision>"]`, `build`, `ship`,
+  `fix <symptom>`, `status`. Each drives the existing steps in order and ends with one
+  `BUILD_FLEET_LITE_DONE: {"stop":…,"next":…}` line; running it again resumes.
+- `scripts/lite-next.sh` — the router: reads `.sdd/` and prints one `BUILD_FLEET_LITE_NEXT:` line
+  (the next hidden step, or a stop). Fails closed on any state it does not recognise.
+- State markers the router reads: `BUILD_STATE` (`started | needs-iteration | done`, written by
+  `implement` and by the deep-build workflow's scribe), `FIX_DONE_CYCLE` (written by `apply-fix`),
+  and `HYPOTHESIS_CYCLE` (the first line of a bug's hypothesis).
+- `scripts/workflow-parse.test.sh` — every workflow must compile as an async body (replaces the
+  `node --check` advice, which rejects top-level `return`).
+
+### Changed
+- **Every other command is a hidden step** (`user-invocable: false`): it cannot be typed, and the
+  lite commands run it. Ask Claude in plain words to run one directly.
+- **`build`, `ship` and `status` are human-only** (`disable-model-invocation`): running `build` is
+  the approval of the spec; Claude cannot approve, ship or take a decision on its own.
+- `status` takes the human decisions: `status park <reason>`, `status resolve [<slug>] <decision>`,
+  `status ratify [force]`; bare `status` names the next command and shows a plan awaiting
+  ratification. It no longer pins the haiku model.
+- `new-product` takes `<slug> [vision…]`.
+- README's first screen is install plus a 60-second walkthrough; the architecture, hidden-step
+  reference and history moved to `docs/reference.md`. `docs/v0.2/CONTRACT.md` opens with the lite
+  surface.
+- Agent bodies edited for the renames: qa, classifier, coder (description), architect,
+  product-owner.
+
+### Renamed
+- Step `build` → `implement`; step `fix` → `apply-fix` (the names now belong to the lite commands).
+
+### Removed
+- `park`, `resolve-escalation`, `plan-finalize` — their behavior moved into `status`, unchanged.
+
+### Fixed
+- `workflows/plan-review.js` did not parse (backticks inside a template literal, since 0.9.0), so
+  the product-plan review could not load.
+
+### Breaking
+- Headless callers that typed a hidden step (`claude -p "/build-fleet:review"`) must drive the
+  lite commands instead. Signal lines from the hidden steps are unchanged.
+- **Compatibility:** the `.sdd/` schema gains the optional fields above (additive; a feature past
+  BUILD without `BUILD_STATE` is treated as built). Signal grammar adds `BUILD_FLEET_LITE_NEXT` and
+  `BUILD_FLEET_LITE_DONE` (additive).
 
 ## [0.11.0] — 2026-10-14
 

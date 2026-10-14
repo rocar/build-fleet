@@ -41,22 +41,21 @@ so scaffolding is safe against a production codebase.
 
 ## 3. First run — describe the feature inline
 
-The simplest entry point. Everything after the slug is the feature description:
+The simplest entry point. Everything after the command is the feature description;
+its first words become the feature's slug:
 
 ```
-/build-fleet:new-feature price-rounding "Order totals must round half-up to 2dp at
-    the line level before tax, not at the invoice level. Applies to the checkout
-    and invoice PDF paths. Out of scope: currency conversion."
+/build-fleet:start Price rounding: order totals must round half-up to 2dp at the
+    line level before tax, not at the invoice level. Applies to the checkout and
+    invoice PDF paths. Out of scope: currency conversion.
 
-/build-fleet:review      # adversarial review workflow — roster seeded by tier + risk
-/build-fleet:finalize    # the gate: flips spec.md to FINALIZED, unlocks source
-/build-fleet:build       # qa writes the failing suite first, then coder implements
-/build-fleet:handoff     # change-review against acceptance.md, then ship
+/build-fleet:build       # your approval: finalizes the spec, then qa writes the failing suite and coder implements
+/build-fleet:ship        # change review against acceptance.md, fixes, then devops
 ```
 
+`start` drafts the spec and runs the adversarial review until it is clean, then stops.
 `/build-fleet:status` prints where you are at any point. If the description is too
-thin, `new-feature` asks in a short structured loop rather than guessing from the
-slug.
+thin, `start` asks in a short structured loop rather than guessing.
 
 ## 4. Alternative — you already have a large, detailed spec document
 
@@ -65,12 +64,11 @@ Don't paste a long document into the command argument. Instead:
 1. **Commit the document into the repo** (e.g. `docs/specs/<name>.md`) so it is part
    of the traceability chain.
 2. **Reference it in the conversation** — tell Claude to read it, and discuss it.
-3. **Run `/build-fleet:new-feature <slug>` with *no* inline argument.**
+3. **Run `/build-fleet:start <short title> — spec in docs/specs/<name>.md`.**
 
-> ⚠️ **The gotcha:** an inline argument is treated as *authoritative* and **overrides
-> conversation context**. Passing `/new-feature x "see the spec doc"` makes that
-> seven-word string the spec. Leave the argument empty so the discussed document
-> resolves, or make the argument a real pointer that names the file path.
+> ⚠️ **The gotcha:** the idea you pass is treated as *authoritative* and **overrides
+> conversation context**. Passing `/build-fleet:start x, see the spec doc` makes that
+> string the spec. Make the argument a real pointer that names the file path.
 
 **Your document does not become `spec.md`.** The product-owner *translates* it into
 the eight sections the `validate-spec-status` hook enforces — Overview, Goals,
@@ -78,16 +76,18 @@ Non-goals, Behavior, Interfaces / Contracts, Constraints, Risks, Acceptance
 Criteria — plus a separate `acceptance.md` of testable criteria. That translation is
 where prose requirements become verifiable ones, and it is the step worth watching.
 
-**Review the translation before you finalize.** After `/new-feature` and before
-`/build-fleet:review`, have the spec's author read `.sdd/<slug>/spec.md` and
+**Review the translation before you build.** When `start` stops with the spec ready,
+and before `/build-fleet:build`, have the spec's author read `.sdd/<slug>/spec.md` and
 `acceptance.md` next to the original document. Correct anything dropped or misread
-there — it is far cheaper than at any later gate.
+there (then run `start` again so review sees it) — it is far cheaper than at any
+later gate.
 
 **If the document spans phases or reads like a PRD, it is a backlog, not a feature.**
-Use the product tier instead: `/build-fleet:new-product <slug>` (on an existing
-codebase the architect *infers* your real stack as the binding baseline) →
-`/build-fleet:plan-review` → `/build-fleet:status ratify` (a human gate that
-never auto-passes) → then run each backlog row through the feature loop above.
+Use the product tier instead: `/build-fleet:start --product "<vision>"` (on an
+existing codebase the architect *infers* your real stack as the binding baseline;
+the plan is reviewed automatically) → `/build-fleet:status ratify` (a human gate that
+never auto-passes) → then `/build-fleet:start` with no idea takes each backlog row
+through the feature loop above.
 
 ## 5. How the outcome gets verified against the spec
 

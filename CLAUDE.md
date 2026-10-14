@@ -17,7 +17,8 @@ fleet runs; this file only covers how to work on the plugin itself.
 .claude-plugin/plugin.json    # manifest (+ marketplace.json)
 agents/                       # 8 role subagents: product-owner, architect, coder,
                               #   qa, devops, classifier, reviewer, scribe
-commands/                     # 23 slash commands (/build-fleet:*)
+commands/                     # 24 slash commands: 5 user-facing (start, build,
+                              #   ship, fix, status) + 19 hidden steps
 skills/                       # 7 skills: sdd-protocol (+references/), adr,
                               #   review-rubric, sdd-spec-template,
                               #   sdd-diagnosis-template, test-plan, skill-routing
@@ -29,7 +30,8 @@ scripts/                      # deterministic helpers (next-feature, intent-bloc
                               #   product-memory-splice, status-snapshot, run-tests,
                               #   acquire-active, finalize-gate, change-review-gate,
                               #   review-rotate, adr-index, workflow-determinism-lint,
-                              #   pin-workflow, quote-check, review-carry)
+                              #   pin-workflow, quote-check, review-carry,
+                              #   lite-next — the lite commands' router)
                               #   + their *.test.sh
 scripts/lib/                  # shared verified-review rules (jq) and REVIEW.md block helpers
 docs/                         # contracts, smoke fixtures, history
@@ -51,9 +53,10 @@ bash scripts/run-tests.sh        # every hook + script suite, then the smoke tes
   real hook stdin contract and asserts exit codes + stderr.
 - The smoke test (`docs/v0.5/smoke/smoke.sh`) walks a planted bug through the
   whole deterministic backbone.
-- Workflows: `node --check workflows/*.js` after any edit (they run in an
-  isolated JS runtime — no `Date`, no filesystem; timestamps come from
-  `args.now`, all state writes go through the scribe).
+- Workflows: `bash scripts/workflow-parse.test.sh` after any edit (plain
+  `node --check` rejects their top-level `return`; the test compiles each as an
+  async body). They run in an isolated JS runtime — no `Date`, no filesystem;
+  timestamps come from `args.now`, all state writes go through the scribe.
 - CI (`.github/workflows/ci.yml`) runs the suite on macOS (bash 3.2) and Linux,
   and pins every pushed `v*` tag to plugin.json's version. Keep every hook
   script bash-3.2 compatible AND GNU-coreutils compatible (probe GNU flags

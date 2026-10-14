@@ -18,6 +18,19 @@ Two deeper references live alongside this file:
   the `diagnosis.md` artifact, the reproducing-test gate) read
   `references/bug-lane.md`.
 
+## The lite surface
+
+A person types five commands: `/build-fleet:start`, `build`, `ship`, `fix` and
+`status`. Every other command is a **hidden step** (`user-invocable: false`) that the
+lite commands run through the Skill tool, in the order `scripts/lite-next.sh` names
+from `.sdd/` state. The steps below keep their own gates and refusals; the lite
+commands add no state writes except the bug lane's hypothesis (`fix` writes it into
+`diagnosis.md`). `build`, `ship` and `status` are human-only
+(`disable-model-invocation`): running `build` is the human's approval of the spec,
+and `status park | resolve | ratify` carries the human decisions. When this file
+names a hidden step (`/build-fleet:review`, `/build-fleet:implement`, …), it is
+describing what a lite command runs, not what a person types.
+
 ## Operating principles
 
 - **Spec is the contract.** No source is written until the active spec is
@@ -452,7 +465,7 @@ phase, the cycle count, the unresolved blockers (verbatim from REVIEW.md), and t
 conflicting positions. It sets PHASE=ESCALATED and stops. Escalation is a
 first-class outcome, not a failure — the human decides how to break the deadlock.
 
-Two human-driven commands operate on stuck state:
+Two human-only forms of `status` operate on stuck state:
 
 - **`/build-fleet:status resolve <decision>`** — archives ESCALATION.md into
   REVIEW.md (append-only), deletes ESCALATION.md, resets the exhausted cycle
@@ -463,5 +476,5 @@ Two human-driven commands operate on stuck state:
   can be triaged mid-feature). Nothing is deleted; resuming is a deliberate human
   act (re-acquire the lock, restore the pre-park PHASE).
 
-Parking is a human act (the command is not model-invocable); the orchestrator's job
+Parking is a human act (`status` is not model-invocable); the orchestrator's job
 when blocked is to surface the conflict and stop.
