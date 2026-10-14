@@ -43,6 +43,7 @@ verbatim before it.
 
 Stop reasons: `spec-ready`, `plan-ready`, `built`, `shipped`, `item-in-flight`, `parked`,
 `escalated`, `step-refused`, `no-progress`, `step-cap`, `unknown-state`, `nothing-to-do`,
+`known-cause` (triage closed a bug whose cause was already known; `next` is `start` with the fix),
 `spec-not-ready`, `not-built`; and `status`, used only by `lite-next.sh status` when the
 next move is a step.
 

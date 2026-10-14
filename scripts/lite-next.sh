@@ -27,11 +27,21 @@ args="$*"
 if ! command -v jq >/dev/null 2>&1; then
   printf 'BUILD_FLEET_LITE_NEXT: {"stop":"unknown-state","why":"jq is required"}\n'; exit 0
 fi
-cd "${CLAUDE_PROJECT_DIR:-$PWD}" 2>/dev/null || {
+# Project root: CLAUDE_PROJECT_DIR, else the nearest ancestor holding .sdd/, else the
+# git toplevel, else $PWD — a caller whose shell sits in a subdirectory must not see
+# "nothing in flight".
+root="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$root" ]; then
+  d="$PWD"
+  while [ "$d" != "/" ] && [ ! -d "$d/.sdd" ]; do d=$(dirname "$d"); done
+  if [ -d "$d/.sdd" ]; then root="$d"
+  else root=$(git rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD"); fi
+fi
+cd "$root" 2>/dev/null || {
   printf 'BUILD_FLEET_LITE_NEXT: {"stop":"unknown-state","why":"project dir unreadable"}\n'; exit 0; }
 
 # A routing decision: kind=step|stop, name, sargs (a step's args), nxt (a stop's next), why.
-kind=""; name=""; sargs=""; nxt=""; why=""; rpass=""; rchanged=""
+kind=""; name=""; sargs=""; nxt=""; why=""; rpass=""; rchanged=""; rrevisable=""
 T(){ kind=step; name="$1"; sargs="$2"; why="$3"; nxt=""; }
 S(){ kind=stop; name="$1"; nxt="$2"; why="$3"; sargs=""; }
 
@@ -63,6 +73,12 @@ gate_report(){
   line=$(bash "$GATE" "$1" --report 2>/dev/null | sed -n 's/^BUILD_FLEET_FINALIZE_REPORT: //p' | head -1)
   rpass=$(printf '%s' "$line" | jq -r '.pass' 2>/dev/null)
   rchanged=$(printf '%s' "$line" | jq -r '.spec_changed' 2>/dev/null)
+  # revise can close open blockers/majors only; any other reason (a missing or
+  # unparsed reviewer block, an ADR the architect cited but never wrote) needs review.
+  rrevisable=$(printf '%s' "$line" | jq -r '
+    if ((.reasons // []) | length) == 0 then "yes"
+    elif ((.reasons // []) | any(. == "open-blockers" or . == "majors-open")) then "yes"
+    else "no" end' 2>/dev/null)
   case "$rpass" in true|false) return 0 ;; esac
   S unknown-state "" "the finalize report is unavailable"; return 1
 }
@@ -73,7 +89,14 @@ route_product(){
   ph=$(field "$pp" PHASE)
   case "$ph" in
     PLAN) T plan-review "" "the product plan has not been reviewed" ;;
-    PLAN_REVIEW) S plan-ready "status ratify" "the product plan is reviewed and awaits ratification" ;;
+    PLAN_REVIEW)
+      local f
+      for f in vision.md backlog.md STACK.md DECISIONS.md; do
+        if [ -f .sdd/_product/REVIEW.md ] && newer ".sdd/_product/$f" .sdd/_product/REVIEW.md; then
+          T plan-review "" "the product plan changed since its review"; return
+        fi
+      done
+      S plan-ready "status ratify" "the product plan is reviewed and awaits ratification" ;;
     ESCALATED) S escalated "status resolve <decision>" "the product plan is escalated" ;;
     DEVELOPING)
       if ! grep -q '^<!-- BEGIN build-fleet:product' CLAUDE.md 2>/dev/null; then
@@ -131,6 +154,8 @@ route_feature(){
       if [ "$rpass" = true ]; then S spec-ready "build" "review is clean"; return; fi
       if [ "$rchanged" = true ] || newer "$d/spec.md" "$d/REVIEW.md" || newer "$d/acceptance.md" "$d/REVIEW.md"; then
         T review "" "the spec changed since the last review"
+      elif [ "$rrevisable" = no ]; then
+        T review "" "the review is incomplete; revise cannot close it"
       else
         T revise "" "review has open items"
       fi ;;
@@ -172,6 +197,11 @@ route_bug(){
   case "$phase" in
     REPORT) T reproduce "" "no reproduction yet" ;;
     REPRODUCE|DIAGNOSE)
+      # sev0 hotfix: diagnose skips confirmation and apply-fix takes it from DIAGNOSED.
+      if [ "$phase" = DIAGNOSE ] && [ "$(field "$d/PROGRESS.md" SEV)" = sev0 ] \
+         && [ "$(field "$d/diagnosis.md" STATUS)" = DIAGNOSED ]; then
+        T apply-fix "" "sev0 fast path"; return
+      fi
       hc=$(num "$(field "$d/diagnosis.md" HYPOTHESIS_CYCLE)")
       if [ "$hc" -le "$cyc" ]; then
         T action:hypothesis "HYPOTHESIS_CYCLE: $((cyc + 1))" "no hypothesis awaits judgement"

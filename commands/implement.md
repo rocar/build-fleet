@@ -47,11 +47,6 @@ this orchestration owns its own preconditions.
 
 ## What you do (tests-first ordering)
 
-**First, mark the build started.** Set `BUILD_STATE: started` in `.sdd/<slug>/PROGRESS.md`
-(add the line if it is absent; an `.sdd/` write, always gate-permitted). Do this before
-routing to deep-build or dispatching qa, so an interrupted build resumes through
-`/build-fleet:deep-build` instead of tripping the re-run guard.
-
 a. **Dispatch qa first.** Use the Task tool to invoke `build-fleet:qa` with this
    prompt:
 
@@ -95,7 +90,12 @@ b. **Wait for QA's signal and verify.** When qa's Task call returns, parse its
    manually or edit the test suite); a blind re-run of `/build-fleet:implement` will
    refuse via the precondition-4 re-run guard.
 
-c. **Route on BUILD_MODE.** Read `BUILD_MODE:` from PROGRESS.md.
+c. **Mark the build started.** qa's failing suite is verified.
+   Set `BUILD_STATE: started` in `.sdd/<slug>/PROGRESS.md` (add the line if it is absent; an `.sdd/` write, always
+   gate-permitted). An interrupted build now resumes through `/build-fleet:deep-build`,
+   which needs exactly this suite. (A qa failure above leaves `BUILD_STATE` unset, so the
+   re-run guard, not deep-build, answers a blind re-run.) Then **route on BUILD_MODE.**
+   Read `BUILD_MODE:` from PROGRESS.md.
    Absent or `standard` → standard sequential BUILD (this command continues with
    single coder dispatch below). `deep-build` → dispatch the deep-build workflow.
 

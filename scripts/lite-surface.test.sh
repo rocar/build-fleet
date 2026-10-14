@@ -64,5 +64,16 @@ for c in start build ship fix; do
   [ "$words" -le 650 ] && ok "$c body ≤ 650 words ($words)" || no "$c body ≤ 650 words" "$words"
 done
 
+# --- final-review fixes ---
+for f in commands/start.md commands/status.md; do
+  if /usr/bin/grep -qF 'never appear in your own command list' "$ROOT/$f"; then ok "$f: router next is authoritative"; else no "$f: router next is authoritative" "missing"; fi
+done
+if /usr/bin/grep -qF 'BUILD_FLEET_TRIAGE_KNOWN_CAUSE' "$ROOT/commands/fix.md"; then ok "loop stops on a known-cause divert"; else no "loop stops on a known-cause divert" "missing"; fi
+if /usr/bin/grep -qF '`known-cause`' "$ROOT/docs/v0.2/CONTRACT.md"; then ok "CONTRACT lists known-cause"; else no "CONTRACT lists known-cause" "missing"; fi
+if /usr/bin/grep -qiE 'cannot approve a spec|cannot approve, ship' "$ROOT/README.md" "$ROOT/CHANGELOG.md"; then no "docs do not overclaim the human-only guarantee" "found"; else ok "docs do not overclaim the human-only guarantee"; fi
+qa_line=$(/usr/bin/grep -n 'BUILD_FLEET_QA_VERIFY_FAIL: {"feature":"<slug>","reason":"<zero-tests' "$ROOT/commands/implement.md" | head -1 | cut -d: -f1)
+bs_line=$(/usr/bin/grep -n 'Set `BUILD_STATE: started`' "$ROOT/commands/implement.md" | head -1 | cut -d: -f1)
+if [ -n "$qa_line" ] && [ -n "$bs_line" ] && [ "$bs_line" -gt "$qa_line" ]; then ok "BUILD_STATE: started is set after qa's suite is verified"
+else no "BUILD_STATE: started is set after qa's suite is verified" "qa=$qa_line bs=$bs_line"; fi
 echo "lite-surface: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

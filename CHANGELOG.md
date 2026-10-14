@@ -32,7 +32,8 @@ only (never across clones).
 - **Every other command is a hidden step** (`user-invocable: false`): it cannot be typed, and the
   lite commands run it. Ask Claude in plain words to run one directly.
 - **`build`, `ship` and `status` are human-only** (`disable-model-invocation`): running `build` is
-  the approval of the spec; Claude cannot approve, ship or take a decision on its own.
+  the approval of the spec, and Claude cannot run these three. The hidden steps behind them are
+  still model-invocable, and `fix` (model-invocable) runs a bug through to devops.
 - `status` takes the human decisions: `status park <reason>`, `status resolve [<slug>] <decision>`,
   `status ratify [force]`; bare `status` names the next command and shows a plan awaiting
   ratification. It no longer pins the haiku model.

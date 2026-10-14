@@ -252,6 +252,34 @@ PHASE: ESCALATED
 EOF
 check fix-escalated '"stop":"escalated"' fix
 
+# ---- final-review fixes ----
+proj; bug b 1 <<'EOF2'
+PHASE: DIAGNOSE
+CYCLE: 0
+SEV: sev0
+EOF2
+sed -i.bak 's/^STATUS: REPORTED/STATUS: DIAGNOSED/' "$P/.sdd/b/diagnosis.md" && rm -f "$P/.sdd/b/diagnosis.md.bak"
+check fix-sev0-fast-path '"step":"apply-fix"' fix
+proj; product PLAN_REVIEW; printf 'x\n' > "$P/.sdd/_product/REVIEW.md"
+touch -t 202601010000 "$P/.sdd/_product/REVIEW.md"; touch -t 202601010100 "$P/.sdd/_product/backlog.md"
+check start-plan-edited-rereview '"step":"plan-review"' start
+proj; feature f DRAFT <<'EOF2'
+PHASE: REVIEW
+CYCLE: 1
+EOF2
+touch -t 202601010000 "$P/.sdd/f/spec.md"; printf 'x\n' > "$P/.sdd/f/REVIEW.md"; touch -t 202601010100 "$P/.sdd/f/REVIEW.md"
+report '{"pass":false,"spec_changed":false,"reasons":["missing-qa"],"open":[]}'
+check start-review-gap-rereview '"step":"review"' start
+report '{"pass":false,"spec_changed":false,"reasons":["open-blockers"],"open":[{"id":"a1"}]}'
+check start-open-blockers-revise '"step":"revise"' start
+proj; feature f FINALIZED <<'EOF2'
+PHASE: BUILD
+BUILD_STATE: done
+EOF2
+mkdir -p "$P/src/deep"
+out="$(cd "$P/src/deep" && env -u CLAUDE_PROJECT_DIR bash "$ROUTER" build 2>&1)"
+if printf '%s' "$out" | grep -qF '"stop":"built"'; then pass=$((pass+1)); echo "ok   subdir-finds-project"; else fail=$((fail+1)); echo "FAIL subdir-finds-project got[$out]"; fi
+
 # ---- status ----
 proj; check status-nothing '"stop":"nothing-to-do"' status
 proj; product PLAN_REVIEW; check status-plan-ready '"stop":"plan-ready"' status

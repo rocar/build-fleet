@@ -142,6 +142,9 @@ Snapshot (`build-fleet/status-snapshot@1`):
    It prints one `BUILD_FLEET_LITE_NEXT:` line. End the report with
    "Next: `<next>`", or, when the line has no `next`, with its `why`. Do not
    derive the next command yourself; the router is the one source of truth.
+   `build`, `ship` and `status` are human-only, so they
+   never appear in your own command list; the router's `next` is still correct. Relay it verbatim and never substitute a
+   hidden step (such as `finalize` or `handoff`) for it.
    A parked item's resume is a deliberate human edit (see **Park**).
 
 ## Park
@@ -358,7 +361,7 @@ The dry run (no state change) is bare `/build-fleet:status` (Report step 5c).
      Tell the user the plan is already ratified; revise the `_product/` files directly
      and re-run `/build-fleet:start` (plan review) and `/build-fleet:status ratify` if strategy changes.
    - Any other phase (e.g. `PLAN` for a non-small product) → refuse with
-     `{"code":2,"reason":"no-interrogation-cycle","detail":"run /build-fleet:plan-review first"}`.
+     `{"code":2,"reason":"no-interrogation-cycle","detail":"run /build-fleet:start first (it reviews the plan)"}`.
    - *(Legacy tier, no `PHASE` field.)* The read returns empty,
      which falls into the `no-interrogation-cycle` refusal above — correct, since
      `/build-fleet:plan-review` is also what normalizes a legacy PROGRESS (seeds
@@ -402,7 +405,7 @@ The dry run (no state change) is bare `/build-fleet:status` (Report step 5c).
    BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"product":"<slug>","code":2,"reason":"open-blockers","open_blockers":<B>}
    ```
    List the open blockers verbatim and tell the user to either resolve them (edit the
-   plan and re-run `/build-fleet:plan-review`) or override with
+   plan and run `/build-fleet:start`, which re-reviews an edited plan) or override with
    `/build-fleet:status ratify force`. No state changes.
 
    **b2. `ratify` (no `force`) with `S > 0`.** Refuse — a split the plan neither made
@@ -411,8 +414,8 @@ The dry run (no state change) is bare `/build-fleet:status` (Report step 5c).
    BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"product":"<slug>","code":2,"reason":"split-unresolved","unresolved_splits":<S>}
    ```
    List each `split-into:` line with its finding id and which proposed slugs are
-   missing; tell the user to either add the rows to `backlog.md` (and re-run
-   `/build-fleet:plan-review`) or have the architect record a product ADR refusing the
+   missing; tell the user to either add the rows to `backlog.md` (and run
+   `/build-fleet:start` to re-review) or have the architect record a product ADR refusing the
    split by finding id — or override with `ratify force`.
 
    **c. `ratify` with `B = 0` and `S = 0`, OR `ratify force` (any B, any S).** **Ratify — flip state** (step 7).
@@ -437,7 +440,7 @@ The dry run (no state change) is bare `/build-fleet:status` (Report step 5c).
      Ratification finalizes the plan **as written** — the binding stack is whatever is
      currently un-tagged; the conditional STACK STATUS flip only re-labels an already-fully-
      binding file. If the user wants a forward direction to bind, they un-tag it themselves
-     (then re-run plan-review) before ratifying. The per-ADR `STATUS:` lines in `DECISIONS.md`
+     (then run `/build-fleet:start` to re-review) before ratifying. The per-ADR `STATUS:` lines in `DECISIONS.md`
      are owned by the architect and are never edited here.
 
    Emit exactly one line:

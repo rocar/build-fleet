@@ -35,7 +35,10 @@ You are a thin driver. You never choose the next step yourself; the router does.
    `invalid-args` or `scribe_apply: "failed"`: relay it verbatim and end with
    `BUILD_FLEET_LITE_DONE: {"stop":"step-refused","step":"<step>"}`.
 4. If the step printed `BUILD_FLEET_DEVOPS_OK`: end with
-   `BUILD_FLEET_LITE_DONE: {"stop":"shipped"}`.
+   `BUILD_FLEET_LITE_DONE: {"stop":"shipped"}`. If it printed
+   `BUILD_FLEET_TRIAGE_KNOWN_CAUSE` (triage found the cause already known and closed the
+   bug), end with `BUILD_FLEET_LITE_DONE: {"stop":"known-cause","next":"/build-fleet:start <the fix to make>"}`,
+   naming the fix triage recommends.
 5. Guards. Before each step, note the active item's `PROGRESS.md` and `spec.md` (or
    `diagnosis.md`). If the router names the same step twice in a row and those files did
    not change in between, end with `BUILD_FLEET_LITE_DONE: {"stop":"no-progress","step":"<step>"}`.
@@ -44,7 +47,9 @@ You are a thin driver. You never choose the next step yourself; the router does.
 6. Go to 1.
 
 Never pass a step's own "next command" hints on to the user. The only next command you
-name is the one in your `BUILD_FLEET_LITE_DONE` line.
+name is the one in your `BUILD_FLEET_LITE_DONE` line. `build`, `ship` and `status` are
+human-only, so they never appear in your own command list; the router's `next` is still
+correct. Relay it verbatim and never substitute a hidden step for it.
 <!-- LITE-LOOP END -->
 
 ## The hypothesis action

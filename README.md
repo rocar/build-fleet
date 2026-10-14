@@ -149,8 +149,10 @@ you make the decisions only a human makes:
 | `/build-fleet:status resolve <decision>` | Unblocks an escalation with your recorded decision. |
 | `/build-fleet:status ratify [force]` | Ratifies the product plan. |
 
-`build`, `ship` and `status` are yours alone: Claude can run `start` and `fix` for
-you, but it cannot approve a spec, ship, or take one of these decisions.
+`build`, `ship` and `status` can only be typed by you; Claude cannot run them. It
+can still run `start` and `fix` for you, and `fix` takes a bug all the way to devops.
+The steps behind `build` and `ship` are not locked against Claude yet, so ask it to
+stop at the spec if you want to be the one who approves.
 
 ## What the gates guarantee
 
