@@ -134,6 +134,7 @@ PHASE: SPEC | REVIEW | FINALIZE | BUILD | CHANGE_REVIEW | HANDOFF | ESCALATED | 
 CYCLE: <int>          # spec-review cycles consumed (one increment per /build-fleet:review run)
 CHANGE_CYCLE: <int>   # change-review cycles consumed (one increment per /build-fleet:handoff pass)
 BUILD_CYCLE: <int>    # deep-build cycles consumed (one increment per deep-build workflow run)
+BUILD_STATE: started | needs-iteration | done   # absent until /build-fleet:implement starts; deep-build's scribe writes needs-iteration|done
 TIER: trivial | standard | large    # set by the classifier at /build-fleet:new-feature. `pending` until it runs.
 BUILD_MODE: standard | deep-build   # selects /build-fleet:implement's orchestration. Classifier sets deep-build for tier=large. `pending` until it runs.
 RISK: low | elevated                 # set by the classifier at /build-fleet:new-feature (reversibility, blast radius, the never-trivial list). `pending` until it runs. With TIER it selects the seeded review roster and budget.
@@ -161,7 +162,8 @@ budget is `DIAGNOSE_CYCLE_BUDGET` and the product plan-review roster is `PLAN_RE
 A bug's PROGRESS.md instead carries `LANE: bug` (absence of `LANE` reads as a
 forward feature), `PHASE: REPORT | REPRODUCE | DIAGNOSE | FIX | VERIFY | HANDOFF |
 ESCALATED | PARKED`, `SEV: sev0|sev1|sev2`, `CYCLE` (diagnose-confirmation cycles),
-and `FIX_CYCLE` (verify→fix bounces) — plus the same `SDD_SCHEMA: 1` stamp. The
+and `FIX_CYCLE` (verify→fix bounces), plus `FIX_DONE_CYCLE` (the `FIX_CYCLE` whose fix
+`apply-fix` completed; `verify` is next while it equals `FIX_CYCLE`) — plus the same `SDD_SCHEMA: 1` stamp. The
 product tier's `_product/PROGRESS.md` is stamped too.
 
 `/build-fleet:park` sets `PHASE: PARKED` on either lane and appends a

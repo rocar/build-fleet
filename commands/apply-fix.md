@@ -64,7 +64,9 @@ Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`).
 
 7. **Verify and report.** When coder returns, run the project's test command (per
    `stop-tests.sh` detection). 
-   - All green (reproducing test(s) now pass, suite passes) → emit:
+   - All green (reproducing test(s) now pass, suite passes) → set `FIX_DONE_CYCLE: <current
+     FIX_CYCLE>` in PROGRESS.md (add the line if absent; it tells the router this cycle's fix
+     is in place and `verify` is next), then emit:
      ```
      BUILD_FLEET_FIX_DONE: {"slug":"<slug>","tests_green":<N>}
      ```

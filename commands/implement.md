@@ -46,6 +46,11 @@ this orchestration owns its own preconditions.
 
 ## What you do (tests-first ordering)
 
+**First, mark the build started.** Set `BUILD_STATE: started` in `.sdd/<slug>/PROGRESS.md`
+(add the line if it is absent; an `.sdd/` write, always gate-permitted). Do this before
+routing to deep-build or dispatching qa, so an interrupted build resumes through
+`/build-fleet:deep-build` instead of tripping the re-run guard.
+
 a. **Dispatch qa first.** Use the Task tool to invoke `build-fleet:qa` with this
    prompt:
 
@@ -193,7 +198,7 @@ e. **Wait for coder's Task call to return, then branch.**
    BUILD_FLEET_BUILD_COMPLETE: {"feature":"<slug>","tests_passing":<N>,"impl_notes_path":".sdd/<slug>/IMPL_NOTES.md"}
    ```
 
-   then tell the user: BUILD complete (qa drafted the failing suite, coder drove them
+   then set `BUILD_STATE: done` in PROGRESS.md, then tell the user: BUILD complete (qa drafted the failing suite, coder drove them
    green); review `IMPL_NOTES.md` for `gap:` / `deviation:` / `todo:` markers; the
    next command is `/build-fleet:handoff` (which runs CHANGE_REVIEW including QA's
    counterfactual gate).

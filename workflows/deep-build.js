@@ -86,6 +86,10 @@ function normalizeCycleBudget(raw) {
   const budget = Math.min(n, MAX_CYCLE_BUDGET);
   return { budget, error: null, clamped: budget !== n };
 }
+// BUILD_STATE written back to PROGRESS.md: a clean run is done; anything else resumes.
+function buildStateFor(verdict) {
+  return verdict === "clean" ? "done" : "needs-iteration";
+}
 // --- LAYER1-PURE-HELPERS END ---
 
 // Validation failures are NEVER a bare throw: a throw would strand the
@@ -547,6 +551,7 @@ function buildEnvelope({ feature, cycle, now, partitions, partitionPlan, coderRe
       PHASE: verdict === "escalate" ? "ESCALATED" : "BUILD",
       BUILD_CYCLE: cycle,
       BUILD_MODE: "deep-build",
+      BUILD_STATE: buildStateFor(verdict),
       UPDATED: now,
     },
     next_legal_commands:
