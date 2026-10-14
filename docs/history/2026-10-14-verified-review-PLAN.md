@@ -37,9 +37,12 @@
 3. **The spec's "smoke test" (§5) is a new suite, `scripts/verified-review-e2e.test.sh`,** not an edit of `docs/v0.5/smoke/smoke.sh`, which is the bug lane's smoke and stays untouched.
 4. **The mirrored verified rule is drift-checked** by extending `rubric-drift.test.sh` to compare a marker-delimited block in the four rubric copies (spec §3.7 says the drift test keeps them identical; today it only covers the table).
 5. **`/status` shows verified state through `finalize-gate.sh --report`;** `status-snapshot.sh` gains only `active.review_shape` (spec §3.6's summary counts are read from the report and the event by `/status`, not added to the snapshot schema).
-6. **A carried finding whose raiser left the roster** is not re-listed by the workflow (no block to write it in); the gate's `carried-open` safety net keeps it open for one cycle and `review-carry.sh` carries it again from the report.
+6. **A carried finding whose raiser left the roster** is written by the workflow into the first roster role's block (`host`), with its `carried:` line, so it stays in the record every cycle; only its raiser can close it (put the raiser back on the roster, or disposition a major `adr`). Every reader of verified blocks (`quote-check.sh`, the gate's previous-cycle safety net, `review-carry.sh`) takes the roles from that cycle's headings (`cycle_roles`), not the roster, because a `--roles` flag is not persisted. Cost if wrong: a finding blocks finalize until a human restores its raiser.
 7. **No fallback path to handle.** Spec §3.6 says "the no-workflow fallback path always runs `debate`"; `commands/review.md` has no non-workflow review path (it refuses with `workflow-runtime-unavailable`), so nothing is built for it.
 8. **`commands/finalize.md` changes** (spec §3.6 says it is unchanged): it narrates the two new refusal reasons, so a refusal is never unexplained (the 0.10.1 lesson). Its gate call is unchanged.
+9. **A carried finding its reviewer re-lists is the carried record, not a new finding** (spec §3.2/§3.3 amended in the same commit as this ruling). `materializeCarried` replaces a re-listed carried id with the carried record (original severity, text, quote, ref and test; `carried: {"from_cycle":N,"reason":"re-listed"}`), so re-listing can never demote, re-verify or kill an open finding; only a confirmed closure closes it. The delta prompt tells reviewers to leave a still-open finding out. `from_cycle` keeps the cycle of the first carry (the report returns `carried`). Cost if wrong: a reviewer cannot raise a carried finding's severity, only raise a new blocker.
+10. **`/build-fleet:review` reaches the gate through `review-carry.sh`.** Spec §3.6 adds `finalize-gate.sh` to `/review`'s allowed tools; the command runs `review-carry.sh` instead, which calls `finalize-gate.sh --report` itself. When the last cycle is verified and the report is missing, `review-carry.sh` exits 2 with no line and `/review` refuses `carry-unavailable` rather than carry an empty open set. Cost if wrong: none (one more refusal reason).
+11. **A quote path names the current feature.** `vr_check($docs; $slug)` maps `.sdd/<slug>/<file>` and `.sdd/_product/<file>` to their keys; another feature's path maps to no key and fails.
 
 ## Review Focus
 
@@ -349,8 +352,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `sha256_stdin`, `read_progress_field` (Task 2 / existing `_lib.sh`).
-- Produces (jq, used by Tasks 4, 6, 8's parity test): `vr_rank`, `vr_sev`, `vr_norm`, `vr_parse_block` (block text → findings `{id, severity, text, verdicts[], quote?, absent?, closure?, carried?, demoted?, ref?, test?, disposition?}`), `vr_outcome($fails)` (adds `final, killed, closed, demoted_reason, reopened_closure`), `vr_open($adrs)` (→ `"blocker"|"major"|"major-without-adr"|null`), `vr_quotes`, `vr_check($docs)`, `vr_revived($fails)`. `$fails` items are `{id, where: "anchor"|"verdict"|"closure", v?}`.
-- Produces (bash): `last_cycle_block <review> <cycle> <role>`, `block_is_verified` (stdin), `review_roster <progress> [csv]`, `quote_docs_json <slug>`, `quote_docs_fingerprint <slug>`, `fingerprint_matches <slug> <fingerprint-json>`.
+- Produces (jq, used by Tasks 4, 6, 8's parity test): `vr_rank`, `vr_sev`, `vr_norm`, `vr_parse_block` (block text → findings `{id, severity, text, verdicts[], quote?, absent?, closure?, carried?, demoted?, ref?, test?, disposition?}`), `vr_outcome($fails)` (adds `final, killed, closed, demoted_reason, reopened_closure`), `vr_open($adrs)` (→ `"blocker"|"major"|"major-without-adr"|null`), `vr_quotes`, `vr_check($docs; $slug)`, `vr_revived($fails)`. `$fails` items are `{id, where: "anchor"|"verdict"|"closure", v?}`.
+- Produces (bash): `last_cycle_block <review> <cycle> <role>`, `block_is_verified` (stdin), `cycle_roles <review> <cycle>` (the roles with a heading in that cycle), `quote_docs_json <slug>`, `quote_docs_fingerprint <slug>`, `fingerprint_matches <slug> <fingerprint-json>`.
 - Produces (test fixtures): `vr_proj`, `vr_block`, `vr_up`, `vr_rf`, `vr_q`, `$VR_REASON`.
 
 - [ ] **Step 1: Write the fixtures and the rules harness**
@@ -511,15 +514,15 @@ $(lo 2 major)
 $(up 3 blocker)" '$fs | vr_revived([{id:"qa-c1-1",where:"verdict",v:2}])' '["qa-c1-1"]'
 DOCS='{"spec.md":"STATUS: DRAFT\n# Up\n## 3.1 Behavior\nThe *client* retries\nfailed uploads—always.\n"}'
 t "check-normalises-markup-dashes-newlines" "$H" \
-  "[{file:\"spec.md\",text:\"The client retries failed uploads-always\"}, {file:\"spec.md\",text:\"the client retries\"}] | map(vr_check($DOCS))" '[true,false]'
+  "[{file:\"spec.md\",text:\"The client retries failed uploads-always\"}, {file:\"spec.md\",text:\"the client retries\"}] | map(vr_check($DOCS; \"feat\"))" '[true,false]'
 t "check-bounds" "$H" \
-  "[{file:\"spec.md\",text:\"retries\"}, {file:\"spec.md\",text:(\"x\" * 501)}] | map(vr_check($DOCS))" '[false,false]'
+  "[{file:\"spec.md\",text:\"retries\"}, {file:\"spec.md\",text:(\"x\" * 501)}] | map(vr_check($DOCS; \"feat\"))" '[false,false]'
 t "check-allowlist" "$H" \
-  "[{file:\"../spec.md\",text:\"The client retries\"}, {file:\"notes.md\",text:\"The client retries\"}] | map(vr_check($DOCS))" '[false,false]'
+  "[{file:\"../spec.md\",text:\"The client retries\"}, {file:\"notes.md\",text:\"The client retries\"}] | map(vr_check($DOCS; \"feat\"))" '[false,false]'
 t "check-workspace-paths-mapped" "$H" \
-  "[{file:\".sdd/feat/spec.md\",text:\"The client retries\"}, {file:\"./spec.md\",text:\"The client retries\"}, {file:\".sdd/_product/DECISIONS.md\",text:\"The client retries\"}] | map(vr_check($DOCS))" '[true,true,false]'
+  "[{file:\".sdd/feat/spec.md\",text:\"The client retries\"}, {file:\"./spec.md\",text:\"The client retries\"}, {file:\".sdd/_product/DECISIONS.md\",text:\"The client retries\"}, {file:\".sdd/other/spec.md\",text:\"The client retries\"}] | map(vr_check($DOCS; \"feat\"))" '[true,true,false,false]'
 t "check-absent-section" "$H" \
-  "[{file:\"spec.md\",section:\"Behavior\"}, {file:\"spec.md\",section:\"§3.1 Behavior\"}, {file:\"spec.md\",section:\"Security\"}] | map(vr_check($DOCS))" '[true,true,false]'
+  "[{file:\"spec.md\",section:\"Behavior\"}, {file:\"spec.md\",section:\"§3.1 Behavior\"}, {file:\"spec.md\",section:\"Security\"}] | map(vr_check($DOCS; \"feat\"))" '[true,true,false]'
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]
 ```
 
@@ -628,16 +631,17 @@ def vr_quotes:
 
 # A cited file name as the quote sources are keyed: models often write the workspace
 # path (".sdd/<slug>/spec.md", ".sdd/_product/DECISIONS.md"); map those to the keys.
-def vr_file:
+# Another feature's path (".sdd/<other>/spec.md") maps to no key, so it fails.
+def vr_file($slug):
   tostring | sub("^\\./"; "")
-  | if test("^\\.sdd/_product/") then sub("^\\.sdd/"; "")
-    elif test("^\\.sdd/[^/]+/") then sub("^\\.sdd/[^/]+/"; "")
+  | if startswith(".sdd/_product/") then ltrimstr(".sdd/")
+    elif startswith(".sdd/" + $slug + "/") then ltrimstr(".sdd/" + $slug + "/")
     else . end;
 
 # One quote item → true when it passes. $docs: {"spec.md": "<raw>", ...} — only
-# allow-listed files that exist are present.
-def vr_check($docs):
-  (.file // "" | vr_file) as $file
+# allow-listed files that exist are present. $slug: the feature under review.
+def vr_check($docs; $slug):
+  (.file // "" | vr_file($slug)) as $file
   | ($docs[$file] // null) as $raw
   | if $raw == null then false
     elif (.section != null) then
@@ -685,13 +689,16 @@ block_is_verified() {
   [ "$(sed -n '2p' | tr -d '\r')" = "shape: verified" ]
 }
 
-# Echo the roster for <progress-file>: REVIEW_ROLES, else architect,qa,coder; one per line.
-# Usage: review_roster <progress-file> [<override csv>]
-review_roster() {
-  local roster="${2:-}"
-  [ -n "$roster" ] || roster=$({ grep -m1 '^REVIEW_ROLES:' "$1" 2>/dev/null || true; } | sed -E 's/^REVIEW_ROLES:[[:space:]]*//' | tr -d '\r ')
-  [ -n "$roster" ] || roster="architect,qa,coder"
-  printf '%s' "$roster" | tr ',' '\n' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | grep . || true
+# Echo the roles that have a "## Cycle <cycle> — <role> —" heading in <review>, one per
+# line, first appearance first. Readers of verified blocks use this, not the roster: a
+# --roles flag is not persisted, and a role may leave the roster with findings still open.
+# Usage: cycle_roles <review-file> <cycle>
+cycle_roles() {
+  local review="$1" cycle="$2"
+  [ -f "$review" ] || return 0
+  { grep -E "^##[[:space:]]+Cycle[[:space:]]+${cycle}[[:space:]]+[^[:space:]]+[[:space:]]+[A-Za-z0-9_-]+[[:space:]]" "$review" || true; } \
+    | sed -E "s/^##[[:space:]]+Cycle[[:space:]]+${cycle}[[:space:]]+[^[:space:]]+[[:space:]]+([A-Za-z0-9_-]+)[[:space:]].*/\1/" \
+    | awk '!seen[$0]++'
 }
 
 # Echo a JSON object of the allow-listed quote sources that exist for <slug>:
@@ -829,6 +836,12 @@ vr_block "$p" 1 architect
 run "$p" 1
 assert "product-adr-quote-allowed" "printf '%s' \"\$out\" | grep -q '\"failed\":0'"
 
+p=$(vr_proj flag-role 1)
+vr_block "$p" 1 qa
+vr_block "$p" 1 coder '- [major] (coder-c1-1) retry limit' "$(vr_q 'a sentence the spec never had')" '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)"
+run "$p" 1
+assert "off-roster-block-checked" "printf '%s' \"\$out\" | grep -q '\"checked\":1,\"failed\":1'"
+
 run "$p" x;  assert "bad-cycle-exit1" "[ $rc -eq 1 ]"
 out=$( cd "$p" && bash "$QC" ../x --cycle 1 2>/dev/null ); rc=$?; assert "bad-slug-exit1" "[ $rc -eq 1 ]"
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]
@@ -893,7 +906,7 @@ if read_events "$slug" "script:quote-check" | jq -e --argjson t "$cycle_total" '
 fi
 
 blocks=""
-for role in $(review_roster "$progress"); do
+for role in $(cycle_roles "$review" "$cycle"); do
   b=$(last_cycle_block "$review" "$cycle" "$role")
   [ -n "$b" ] || continue
   printf '%s\n' "$b" | block_is_verified || continue
@@ -902,9 +915,9 @@ done
 if [ -z "$blocks" ]; then signal 0 0 '[]' false '"not-verified"'; exit 0; fi
 
 docs=$(quote_docs_json "$slug")
-result=$(printf '%s' "$blocks" | jq -Rs --argjson docs "$docs" "${RULES}"'
+result=$(printf '%s' "$blocks" | jq -Rs --argjson docs "$docs" --arg slug "$slug" "${RULES}"'
   split("\n## ") | map(vr_parse_block) | add // [] | . as $fs
-  | ($fs | vr_quotes | map(. + {pass: vr_check($docs)})) as $q
+  | ($fs | vr_quotes | map(. + {pass: vr_check($docs; $slug)})) as $q
   | ([$q[] | select(.pass | not) | {id, where} + (if .v != null then {v} else {} end)]) as $fails
   | ($fs | vr_revived($fails)) as $rev
   | {checked: ($q | length), failures: $fails, revived: $rev, exempt: (($rev | length) > 0)}') \
@@ -923,7 +936,7 @@ exit 0
 - [ ] **Step 4: Run green, then the suite**
 
 Run: `bash scripts/quote-check.test.sh | tail -1; bash scripts/run-tests.sh 2>&1 | tail -1`
-Expected: `passed=12 failed=0`; `suites: 34, failed: 0`.
+Expected: `passed=13 failed=0`; `suites: 34, failed: 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1076,7 +1089,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: Tasks 2–4.
-- Produces: `finalize-gate.sh <slug> [--roster csv] [--report]`. Gate mode: the unchanged `BUILD_FLEET_FINALIZE_GATE:` line (new reasons `quote-check-missing`, `spec-changed-since-review`), exit 0/2, and one event `{kind:"gate", source:"script:finalize-gate", decision:"pass"|"refuse", cycle, cycle_total, reasons}`. Report mode: `BUILD_FLEET_FINALIZE_REPORT: {feature, cycle, cycle_total, shape:"debate"|"verified"|"mixed", pass, reasons, open_blockers, open_majors, majors_without_adr, spec_changed, open:[{id, severity, text, raised_by, why, quote?, absent?, ref?, test?, disposition?}]}`, exit 0, writes nothing. `why` ∈ `blocker`, `major`, `major-without-adr`, `carried`, `carried-open`, `reopened-closure`.
+- Produces: `finalize-gate.sh <slug> [--roster csv] [--report]`. Gate mode: the unchanged `BUILD_FLEET_FINALIZE_GATE:` line (new reasons `quote-check-missing`, `spec-changed-since-review`), exit 0/2, and one event `{kind:"gate", source:"script:finalize-gate", decision:"pass"|"refuse", cycle, cycle_total, reasons}`. Report mode: `BUILD_FLEET_FINALIZE_REPORT: {feature, cycle, cycle_total, shape:"debate"|"verified"|"mixed", pass, reasons, open_blockers, open_majors, majors_without_adr, spec_changed, open:[{id, severity, text, raised_by, why, quote?, absent?, ref?, test?, disposition?, carried?}]}`, exit 0, writes nothing. `why` ∈ `blocker`, `major`, `major-without-adr`, `carried`, `carried-open`, `reopened-closure`.
 
 - [ ] **Step 1: Write the verified harness**
 
@@ -1168,6 +1181,25 @@ qc "$p" 2; gate "$p" --report
 assert "omitted-finding-carried-open" "[ \"\$(field '[.open[] | {id, why}]')\" = '[{\"id\":\"qa-c1-1\",\"why\":\"carried-open\"}]' ]"
 assert "report-shape-verified" "[ \"\$(field .shape)\" = '\"verified\"' ]"
 assert "report-logs-nothing" "! grep -q finalize-gate '$p/.sdd/feat/EVENTS.jsonl'"
+
+QC1='{"v":1,"ts":"t","slug":"feat","kind":"gate","source":"script:quote-check","decision":"pass","cycle":1,"cycle_total":1,"files":{},"checked":1,"failures":[],"revived":[],"exempt":false}'
+p=$(vr_proj off-roster 2 2)
+vr_block "$p" 1 qa
+vr_block "$p" 1 architect '- [major] (architect-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)" '  disposition: fix'
+sed -i.bak 's/^REVIEW_ROLES: .*/REVIEW_ROLES: qa,coder/' "$p/.sdd/feat/PROGRESS.md"
+vr_block "$p" 2 qa
+vr_block "$p" 2 coder
+printf '%s\n' "$QC1" >> "$p/.sdd/feat/EVENTS.jsonl"
+qc "$p" 2; gate "$p" --report
+assert "off-roster-raiser-carried-open" "[ \"\$(field '[.open[] | {id, why}]')\" = '[{\"id\":\"architect-c1-1\",\"why\":\"carried-open\"}]' ]"
+
+p=$(vr_proj hosted 3 3)
+sed -i.bak 's/^REVIEW_ROLES: .*/REVIEW_ROLES: qa,coder/' "$p/.sdd/feat/PROGRESS.md"
+vr_block "$p" 3 qa '- [major] (architect-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' '  carried: {"from_cycle":1,"reason":"not-addressed"}'
+vr_block "$p" 3 coder
+qc "$p" 3; gate "$p" --report
+assert "hosted-carried-stays-open" "[ \"\$(field '[.open[] | {id, why, raised_by}]')\" = '[{\"id\":\"architect-c1-1\",\"why\":\"carried\",\"raised_by\":\"architect\"}]' ]"
+assert "report-keeps-carried-origin" "[ \"\$(field '.open[0].carried')\" = '{\"from_cycle\":1,\"reason\":\"not-addressed\"}' ]"
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]
 ```
 
@@ -1279,9 +1311,9 @@ Save as `/tmp/gate.patch` and run `git apply /tmp/gate.patch`:
 +adr_nums() { { grep -E '^##[[:space:]]+ADR-0*[0-9]+:' "$decisions" 2>/dev/null || true; } \
 +  | sed -E 's/^##[[:space:]]+ADR-0*([0-9]+):.*/\1/' | jq -Rsc 'split("\n") | map(select(length > 0) | tonumber)'; }
 +qc_event() { read_events "$slug" "script:quote-check" | jq -c --argjson t "$1" 'select(.cycle_total == $t)' | head -1; }
-+verified_blocks_for() { # verified_blocks_for <cycle> → concatenated verified blocks of that cycle
++verified_blocks_for() { # verified_blocks_for <cycle> → every verified block of that cycle, whatever the roster
 +  local r b out=""
-+  for r in $roles; do
++  for r in $(cycle_roles "$review" "$1"); do
 +    b=$(last_cycle_block "$review" "$1" "$r"); [ -n "$b" ] || continue
 +    printf '%s\n' "$b" | block_is_verified && out="${out}${b}"$'\n'
 +  done
@@ -1314,7 +1346,7 @@ Save as `/tmp/gate.patch` and run `git apply /tmp/gate.patch`:
 +           | map(select(.why != null)))
 +      + [$prev[] | select(.id as $i | $listed | index($i) | not) | . + {why: "carried-open"}]
 +    | map({id, severity: .final, text, raised_by: (.id | sub("-c[0-9]+-[0-9]+$"; "")), why,
-+           quote, absent, ref, test, disposition} | with_entries(select(.value != null)))')
++           quote, absent, ref, test, disposition, carried} | with_entries(select(.value != null)))')
 +  while IFS= read -r row; do
 +    [ -n "$row" ] || continue
 +    id=$(printf '%s' "$row" | jq -r '.id'); why=$(printf '%s' "$row" | jq -r '.why'); sev=$(printf '%s' "$row" | jq -r '.severity')
@@ -1357,7 +1389,7 @@ Save as `/tmp/gate.patch` and run `git apply /tmp/gate.patch`:
 - [ ] **Step 4: Run green — both harnesses — then the suite**
 
 Run: `bash scripts/finalize-gate-verified.test.sh | tail -1; bash scripts/finalize-gate.test.sh | tail -1; bash scripts/run-tests.sh 2>&1 | tail -1`
-Expected: `passed=15 failed=0`; `passed=19 failed=0` (debate path unchanged); `suites: 36, failed: 0`.
+Expected: `passed=18 failed=0`; `passed=19 failed=0` (debate path unchanged); `suites: 36, failed: 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1381,7 +1413,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: Task 6 `--report`; Task 2 `read_events`.
-- Produces: `review-carry.sh <slug>` → `BUILD_FLEET_REVIEW_CARRY: {feature, cycle, previous_shape:"verified"|"debate"|"none", carried:[…report .open…], open_count, exempt_cycles}`. Task 10's `/build-fleet:review` passes `carried` and `exempt_cycles` to the workflow.
+- Produces: `review-carry.sh <slug>` → `BUILD_FLEET_REVIEW_CARRY: {feature, cycle, previous_shape:"verified"|"debate"|"none", carried:[…report .open…], open_count, exempt_cycles}`; exit 2 and no line when the last cycle is verified but the gate gave no report. Task 10's `/build-fleet:review` passes `carried` and `exempt_cycles` to the workflow.
 
 - [ ] **Step 1: Write the harness**
 
@@ -1422,6 +1454,18 @@ ev "$p" 1 4 false   # later event for the same cycle_total: first wins
 ev "$p" 2 5 false
 carry "$p"
 assert "exempt-counts-this-phase-first-event" "[ \"\$(field .exempt_cycles)\" = 1 ]"
+
+p=$(vr_proj no-report 1)
+vr_block "$p" 1 qa; vr_block "$p" 1 architect
+mkdir -p "$work/broken/lib"; cp "$RC" "$work/broken/"; cp "$DIR/lib/"* "$work/broken/lib/"
+mkdir -p "$work/hooks/scripts"; cp "$DIR/../hooks/scripts/_lib.sh" "$work/hooks/scripts/"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$work/broken/finalize-gate.sh"
+out=$( cd "$p" && CLAUDE_PROJECT_DIR="$p" bash "$work/broken/review-carry.sh" feat 2>/dev/null ); rc=$?
+assert "no-report-refuses" "[ $rc -eq 2 ] && ! printf '%s' \"\$out\" | grep -q BUILD_FLEET_REVIEW_CARRY"
+
+p=$(vr_proj flag-role-carry 1)
+vr_block "$p" 1 coder; carry "$p"
+assert "shape-read-from-any-block" "[ \"\$(field .previous_shape)\" = '\"verified\"' ]"
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]
 ```
 
@@ -1448,7 +1492,8 @@ Expected: every case FAILs (script missing).
 # Usage: review-carry.sh <slug>
 # Output (stdout, one line):
 #   BUILD_FLEET_REVIEW_CARRY: {"feature","cycle","previous_shape":"verified"|"debate"|"none","carried":[…],"open_count":N,"exempt_cycles":N}
-# Exit: 0; 1 = bad usage / unreadable workspace. Writes nothing. bash 3.2; requires jq.
+# Exit: 0; 1 = bad usage / unreadable workspace; 2 (no output line) = the last cycle is
+# verified but finalize-gate.sh --report gave no report. Writes nothing. bash 3.2; requires jq.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 slug="${1:-}"
@@ -1470,13 +1515,14 @@ out() { printf 'BUILD_FLEET_REVIEW_CARRY: %s\n' "$(jq -cn --arg f "$slug" --argj
 
 [ "$cycle" -ge 1 ] || { out none '[]' 0; exit 0; }
 shape=debate
-for role in $(review_roster "$progress"); do
+for role in $(cycle_roles "$review" "$cycle"); do
   last_cycle_block "$review" "$cycle" "$role" | block_is_verified && { shape=verified; break; }
 done
 [ "$shape" = verified ] || { out debate '[]' 0; exit 0; }
 
 report=$(bash "${HERE}/finalize-gate.sh" "$slug" --report 2>/dev/null | sed -n 's/^BUILD_FLEET_FINALIZE_REPORT: //p')
-carried=$(printf '%s' "${report:-{\}}" | jq -c '.open // []')
+[ -n "$report" ] || { echo "review-carry.sh: finalize-gate.sh --report gave no report; refusing to carry an empty open set" >&2; exit 2; }
+carried=$(printf '%s' "$report" | jq -c '.open // []')
 exempt=$(read_events "$slug" "script:quote-check" | jq -s --argjson lo $((total - cycle)) --argjson hi "$total" \
   'group_by(.cycle_total) | map(.[0]) | map(select(.cycle_total > $lo and .cycle_total <= $hi and .exempt == true)) | length')
 out verified "$carried" "${exempt:-0}"
@@ -1485,7 +1531,7 @@ out verified "$carried" "${exempt:-0}"
 - [ ] **Step 4: Run green, then the suite**
 
 Run: `bash scripts/review-carry.test.sh | tail -1; bash scripts/run-tests.sh 2>&1 | tail -1`
-Expected: `passed=5 failed=0`; `suites: 37, failed: 0`.
+Expected: `passed=7 failed=0`; `suites: 37, failed: 0`.
 
 - [ ] **Step 5: Commit**
 
@@ -1506,7 +1552,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `flattenText` (existing, same region); `scripts/lib/verified-review.jq` (parity test).
-- Produces (used by Task 9): `normalizeShape(raw) → {shape, error}`, `normalizeVerifierModel(raw) → {model, error}`, `normalizeFlag(raw, name) → {value, error}`, `normalizeExemptCycles(raw) → {value, error}`, `normalizeCarried(raw, shape) → {carried, error}`, `vrRank(s)`, `vrEvidence(v)`, `demoteUncheckable(concerns) → {concerns, demoted}`, `rotateLeft(list, k)`, `verifiedOutcome(f)`, `applyVerifiedVote(findings, panels)` (returns findings with `verdicts`, `final`, `killed`, `closed`, `demoted?`, `severity` = final, `severity_raised`, `refuted` = killed‖closed), `materializeCarried(concerns, carried, cycle)`, `formatVerifiedFindingLines(c, dispositionMap)`.
+- Produces (used by Task 9): `normalizeShape(raw) → {shape, error}`, `normalizeVerifierModel(raw) → {model, error}`, `normalizeFlag(raw, name) → {value, error}`, `normalizeExemptCycles(raw) → {value, error}`, `normalizeCarried(raw, shape) → {carried, error}`, `vrRank(s)`, `vrEvidence(v)`, `demoteUncheckable(concerns) → {concerns, demoted}`, `rotateLeft(list, k)`, `verifiedOutcome(f)`, `applyVerifiedVote(findings, panels)` (returns findings with `verdicts`, `final`, `killed`, `closed`, `demoted?`, `severity` = final, `severity_raised`, `refuted` = killed‖closed), `materializeCarried(concerns, carried, cycle, roles)` (re-listed and omitted carried findings become carried records; an off-roster raiser's gets `host: roles[0]`), `formatVerifiedFindingLines(c, dispositionMap)`.
 
 - [ ] **Step 1: Write both harnesses**
 
@@ -1582,11 +1628,20 @@ check("vote-closure-confirmed-refuted", c.closed && c.refuted);
 ]);
 check("vote-test-invalid-demotes-with-line", c.severity === "minor" && c.demoted && c.demoted.reason === "test-invalid");
 
-const mc = materializeCarried([{ ...f }], [
-  { id: "qa-c1-1", raised_by: "qa", severity: "major", text: "a" },
-  { id: "qa-c1-9", raised_by: "qa", severity: "blocker", text: "z", absent: { file: "spec.md", section: "Security", missing: "auth" }, test: "t" },
-], 2);
-check("carry-adds-only-omitted", eq(mc.map((x) => x.id), ["qa-c1-1", "qa-c1-9"]) && eq(mc[1].carried, { from_cycle: 1, reason: "not-addressed" }) && mc[1].anchor.kind === "absent");
+const K1 = { id: "qa-c1-1", raised_by: "qa", severity: "major", text: "a", quote: { file: "spec.md", text: "abc def ghij" }, test: "t" };
+const K9 = { id: "qa-c1-9", raised_by: "qa", severity: "blocker", text: "z", absent: { file: "spec.md", section: "Security", missing: "auth" }, test: "t" };
+const KA = { id: "architect-c1-2", raised_by: "architect", severity: "blocker", text: "y", quote: { file: "spec.md", text: "abc def ghij" }, test: "t", carried: { from_cycle: 1, reason: "not-addressed" } };
+// qa re-lists qa-c1-1 badly (lower severity, no anchor) and twice; leaves qa-c1-9 out.
+let mc = materializeCarried([{ id: "qa-c1-1", severity: "minor", raised_by: "qa", text: "again", anchor: { kind: "none" }, test: "" },
+  { id: "qa-c1-1", severity: "major", raised_by: "qa", text: "dup", anchor: { kind: "none" }, test: "" }], [K1, K9], 2, ["qa", "coder"]);
+check("carry-adds-omitted", eq(mc.map((x) => x.id), ["qa-c1-1", "qa-c1-9"]) && eq(mc[1].carried, { from_cycle: 1, reason: "not-addressed" }) && mc[1].anchor.kind === "absent");
+check("carry-relisted-keeps-record", mc[0].severity === "major" && mc[0].text === "a" && eq(mc[0].anchor, { kind: "quote", file: "spec.md", text: "abc def ghij" }) && mc[0].test === "t" && eq(mc[0].carried, { from_cycle: 1, reason: "re-listed" }));
+mc = materializeCarried([{ id: "qa-c1-1", severity: "major", raised_by: "qa", text: "a", closure: { file: "spec.md", text: "closed" } }], [K1, KA], 3, ["qa", "coder"]);
+check("carry-closure-claim-untouched", mc[0].closure && !mc[0].carried && mc.length === 2);
+check("carry-off-roster-hosted", mc[1].id === "architect-c1-2" && mc[1].host === "qa" && mc[1].raised_by === "architect");
+check("carry-keeps-origin-cycle", eq(mc[1].carried, { from_cycle: 1, reason: "not-addressed" }));
+const dm2 = demoteUncheckable([{ ...mc[0] }, { id: "qa-c1-7", severity: "major", raised_by: "qa", text: "c", anchor: { kind: "none" }, carried: { from_cycle: 1, reason: "not-addressed" } }]);
+check("demote-skips-closure-and-carried", eq(dm2.demoted, []));
 
 [c] = applyVerifiedVote([f], panels);
 let lines = formatVerifiedFindingLines(c, {});
@@ -1660,15 +1715,10 @@ Save as `/tmp/review-helpers.patch` and run `git apply /tmp/review-helpers.patch
 ```diff
 --- a/workflows/review.js
 +++ b/workflows/review.js
-@@ -266,11 +266,187 @@
-     const cite = c.refutation_citation ? ` (cites ${flattenText(c.refutation_citation.file)} ${flattenText(c.refutation_citation.locator)})` : "";
-     lines.push(`  refuted-by: ${c.refuted_by} — reason: ${flattenText(c.refutation_reason)}${cite}`);
-   } else if (c.severity === "major") {
-+    const d = dispositionMap[c.id];
-+    lines.push(d && d.action === "adr" ? `  disposition: adr ADR-${d.adr_id}` : "  disposition: fix");
-+  }
-+  return lines;
-+}
+@@ -271,6 +271,208 @@
+   }
+   return lines;
+ }
 +// REVIEW_SHAPE and its settings (verified review). Absent ⇒ today's behaviour.
 +const REVIEW_SHAPES = ["debate", "verified"];
 +const VERIFIER_MODELS = ["opus", "sonnet", "haiku"];
@@ -1731,10 +1781,11 @@ Save as `/tmp/review-helpers.patch` and run `git apply /tmp/review-helpers.patch
 +
 +// The schema requires anchor + test on every finding; a blocker/major whose anchor is
 +// kind "none" (or whose quote/section is empty) or whose test is empty is demoted to minor.
++// Carried findings and closure claims are left alone: their evidence is the record's.
 +function demoteUncheckable(concerns) {
 +  const demoted = [];
 +  const out = (concerns || []).map((c) => {
-+    if (vrRank(c.severity) < 1) return c;
++    if (vrRank(c.severity) < 1 || c.carried || c.closure) return c;
 +    const a = c.anchor || {};
 +    const anchorOk = (a.kind === "quote" && typeof a.text === "string" && a.text.trim() !== "" && typeof a.file === "string" && a.file !== "") ||
 +      (a.kind === "absent" && typeof a.section === "string" && a.section.trim() !== "" && typeof a.file === "string" && a.file !== "");
@@ -1799,17 +1850,42 @@ Save as `/tmp/review-helpers.patch` and run `git apply /tmp/review-helpers.patch
 +  });
 +}
 +
-+// Carried findings (from finalize-gate --report) the reviewer neither re-listed nor
-+// claimed closed are re-listed with a carried line. Returns the full list.
-+function materializeCarried(concerns, carried, cycle) {
-+  const listed = {};
-+  for (const c of concerns || []) listed[c.id] = true;
-+  const add = (carried || []).filter((k) => k && typeof k.id === "string" && !listed[k.id]).map((k) => ({
++// Carried findings (from finalize-gate --report) stay open until a confirmed closure.
++// A reviewer's re-listing of one is replaced by the carried record (original severity,
++// text, anchor, ref and test; reason "re-listed"), so re-listing can never demote,
++// re-verify or drop it; one the reviewer left out is added (reason "not-addressed").
++// from_cycle keeps the cycle the finding was first carried from. A finding whose raiser
++// is not in <roles> is written in roles[0]'s block (`host`): it stays open, and only its
++// raiser can close it. Closure claims (entries with `closure`) pass through. Returns the
++// full list, each id once.
++function materializeCarried(concerns, carried, cycle, roles) {
++  const byId = {};
++  for (const k of carried || []) if (k && typeof k.id === "string") byId[k.id] = k;
++  const record = (k, reason) => ({
 +    id: k.id, severity: k.severity, raised_by: k.raised_by, text: k.text,
 +    anchor: k.quote ? { kind: "quote", ...k.quote } : k.absent ? { kind: "absent", ...k.absent } : { kind: "none" },
-+    ref: k.ref || "", test: k.test || "", carried: { from_cycle: cycle - 1, reason: "not-addressed" },
-+  }));
-+  return (concerns || []).concat(add);
++    ref: k.ref || "", test: k.test || "",
++    carried: { from_cycle: k.carried && Number.isInteger(k.carried.from_cycle) ? k.carried.from_cycle : cycle - 1, reason },
++    ...(Array.isArray(roles) && roles.length > 0 && roles.indexOf(k.raised_by) === -1 ? { host: roles[0] } : {}),
++  });
++  const seen = {};
++  const out = [];
++  for (const c of concerns || []) {
++    if (!c) continue;
++    if (c.closure) { seen[c.id] = true; out.push(c); continue; }
++    if (byId[c.id]) {
++      if (!seen[c.id]) out.push(record(byId[c.id], "re-listed"));
++      seen[c.id] = true;
++      continue;
++    }
++    out.push(c);
++  }
++  for (const k of carried || []) {
++    if (!k || typeof k.id !== "string" || seen[k.id]) continue;
++    seen[k.id] = true;
++    out.push(record(k, "not-addressed"));
++  }
++  return out;
 +}
 +
 +// REVIEW.md lines for one verified finding. The header keeps the RAISED severity; the
@@ -1839,11 +1915,11 @@ Save as `/tmp/review-helpers.patch` and run `git apply /tmp/review-helpers.patch
 +    lines.push(`  verified: ${summary}`);
 +  }
 +  if (!c.refuted && c.final === "major") {
-     const d = dispositionMap[c.id];
-     lines.push(d && d.action === "adr" ? `  disposition: adr ADR-${d.adr_id}` : "  disposition: fix");
-   }
-   return lines;
- }
++    const d = dispositionMap[c.id];
++    lines.push(d && d.action === "adr" ? `  disposition: adr ADR-${d.adr_id}` : "  disposition: fix");
++  }
++  return lines;
++}
 +// --- VERIFIED-RULES END ---
  // --- LAYER1-PURE-HELPERS END ---
  
@@ -1853,7 +1929,7 @@ Save as `/tmp/review-helpers.patch` and run `git apply /tmp/review-helpers.patch
 - [ ] **Step 4: Run green; parse, lint, existing workflow suites; full suite**
 
 ```bash
-bash scripts/workflow-review-verified.test.sh | tail -1    # passed=30 failed=0
+bash scripts/workflow-review-verified.test.sh | tail -1    # passed=35 failed=0
 bash scripts/verified-vote-parity.test.sh | tail -1        # passed=10 failed=0
 { echo '(async function(){'; sed 's/^export const meta/const meta/' workflows/review.js; echo '})'; } > /tmp/review-wrapped.js && node --check /tmp/review-wrapped.js && echo "parse ok"
 bash scripts/workflow-determinism-lint.sh workflows/review.js | tail -1   # BUILD_FLEET_LINT_PASS
@@ -1886,7 +1962,7 @@ What the patch does (read it before applying):
 - `meta`: description names both shapes; phases gain `Verification panel` and `Vote`.
 - Args: the five settings are normalized and validated through the existing `invalid-args` path; `effectiveBudget = cycleBudget + exempt_cycles`, added after the `MAX_CYCLE_BUDGET` clamp, and used for `exhausting`, `decideVerdict` and the envelope.
 - Fan-out: `reviewPrompt(role, feature, cycle, lens, shape, carriedForRole)` adds, in the verified shape only, the finding grammar, the carried list with closure instructions, and a verified delta-cycle rule; `concernsSchemaFor(role, shape)` requires `anchor` + `test` and adds `closures`. `mergeConcerns` carries `anchor`, `ref`, `test`.
-- Verified branch (after the existing delta-severity enforcement): closure claims accepted only for carried findings their reviewer raised; `demoteUncheckable`; `materializeCarried` for roster raisers; a shared 3-verifier panel (`verifierPrompt`, `VERIFICATION_SCHEMA`, `model: VERIFIER_MODEL`, list rotated per verifier) plus, with `verify_blockers_solo`, one 3-verifier panel per blocker; fewer than 2 verdict sets from any panel ⇒ `incomplete`/`verifier-panel` with the cleanup envelope; then `applyVerifiedVote`. The debate branch is the existing code, indented under `else`.
+- Verified branch (after the existing delta-severity enforcement): closure claims accepted only for carried findings their reviewer raised; `materializeCarried` (with `ROLES`) then `demoteUncheckable`, which skips carried findings and closure claims; `buildEnvelope` writes a finding in the block of `host` when set; a shared 3-verifier panel (`verifierPrompt`, `VERIFICATION_SCHEMA`, `model: VERIFIER_MODEL`, list rotated per verifier) plus, with `verify_blockers_solo`, one 3-verifier panel per blocker; fewer than 2 verdict sets from any panel ⇒ `incomplete`/`verifier-panel` with the cleanup envelope; then `applyVerifiedVote`. The debate branch is the existing code, indented under `else`.
 - Render: verified blocks get `shape: verified` and `formatVerifiedFindingLines`; debate blocks unchanged.
 
 - [ ] **Step 1: Write the end-to-end harness**
@@ -1975,7 +2051,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
      { title: "Disposition", detail: "architect classifies each surviving major: adr (trade-off, ADR drafted) or fix (PO must close it in the spec)" },
      { title: "Apply", detail: "scribe writes PROGRESS + REVIEW + DECISIONS deltas" },
    ],
-@@ -495,6 +497,11 @@
+@@ -521,6 +523,11 @@
  // Validation failures are NEVER a bare throw (a throw would strand the marker).
  const rolesResult = normalizeRoles(A.roles);
  const budgetResult = normalizeCycleBudget(A.cycle_budget);
@@ -1987,7 +2063,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
  
  const argErrors = [];
  if (!feature || typeof feature !== "string") argErrors.push("feature: required non-empty string");
-@@ -502,6 +509,7 @@
+@@ -528,6 +535,7 @@
  if (!now || typeof now !== "string") argErrors.push("now: required iso8601 string (the dispatching command supplies it — the script cannot call Date)");
  if (rolesResult.error) argErrors.push(rolesResult.error);
  if (budgetResult.error) argErrors.push(budgetResult.error);
@@ -1995,7 +2071,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
  if (argErrors.length > 0) {
    log(`Invalid args: ${argErrors.join("; ")}. No state advanced.`);
    if (feature && typeof feature === "string") {
-@@ -520,6 +528,14 @@
+@@ -546,6 +554,14 @@
  const cycleBudget = budgetResult.budget;
  const cycleTotalBefore = normalizeCycleTotal(A.cycle_total, cycle);
  const nextAdrId = normalizeNextAdrId(A.next_adr_id);
@@ -2010,7 +2086,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
  log(`Reviewer roster: [${ROLES.join(", ")}]; cycle budget ${cycleBudget}; cumulative cycles before this run ${cycleTotalBefore}; next feature ADR id ${nextAdrId}.`);
  if (budgetResult.clamped) {
    log(`cycle_budget requested ${JSON.stringify(A.cycle_budget)} exceeds the protocol ceiling — capped to ${MAX_CYCLE_BUDGET}.`);
-@@ -533,8 +549,8 @@
+@@ -559,8 +575,8 @@
  
  // ---------- schemas (structured agent output) ----------
  
@@ -2021,14 +2097,10 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
      type: "object",
      additionalProperties: false,
      required: ["role", "status", "concerns"],
-@@ -552,10 +568,48 @@
-             severity: { type: "string", enum: ["blocker", "major", "minor"] },
-             text: { type: "string" },
-           },
-+        },
-+      },
-+    },
-+  };
+@@ -582,6 +598,44 @@
+       },
+     },
+   };
 +  if (shape !== "verified") return base;
 +  // Verified shape: every finding carries an anchor and a test (a [minor] may use anchor
 +  // kind "none"); delta cycles return closure claims for carried findings.
@@ -2062,25 +2134,18 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
 +          additionalProperties: false,
 +          required: ["file", "text"],
 +          properties: { file: { type: "string" }, text: { type: "string" } },
-         },
-       },
-     },
-   };
++        },
++      },
++    },
++  };
 +  return base;
  }
  
  const REFUTATION_SCHEMA = {
-@@ -582,7 +636,36 @@
-               file: { type: "string" },
-               locator: { type: "string" },
-             },
-+          },
-+        },
-+      },
-+    },
-+  },
-+};
-+
+@@ -615,6 +669,35 @@
+   },
+ };
+ 
 +const VERIFICATION_SCHEMA = {
 +  type: "object",
 +  additionalProperties: false,
@@ -2102,12 +2167,18 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
 +            additionalProperties: false,
 +            required: ["file", "text"],
 +            properties: { file: { type: "string" }, text: { type: "string" } },
-           },
++          },
 +          test_invalid: { type: "boolean" },
-         },
-       },
-     },
-@@ -619,12 +702,12 @@
++        },
++      },
++    },
++  },
++};
++
+ const DISPOSITION_SCHEMA = {
+   type: "object",
+   additionalProperties: false,
+@@ -645,12 +728,12 @@
  
  const reviewerResults = await parallel(
    ROLES.map((role) => () =>
@@ -2122,7 +2193,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
      })
    )
  );
-@@ -653,30 +736,115 @@
+@@ -679,29 +762,114 @@
    log(`Delta-severity enforcement demoted new major(s) to minor (not permitted on a delta cycle): ${enforced.demoted.join(", ")}.`);
  }
  
@@ -2148,36 +2219,20 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
 +    }
 +  }
 +  const closureIds = closures.map((c) => c.id);
-+  const dem = demoteUncheckable(allConcerns.filter((c) => closureIds.indexOf(c.id) === -1));
++  const offRoster = CARRIED.filter((k) => ROLES.indexOf(k.raised_by) === -1).map((k) => k.id);
++  if (offRoster.length > 0) log(`Carried findings whose raiser is not in the roster are written in ${ROLES[0]}'s block and stay open until their raiser closes them: ${offRoster.join(", ")}.`);
++  const dem = demoteUncheckable(materializeCarried(allConcerns.filter((c) => closureIds.indexOf(c.id) === -1).concat(closures), CARRIED, cycle, ROLES));
 +  if (dem.demoted.length > 0) log(`Demoted to minor (no anchor or no test): ${dem.demoted.join(", ")}.`);
-+  const carriedHere = CARRIED.filter((k) => ROLES.indexOf(k.raised_by) !== -1);
-+  if (carriedHere.length < CARRIED.length) log(`Carried findings whose raiser is not in the roster (left to the gate's carried-open check): ${CARRIED.filter((k) => ROLES.indexOf(k.raised_by) === -1).map((k) => k.id).join(", ")}.`);
-+  const findings = materializeCarried(dem.concerns.concat(closures), carriedHere, cycle);
++  const findings = dem.concerns;
 +  const toVerify = findings.filter((f) => !f.carried && !f.demoted && (f.closure || vrRank(f.severity) >= 1));
 +  const verifyItem = (f) => f.closure
 +    ? { id: f.id, kind: "closure", severity: f.severity, text: f.text, closure: f.closure }
 +    : { id: f.id, kind: "finding", severity: f.severity, text: f.text, anchor: f.anchor, ref: f.ref || "", test: f.test };
 +  const soloIds = VERIFY_BLOCKERS_SOLO ? toVerify.filter((f) => !f.closure && f.severity === "blocker").map((f) => f.id) : [];
 +  const shared = toVerify.filter((f) => soloIds.indexOf(f.id) === -1).map(verifyItem);
- 
--const xaResults = await parallel(
--  ROLES.map((role) => () =>
--    agent(crossExamPrompt(role, allConcerns, feature, cycle), {
--      label: `cross-exam:${role}`,
--      phase: "Cross-examination",
--      agentType: "build-fleet:reviewer",
--      ...(modelFor(role) ? { model: modelFor(role) } : {}),
--      schema: REFUTATION_SCHEMA,
--    })
--  )
--);
++
 +  phase("Verification panel");
- 
--const refutationMap = mergeRefutations(ROLES, xaResults);
--
--// ---------- Phase 3: survival vote (pure JS) ----------
--
--phase("Survival vote");
++
 +  const runPanel = (items, tag) =>
 +    parallel([0, 1, 2].map((k) => () =>
 +      agent(verifierPrompt(feature, cycle, rotateLeft(items, k)), {
@@ -2212,9 +2267,19 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
 +    };
 +  }
  
--const surviving = applySurvivalVote(allConcerns, refutationMap);
+-const xaResults = await parallel(
+-  ROLES.map((role) => () =>
+-    agent(crossExamPrompt(role, allConcerns, feature, cycle), {
+-      label: `cross-exam:${role}`,
+-      phase: "Cross-examination",
+-      agentType: "build-fleet:reviewer",
+-      ...(modelFor(role) ? { model: modelFor(role) } : {}),
+-      schema: REFUTATION_SCHEMA,
+-    })
+-  )
+-);
 +  // ---------- Phase 3 (verified): vote (pure JS; the gate recomputes it) ----------
- 
++
 +  phase("Vote");
 +
 +  surviving = findings.map((f) => applyVerifiedVote([f], soloIds.indexOf(f.id) !== -1 ? soloPanels[f.id] : sharedPanels)[0]);
@@ -2244,20 +2309,23 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
 +      })
 +    )
 +  );
-+
+ 
+-const refutationMap = mergeRefutations(ROLES, xaResults);
 +  const refutationMap = mergeRefutations(ROLES, xaResults);
-+
+ 
+-// ---------- Phase 3: survival vote (pure JS) ----------
 +  // ---------- Phase 3: survival vote (pure JS) ----------
-+
+ 
+-phase("Survival vote");
 +  phase("Survival vote");
-+
+ 
+-const surviving = applySurvivalVote(allConcerns, refutationMap);
 +  surviving = applySurvivalVote(allConcerns, refutationMap);
 +}
-+
+ 
  // ---------- Phase 4: disposition (architect, read-only; scribe writes the ADRs) ----------
  
- phase("Disposition");
-@@ -689,7 +857,7 @@
+@@ -715,7 +883,7 @@
  if (survivingMajors.length === 0) {
    log("No surviving majors — disposition leg skipped.");
  } else {
@@ -2266,7 +2334,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
    let dispo = null;
    try {
      dispo = await agent(dispositionPrompt(feature, cycle, survivingMajors, nextAdrId, exhausting), {
-@@ -749,7 +917,7 @@
+@@ -775,7 +943,7 @@
  }
  
  const ready = computeFinalizeReady(surviving, dispositionMap);
@@ -2275,7 +2343,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
  
  log(
    `Cycle ${cycle}: ${surviving.length} concerns, ${ready.openBlockers.length} open blockers, ${ready.openMajors.length} open majors → verdict=${verdict}, finalize_ready=${ready.finalize_ready}`
-@@ -761,13 +929,15 @@
+@@ -787,13 +955,15 @@
  
  const outputTokens = outputTokensSoFar();
  const envelope = buildEnvelope({
@@ -2293,7 +2361,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
    finalize_ready: ready.finalize_ready,
    feature,
    cycle,
-@@ -787,7 +957,7 @@
+@@ -813,7 +983,7 @@
  
  // ================= helpers =================
  
@@ -2302,7 +2370,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
    const files = `Read these files yourself (you have Read/Grep/Glob and NOTHING that writes):
  - .sdd/${feature}/spec.md
  - .sdd/${feature}/acceptance.md
-@@ -804,7 +974,28 @@
+@@ -830,7 +1000,28 @@
  
  Do NOT write, edit, or create any file. Return only the structured object.`;
  
@@ -2318,10 +2386,10 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
 +Quotes are checked word for word against the files after this review; an invented quote demotes the finding.`;
 +  const carriedRules = !(verified && carried && carried.length > 0) ? "" : `
 +OPEN FINDINGS YOU RAISED, carried from the previous cycle. Handle EVERY one:
-+${JSON.stringify(carried.map((k) => ({ id: k.id, severity: k.severity, text: k.text, why_open: k.why || null })), null, 2)}
-+- Still open ⇒ return it in "concerns" with its ORIGINAL id and severity, with anchor and test.
++${JSON.stringify(carried.map((k) => ({ id: k.id, severity: k.severity, text: k.text, ...(k.quote ? { quote: k.quote } : {}), ...(k.absent ? { absent: k.absent } : {}), why_open: k.why || null })), null, 2)}
++- Still open ⇒ leave it out of "concerns". It stays open exactly as recorded (severity, quote, test); re-listing it changes nothing.
 +- Closed by the revised spec ⇒ return it in "closures" as {"id": "<id>", "closure": {"file": "<file>", "text": "<verbatim text of the revised spec that closes it>"}}.
-+A carried finding you leave out is re-listed for you as still open.`;
++Only a closure the verifier panel confirms closes a carried finding.`;
 +  const cycleRules = verified && cycle > 1
 +    ? `This is cycle ${cycle}: a DELTA review. Two jobs, in order:
 +1. CLOSURE: the carried findings listed below.
@@ -2332,7 +2400,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
      ? `This is cycle 1: a FULL review of the spec through your lens.`
      : `This is cycle ${cycle}: a DELTA review. Two jobs, in order:
  1. CLOSURE — for each of YOUR OWN findings from the previous cycle that carries "disposition: fix",
-@@ -824,6 +1015,8 @@
+@@ -850,6 +1041,8 @@
  The severity rubric (blocker / major / minor) is in your instructions — use those exact words.
  
  ${cycleRules}
@@ -2341,7 +2409,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
  
  ${rules}
  
-@@ -831,7 +1024,43 @@
+@@ -857,7 +1050,43 @@
  - role: "${role}"
  - status: "concerns-raised" if you hold any blocker/major, else "approved" (informational — the
    gate reads dispositions, not this line)
@@ -2386,7 +2454,7 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
  }
  
  function crossExamPrompt(role, allConcerns, feature, cycle) {
-@@ -913,6 +1142,9 @@
+@@ -939,6 +1168,9 @@
          severity: c.severity,
          raised_by: r.role,
          text: c.text,
@@ -2396,14 +2464,15 @@ Save as `/tmp/review-wiring.patch` and run `git apply /tmp/review-wiring.patch`:
          refuted: false,
          refuted_by: null,
          refutation_reason: null,
-@@ -962,12 +1194,14 @@
+@@ -988,12 +1220,14 @@
    });
  }
  
 -function buildEnvelope({ feature, cycle, cycleBudget, cycleTotalBefore, now, reviews, surviving, dispositionMap, decisionsAppendix, ready, verdict, outputTokens }) {
 +function buildEnvelope({ feature, cycle, cycleBudget, cycleTotalBefore, now, reviews, surviving, dispositionMap, decisionsAppendix, ready, verdict, outputTokens, shape }) {
    const reviewEntries = reviews.map((r) => {
-     const own = surviving.filter((c) => c.raised_by === r.role);
+-    const own = surviving.filter((c) => c.raised_by === r.role);
++    const own = surviving.filter((c) => (c.host || c.raised_by) === r.role);
      const lines = [`## Cycle ${cycle} — ${r.role} — ${now}`];
 +    if (shape === "verified") lines.push("shape: verified");
      for (const c of own) {
@@ -2425,7 +2494,7 @@ bash scripts/workflow-determinism-lint.sh workflows/review.js | tail -1   # BUIL
 for t in scripts/workflow-*.test.sh scripts/lens-drift.test.sh scripts/verified-vote-parity.test.sh scripts/verified-review-e2e.test.sh; do printf '%s: ' "$t"; bash "$t" | tail -1; done
 bash scripts/run-tests.sh 2>&1 | tail -1                     # suites: 40, failed: 0
 ```
-Expected per suite: cycle-budget `all cycle-budget helpers pass`; determinism-lint `passed=42`; plan-review-config `passed=13`; review-config `passed=19`; review-convergence `passed=67`; review-verified `passed=30`; lens-drift `passed=3`; parity `passed=10`; e2e `passed=5`.
+Expected per suite: cycle-budget `all cycle-budget helpers pass`; determinism-lint `passed=42`; plan-review-config `passed=13`; review-config `passed=19`; review-convergence `passed=67`; review-verified `passed=35`; lens-drift `passed=3`; parity `passed=10`; e2e `passed=5`.
 
 - [ ] **Step 5: Commit**
 
@@ -2515,7 +2584,10 @@ Run: `bash scripts/status-snapshot.test.sh | tail -1` → `passed=50 failed=0`.
       `carried` array (`open_count` items) and `effective_budget` becomes
       `effective_budget + exempt_cycles`, added after the clamp: a cycle whose quote check reopened
       a finding does not count against the budget. Otherwise the open set is read from REVIEW.md
-      as below.
+      as below. If the script exits without a `BUILD_FLEET_REVIEW_CARRY:` line, refuse before
+      dispatch: `BUILD_FLEET_REFUSE: {"command":"review","code":2,"reason":"carry-unavailable"}`,
+      show its stderr, and say: the last cycle's open findings could not be read; run
+      `/build-fleet:status` and re-run review once the gate's report works.
 
       **Shape is fixed per review phase.** When `previous_shape` is `debate` or `verified` and the
       resolved shape (flag, else PROGRESS.md, else `debate`) differs from it, refuse before dispatch:
@@ -2625,8 +2697,9 @@ When `REVIEW_SHAPE: verified` is set, the cross-examination and survival vote ar
 - **Quotes are checked after the review** (`scripts/quote-check.sh`); the finalize gate recomputes
   every vote from the recorded verdicts and that check. A quote that is not found voids its vote; a
   finding that loses its kill this way is reopened, and that cycle does not count against the budget.
-- **Open findings carry forward**: each delta cycle re-lists, closes with a quoted closure, or carries
-  every open finding of the previous cycle.
+- **Open findings carry forward**: an open finding of the previous cycle is closed only by a quoted
+  closure the panel confirms; otherwise it is carried unchanged (`carried:` line), whether or not its
+  reviewer re-lists it.
 - **Limit:** the quote check catches invented quotes, not a real quote used to argue a wrong point; the
   majority vote is the defence against that.
 ```
@@ -2769,7 +2842,7 @@ Add at the top:
 
 - [ ] **Step 5: Contract docs**
 
-- `docs/v0.2/CONTRACT.md` §8, in the "Success paths emit their command-specific signal" sentence, add `BUILD_FLEET_QUOTE_CHECK`, `BUILD_FLEET_FINALIZE_REPORT` and `BUILD_FLEET_REVIEW_CARRY`; after it add: `The finalize gate refuses with two further reasons in a verified review: quote-check-missing and spec-changed-since-review. /build-fleet:review refuses shape-changed-mid-feature.` In §6's workflow return object, add `shape` ("debate"|"verified"), `verification` (`{raised, verified, killed, closed, demoted, carried, solo_panels}` or null) and the `incomplete` reason `verifier-panel`.
+- `docs/v0.2/CONTRACT.md` §8, in the "Success paths emit their command-specific signal" sentence, add `BUILD_FLEET_QUOTE_CHECK`, `BUILD_FLEET_FINALIZE_REPORT` and `BUILD_FLEET_REVIEW_CARRY`; after it add: `The finalize gate refuses with two further reasons in a verified review: quote-check-missing and spec-changed-since-review. /build-fleet:review refuses shape-changed-mid-feature and carry-unavailable.` In §6's workflow return object, add `shape` ("debate"|"verified"), `verification` (`{raised, verified, killed, closed, demoted, carried, solo_panels}` or null) and the `incomplete` reason `verifier-panel`.
 - `docs/loops.md`: in the REVIEW internal row (line 22), change the stages cell to `fan-out → cross-examination → survival vote (debate) or verification panel → quote-backed vote (verified) → disposition → apply`.
 
 - [ ] **Step 6: `plugin.json` and `ROADMAP.md`**
@@ -2800,7 +2873,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | D7 hook on marker release, §3.4 | 4, 5 |
 | D8 gate authority, §3.5 | 6 |
 | D9 reviewer agent reused | 9, 11 |
-| D10 carry-forward | 3 (`carried`), 6 (`carried-open`), 7, 8 (`materializeCarried`), 9 |
+| D10 carry-forward | 3 (`carried`), 4 (`off-roster-block-checked`), 6 (`carried-open`, `off-roster-raiser-carried-open`, `hosted-carried-stays-open`, `report-keeps-carried-origin`), 7 (`no-report-refuses`, `shape-read-from-any-block`), 8 (`materializeCarried`: `carry-relisted-keeps-record`, `carry-off-roster-hosted`), 9 |
 | §3.2 REVIEW.md format | 8 (render), 3 (parse), 11 (docs) |
 | §3.3 delta cycles, closures | 8, 9; 6 (`confirmed-closure-closes`) |
 | §3.4 first event wins, exempt, budget | 4, 7, 9 (`effectiveBudget`), 10 (precondition) |

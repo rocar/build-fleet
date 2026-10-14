@@ -43,7 +43,7 @@ evidence). The fixes below move the review fully onto the verification side.
 | D7 | **Quotes are checked by a PostToolUse hook on the scribe's final write**, the release of `.workflow-in-flight`, and the result is recorded as an event. | The workflow runtime has no filesystem, and `/review` returns before the workflow finishes, so no command is present at apply time. The marker release is the scribe's last action, after REVIEW.md and DECISIONS.md are complete, and before anyone can revise the spec. |
 | D8 | **The finalize gate is the authority** for the verified shape: it recomputes the vote from recorded verdicts and the quote-check event. | The deterministic layer decides; the workflow's answer is provisional. |
 | D9 | **Reuse the read-only `reviewer` agent** in a verify mode. | No ninth agent, no new tool allowlist. |
-| D10 | **Open findings carry forward, in writing.** Every open finding of a verified cycle is written into the next cycle's block: re-listed by its reviewer, closed with a confirmed closure, or re-listed by `review.js` with a `carried:` line when the reviewer left it out. | Delta reviewers, the gate and rotation all look only at the latest cycles; a finding that is only implied would vanish once rotation archives the cycle that raised it. |
+| D10 | **Open findings carry forward, in writing.** Every open finding of a verified cycle is written into the next cycle's block: closed with a confirmed closure, or re-listed by `review.js` with a `carried:` line (its original record, whether or not its reviewer re-listed it). A finding whose raiser left the roster is written in the first roster role's block. | Delta reviewers, the gate and rotation all look only at the latest cycles; a finding that is only implied would vanish once rotation archives the cycle that raised it. |
 
 ## 3. Design
 
@@ -97,8 +97,10 @@ status: concerns-raised
 - A verdict may carry `"test_invalid":true` (§3.3).
 - `demoted: {"reason":"no-anchor"|"no-test"|"test-invalid"}` records a demotion the workflow
   decided. Demotions from a failed quote are recorded in the quote-check event (§3.4).
-- `carried: {"from_cycle":N,"reason":"not-addressed"}` marks a finding `review.js` re-listed
-  because its reviewer left it out of a delta cycle (D10). It keeps its original `quote:`,
+- `carried: {"from_cycle":N,"reason":"not-addressed"|"re-listed"}` marks a finding `review.js`
+  carried into a delta cycle (D10): its reviewer left it out (`not-addressed`) or re-listed it
+  (`re-listed`; the reviewer's copy is replaced by the record). `N` is the cycle it was first
+  carried from. It keeps its original `quote:`,
   `ref:` and `test:` lines and gets no new verdicts. Its `disposition:` line is never copied:
   like every re-listed finding, it goes through this cycle's disposition leg (§3.3).
 - `verified:` is a human summary; every parser ignores it and recomputes.
@@ -157,12 +159,14 @@ makes the finding less serious. When unsure, uphold at the finding's own severit
 the `carried` arg: full finding objects `{id, raised_by, severity, text, anchor, ref, test,
 disposition?}` for every open blocker, `fix` major and revived finding, read from
 `finalize-gate.sh --report`. Each reviewer's prompt lists the carried findings it raised.
-For each, it either re-lists it as still open (original id and severity), or claims closure
+For each, it either leaves it out (it stays open), or claims closure
 with a `closure` quote of the revised spec text. The panel votes `confirm`/`reject` on each
 closure; a closure holds when a majority confirms (and, at the gate, its quote passes §3.4).
-A rejected closure keeps the finding open. After the fan-out, `review.js` re-lists every
-carried finding its reviewer neither re-listed nor claimed closed, with a `carried:` line;
-carried findings are not re-verified. New blockers raised in a delta cycle are verified like
+A rejected closure keeps the finding open. After the fan-out, `review.js` writes every
+carried finding not claimed closed as its original record with a `carried:` line, including
+one its reviewer re-listed anyway (so re-listing can never demote, re-verify or drop it);
+carried findings are not re-verified. A carried finding whose raiser is no longer in the
+roster is written in the first roster role's block and can be closed only by its raiser. New blockers raised in a delta cycle are verified like
 any new finding.
 
 **What reaches disposition and `finalize_ready`.** Findings whose closure holds are removed
