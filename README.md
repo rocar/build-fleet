@@ -170,7 +170,8 @@ either `.sdd/<feature>/` or `.sdd/_product/` via a `workspace_dir` field). The
 Plus deterministic shared scripts under `scripts/` (the backlog resolver, the
 intent-block extractor, the product-memory splice, the status snapshot, the
 atomic ACTIVE-lock acquirer, the finalize and change-review gates, the REVIEW.md
-rotation, the ADR index, plus the workflow determinism-lint and pinner that
+rotation, the ADR index, the verified review's quote check and carry (`quote-check.sh`,
+`review-carry.sh`), plus the workflow determinism-lint and pinner that
 govern the generate-then-pin lane — each with its own test harness), seven craft
 skills, twelve gate-enforcing hooks, and the shared memory layer under `.sdd/`.
 
@@ -437,7 +438,10 @@ Four phases run as Claude Code **dynamic workflows** (JS scripts under
   **cross-examination** → **survival vote** → architect **disposition** of surviving
   majors (`adr` or `fix`) → scribe applies the verdict, `finalize_ready` and the
   ADRs. Between cycles `/build-fleet:revise` hands the PO exactly the open items;
-  REVIEW.md is rotated to the previous cycle at dispatch.
+  REVIEW.md is rotated to the previous cycle at dispatch. Optional verified review
+  (`REVIEW_SHAPE: verified`): fresh verifiers judge every finding, a finding dies only on
+  two quote-backed refutations, and every quote is checked against the spec before the
+  gate counts it.
 - **`/build-fleet:plan-review` → `workflows/plan-review.js`.** The product
   counterpart — product-owner/architect/qa **interrogate** the plan. **Forked, not
   parameterized:** no cross-examination, no survival vote, no auto-escalation. It

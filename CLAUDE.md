@@ -29,7 +29,9 @@ scripts/                      # deterministic helpers (next-feature, intent-bloc
                               #   product-memory-splice, status-snapshot, run-tests,
                               #   acquire-active, finalize-gate, change-review-gate,
                               #   review-rotate, adr-index, workflow-determinism-lint,
-                              #   pin-workflow) + their *.test.sh
+                              #   pin-workflow, quote-check, review-carry)
+                              #   + their *.test.sh
+scripts/lib/                  # shared verified-review rules (jq) and REVIEW.md block helpers
 docs/                         # contracts, smoke fixtures, history
 .github/workflows/ci.yml      # CI: test matrix + release-channel check
 ```
@@ -83,6 +85,9 @@ bash scripts/run-tests.sh        # every hook + script suite, then the smoke tes
 - **Hooks fail closed.** Gate scripts anchor at `CLAUDE_PROJECT_DIR`, reject
   `..` traversal, require jq while an item is active, and trap unexpected errors
   to exit 2. Deliberate allows are explicit `exit 0`. Keep it that way.
+  The one deliberate exception is logging: `log_event` (hooks/scripts/_lib.sh)
+  swallows its own failures, so writing the event log never changes a gate's
+  decision.
 - **Signal lines are the machine contract.** Commands cannot set process exit
   codes; orchestrators dispatch on the `BUILD_FLEET_*:` stdout lines (refusals
   carry `{"code":<int>,"reason":"<slug>"}`). Never document an exit-code table.

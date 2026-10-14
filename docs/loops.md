@@ -19,7 +19,7 @@ stopping conditions.
 | Loop | Shape (named pattern) | Iteration unit | Stopping condition | Where |
 |---|---|---|---|---|
 | **REVIEW** (spec ⇄ review) | evaluator-optimizer + parallelization-with-voting | one `/build-fleet:review` run (REVIEW.md rotated to the previous cycle at each dispatch; cycle ≥2 is a delta review) | zero blockers & zero `fix` majors (`finalize_ready`) → `clean`; else `revise`/`escalate` at **≤3 cycles**, escalating on blockers **or** `fix` majors — plus a cumulative `CYCLE_TOTAL` bound across escalations | `workflows/review.js`, `SKILL.md` §REVIEW |
-| **REVIEW internal** | 5-stage micro-loop | fan-out → cross-examination → survival vote → disposition → apply | pure-JS survival vote | `workflows/review.js` |
+| **REVIEW internal** | 5-stage micro-loop | fan-out → cross-examination → survival vote (debate) or verification panel → quote-backed vote (verified) → disposition → apply | pure-JS survival vote | `workflows/review.js` |
 | **BUILD** (TDD) | generator/evaluator | coder iterates against qa's pre-written failing tests | every qa test passes | `SKILL.md:260-267` |
 | **deep-build** | orchestrator-workers | architect partitions files → N coders fan out → adversarial review | `clean` / `needs-iteration` / `escalate`, bounded by `BUILD_CYCLE ≤3` | `workflows/deep-build.js`, `SKILL.md:283-287` |
 | **CHANGE_REVIEW** | evaluator-optimizer | one `/build-fleet:handoff` pass | change-review gate passes (zero blockers, every major ADR'd or demoted — `scripts/change-review-gate.sh`); fail → back to BUILD, `≤3 CHANGE_CYCLE` then `escalate` | `SKILL.md:289-300` |

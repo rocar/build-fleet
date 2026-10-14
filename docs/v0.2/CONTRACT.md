@@ -583,6 +583,8 @@ plan-review) returns:
                                       //                 with an empty body, a duplicate id, or a missing id):
                                       //                 PHASE/CYCLE untouched, marker cleaned via a minimal
                                       //                 cleanup envelope, re-run is safe. NOT an escalation.
+                                      //                 Verified review: reason "verifier-panel" — fewer than two
+                                      //                 verifiers returned a usable verdict set.
                                       // "invalid-args" — the dispatch args were malformed; nothing ran
                                       //                 beyond marker cleanup. Fix the dispatch and re-run.
   "cycles_remaining": 1,              // int — present on bounded workflows (e.g. deep-build
@@ -597,6 +599,9 @@ plan-review) returns:
   "output_tokens": 27991,             // int | null — v0.9. Actual output tokens for this run (the runtime
                                       //              exposes output only); feeds LAST_REVIEW_OUTPUT_TOKENS.
   "cycle_total": 3,                   // int — v0.9 (review workflow). CYCLE_TOTAL value AFTER this run.
+  "shape": "debate|verified",         // string — review workflow. The review shape this run used.
+  "verification": null,               // object | null — review workflow, verified shape only:
+                                      //   {raised, verified, killed, closed, demoted, carried, solo_panels}.
   "scribe_apply": "applied|failed",   // "failed" = the scribe could not write state even after one
                                       //            retry: REVIEW.md/IMPL_NOTES.md/PROGRESS.md did NOT
                                       //            land and the marker may remain. The reader MUST
@@ -673,7 +678,10 @@ Every refusal emits exactly one `BUILD_FLEET_*REFUSE*:` line whose JSON carries:
 
 Success paths emit their command-specific signal (`BUILD_FLEET_WORKFLOW_LAUNCHED`,
 `BUILD_FLEET_FINALIZE_PASS`, `BUILD_FLEET_PLAN_FINALIZE_PASS`, `BUILD_FLEET_CHANGE_REVIEW_GATE`,
-`BUILD_FLEET_REVIEW_DEFAULTS`, …). `BUILD_FLEET_CLASSIFICATION` carries `risk` and
+`BUILD_FLEET_REVIEW_DEFAULTS`, `BUILD_FLEET_QUOTE_CHECK`, `BUILD_FLEET_FINALIZE_REPORT`,
+`BUILD_FLEET_REVIEW_CARRY`, …). The finalize gate refuses with two further reasons in a verified review:
+quote-check-missing and spec-changed-since-review. /build-fleet:review refuses shape-changed-mid-feature
+and carry-unavailable. `BUILD_FLEET_CLASSIFICATION` carries `risk` and
 `risk_reasons`; `BUILD_FLEET_CLASSIFIER_FALLBACK` carries `risk_assigned` and may name
 the reason `risk-tier-conflict`.
 
