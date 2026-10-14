@@ -173,7 +173,7 @@ atomic ACTIVE-lock acquirer, the finalize and change-review gates, the REVIEW.md
 rotation, the ADR index, the verified review's quote check and carry (`quote-check.sh`,
 `review-carry.sh`), plus the workflow determinism-lint and pinner that
 govern the generate-then-pin lane — each with its own test harness), seven craft
-skills, twelve gate-enforcing hooks, and the shared memory layer under `.sdd/`.
+skills, fourteen gate-enforcing hooks, and the shared memory layer under `.sdd/`.
 
 ---
 

@@ -103,4 +103,35 @@ vr_block "$p" 3 coder
 qc "$p" 3; gate "$p" --report
 assert "hosted-carried-stays-open" "[ \"\$(field '[.open[] | {id, why, raised_by}]')\" = '[{\"id\":\"architect-c1-1\",\"why\":\"carried\",\"raised_by\":\"architect\"}]' ]"
 assert "report-keeps-carried-origin" "[ \"\$(field '.open[0].carried')\" = '{\"from_cycle\":1,\"reason\":\"not-addressed\"}' ]"
+
+# Final-review regressions.
+p=$(vr_proj prev-no-event 2 2)
+vr_block "$p" 1 qa; vr_block "$p" 1 architect
+vr_block "$p" 2 qa '- [blocker] (qa-c2-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 blocker)" "$(vr_up 2 blocker)" "$(vr_up 3 blocker)"
+vr_block "$p" 2 architect
+qc "$p" 2; gate "$p"
+assert "prev-cycle-without-event-keeps-blocker" "[ $rc -eq 2 ] && field .open_blockers | grep -q qa-c2-1"
+gate "$p" --report
+assert "report-json-without-prev-event" "field '.open | map(.id)' | grep -q qa-c2-1"
+
+p=$(vr_proj dup-refute 1)
+vr_block "$p" 1 qa '- [blocker] (qa-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 blocker)" "$(vr_rf 2 'Retries are capped at 3 attempts')" "$(vr_rf 2 'Retries are capped at 3 attempts')" "$(vr_up 3 blocker)"
+vr_block "$p" 1 architect
+qc "$p" 1; gate "$p"
+assert "one-verifier-twice-never-kills" "[ $rc -eq 2 ] && field .open_blockers | grep -q qa-c1-1"
+
+p=$(vr_proj edited-after-check 1)
+vr_block "$p" 1 architect
+vr_block "$p" 1 qa '- [major] (qa-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)" '  disposition: fix'
+qc "$p" 1
+ln=$(grep -n '^status:' "$p/.sdd/feat/REVIEW.md" | tail -1 | cut -d: -f1)
+awk -v n="$ln" -v a="$(vr_rf 4 'Retries are capped at 3 attempts')" -v b="$(vr_rf 5 'Retries are capped at 3 attempts')" 'NR==n{print a; print b} {print}' "$p/.sdd/feat/REVIEW.md" > "$p/r" && mv "$p/r" "$p/.sdd/feat/REVIEW.md"
+gate "$p"
+assert "review-edited-after-check-refuses" "[ $rc -eq 2 ] && field .reasons | grep -q review-changed-since-check"
+
+p=$(vr_proj flag-role-gate 1)
+vr_block "$p" 1 qa; vr_block "$p" 1 architect
+vr_block "$p" 1 product-owner '- [blocker] (product-owner-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 blocker)" "$(vr_up 2 blocker)" "$(vr_up 3 blocker)"
+qc "$p" 1; gate "$p"
+assert "flag-role-blocker-counted" "[ $rc -eq 2 ] && field .open_blockers | grep -q product-owner-c1-1"
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]

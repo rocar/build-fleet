@@ -81,10 +81,8 @@ for role in $roles; do
   [ -f "$review" ] || { add reasons "missing-${role}"; continue; }
   block=$(last_cycle_block "$review" "$cycle" "$role")
   if [ -z "$block" ]; then add reasons "missing-${role}"; continue; fi
-  if printf '%s\n' "$block" | block_is_verified; then
-    vblocks="${vblocks}${block}"$'\n'
-    continue
-  fi
+  # verified blocks are read below by heading (cycle_roles), not by roster
+  printf '%s\n' "$block" | block_is_verified && continue
   legacy_blocks=$((legacy_blocks+1))
 
   # blockers + majors: a finding is closed by a "refuted-by:"/"disposition: adr ADR-N"
@@ -139,14 +137,11 @@ spec_changed=false; vopen='[]'
 adr_nums() { { grep -E '^##[[:space:]]+ADR-0*[0-9]+:' "$decisions" 2>/dev/null || true; } \
   | sed -E 's/^##[[:space:]]+ADR-0*([0-9]+):.*/\1/' | jq -Rsc 'split("\n") | map(select(length > 0) | tonumber)'; }
 qc_event() { read_events "$slug" "script:quote-check" | jq -c --argjson t "$1" 'select(.cycle_total == $t)' | head -1; }
-verified_blocks_for() { # verified_blocks_for <cycle> → every verified block of that cycle, whatever the roster
-  local r b out=""
-  for r in $(cycle_roles "$review" "$1"); do
-    b=$(last_cycle_block "$review" "$1" "$r"); [ -n "$b" ] || continue
-    printf '%s\n' "$b" | block_is_verified && out="${out}${b}"$'\n'
-  done
-  printf '%s' "$out"
-}
+# Every verified block of the current cycle, whatever the roster: a role added with --roles
+# (not persisted) still counts. quote-check.sh hashed exactly this text.
+vblocks=$(verified_cycle_blocks "$review" "$cycle")
+# A jq evaluation that fails on the verified path refuses; it never reads as "no open findings".
+vjson() { local out; out=$(jq "$@") && printf '%s' "$out" | jq -e 'type == "array"' >/dev/null 2>&1 && printf '%s' "$out"; }
 if [ -n "$vblocks" ]; then
   adrs=$(adr_nums)
   ev=$(qc_event "$cycle_total")
@@ -155,26 +150,31 @@ if [ -n "$vblocks" ]; then
   else
     fails=$(printf '%s' "$ev" | jq -c '.failures // []')
     fingerprint_matches "$slug" "$(printf '%s' "$ev" | jq -c '.files // {}')" || spec_changed=true
+    [ "$(printf '%s' "$ev" | jq -r '.blocks_sha256 // empty')" = "$(printf '%s' "$vblocks" | sha256_stdin)" ] \
+      || add reasons "review-changed-since-check"
   fi
   # carried-open safety net: open at the end of the previous verified cycle, absent now
   prev_open='[]'
   if [ "$cycle" -ge 2 ]; then
-    pblocks=$(verified_blocks_for $((cycle-1)))
+    pblocks=$(verified_cycle_blocks "$review" $((cycle-1)))
     if [ -n "$pblocks" ]; then
       pev=$(qc_event $((cycle_total-1)))
-      pfails=$(printf '%s' "${pev:-{\}}" | jq -c '.failures // []')
-      prev_open=$(printf '%s' "$pblocks" | jq -Rs --argjson fails "$pfails" --argjson adrs "$adrs" "${RULES}"'
-        split("\n## ") | map(vr_parse_block) | add // [] | map(vr_outcome($fails) | . + {why: vr_open($adrs)}) | map(select(.why != null))')
+      [ -n "$pev" ] || pev='{}'
+      pfails=$(printf '%s' "$pev" | jq -c '.failures // []') || pfails='[]'
+      prev_open=$(printf '%s' "$pblocks" | vjson -c -Rs --argjson fails "$pfails" --argjson adrs "$adrs" "${RULES}"'
+        split("\n## ") | map(vr_parse_block) | add // [] | map(vr_outcome($fails) | . + {why: vr_open($adrs)}) | map(select(.why != null))') \
+        || { add reasons "verified-eval-failed"; prev_open='[]'; }
     fi
   fi
-  vopen=$(printf '%s' "$vblocks" | jq -Rs --argjson fails "$fails" --argjson adrs "$adrs" --argjson prev "$prev_open" "${RULES}"'
+  vopen=$(printf '%s' "$vblocks" | vjson -c -Rs --argjson fails "$fails" --argjson adrs "$adrs" --argjson prev "$prev_open" "${RULES}"'
     split("\n## ") | map(vr_parse_block) | add // [] | . as $fs
     | ($fs | map(.id)) as $listed
     | ($fs | map(vr_outcome($fails) | . + {why: (if .carried != null and vr_open($adrs) != null then "carried" elif .reopened_closure and vr_open($adrs) != null then "reopened-closure" else vr_open($adrs) end)})
            | map(select(.why != null)))
       + [$prev[] | select(.id as $i | $listed | index($i) | not) | . + {why: "carried-open"}]
     | map({id, severity: .final, text, raised_by: (.id | sub("-c[0-9]+-[0-9]+$"; "")), why,
-           quote, absent, ref, test, disposition, carried} | with_entries(select(.value != null)))')
+           quote, absent, ref, test, disposition, carried} | with_entries(select(.value != null)))') \
+    || { add reasons "verified-eval-failed"; vopen='[]'; }
   while IFS= read -r row; do
     [ -n "$row" ] || continue
     id=$(printf '%s' "$row" | jq -r '.id'); why=$(printf '%s' "$row" | jq -r '.why'); sev=$(printf '%s' "$row" | jq -r '.severity')

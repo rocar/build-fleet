@@ -280,6 +280,13 @@ For verified blocks the gate:
    lists nor closes as open, reason `carried-open`;
 5. applies today's rule: no open blockers; no majors dispositioned `fix` or undispositioned.
 
+Added after the final code review (2026-10-14): the gate reads the current cycle's verified
+blocks by heading, not by roster (a role added with `--roles` still counts); it counts one
+verdict per verifier per finding (a repeated line keeps its first); it refuses
+`review-changed-since-check` when the cycle's verified blocks differ from what the quote check
+hashed (`blocks_sha256` in the event); and it refuses `verified-eval-failed` rather than read a
+failed evaluation as "no open findings".
+
 `review.js` still returns `finalize_ready`; for the verified shape it is provisional, and
 `/build-fleet:status` and `/build-fleet:finalize` show the gate's answer (`--report`,
 dashboard spec §3.4) once the quote check has run.

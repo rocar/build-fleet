@@ -48,13 +48,7 @@ if read_events "$slug" "script:quote-check" | jq -e --argjson t "$cycle_total" '
   signal 0 0 '[]' false '"already-checked"'; exit 0
 fi
 
-blocks=""
-for role in $(cycle_roles "$review" "$cycle"); do
-  b=$(last_cycle_block "$review" "$cycle" "$role")
-  [ -n "$b" ] || continue
-  printf '%s\n' "$b" | block_is_verified || continue
-  blocks="${blocks}${b}"$'\n'
-done
+blocks=$(verified_cycle_blocks "$review" "$cycle")
 if [ -z "$blocks" ]; then signal 0 0 '[]' false '"not-verified"'; exit 0; fi
 
 docs=$(quote_docs_json "$slug")
@@ -67,10 +61,11 @@ result=$(printf '%s' "$blocks" | jq -Rs --argjson docs "$docs" --arg slug "$slug
   || { echo "quote-check.sh: could not evaluate ${review}" >&2; exit 1; }
 
 fp=$(quote_docs_fingerprint "$slug")
+blocks_sha=$(printf '%s' "$blocks" | sha256_stdin)
 failed=$(printf '%s' "$result" | jq '.failures | length')
 decision=pass; [ "$failed" -eq 0 ] || decision=fail
-log_event "$slug" "$(printf '%s' "$result" | jq -c --arg d "$decision" --argjson c "$cycle" --argjson t "$cycle_total" --argjson fp "$fp" \
-  '{kind: "gate", source: "script:quote-check", decision: $d, cycle: $c, cycle_total: $t, files: $fp} + .')"
+log_event "$slug" "$(printf '%s' "$result" | jq -c --arg d "$decision" --argjson c "$cycle" --argjson t "$cycle_total" --argjson fp "$fp" --arg bs "$blocks_sha" \
+  '{kind: "gate", source: "script:quote-check", decision: $d, cycle: $c, cycle_total: $t, files: $fp, blocks_sha256: $bs} + .')"
 signal "$(printf '%s' "$result" | jq '.checked')" "$failed" "$(printf '%s' "$result" | jq -c '.revived')" \
   "$(printf '%s' "$result" | jq '.exempt')" null
 exit 0

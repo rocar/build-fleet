@@ -33,6 +33,18 @@ cycle_roles() {
     | awk '!seen[$0]++'
 }
 
+# Print every verified block of <cycle> (each followed by a newline), whatever the roster.
+# quote-check.sh hashes exactly this text and finalize-gate.sh re-reads it, so both must use it.
+# Usage: verified_cycle_blocks <review-file> <cycle>
+verified_cycle_blocks() {
+  local review="$1" cycle="$2" r b
+  for r in $(cycle_roles "$review" "$cycle"); do
+    b=$(last_cycle_block "$review" "$cycle" "$r"); [ -n "$b" ] || continue
+    printf '%s\n' "$b" | block_is_verified && printf '%s\n' "$b"
+  done
+  return 0
+}
+
 # Echo a JSON object of the allow-listed quote sources that exist for <slug>:
 # {"spec.md": "<raw>", "acceptance.md": …, "DECISIONS.md": …, "_product/DECISIONS.md": …}
 # Usage: quote_docs_json <slug>

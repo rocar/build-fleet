@@ -18,6 +18,7 @@ const A = { kind: "quote", file: "spec.md", text: "xx yy zz ww" };
 const v = (id, vote, severity, extra) => ({ verdicts: [{ id, vote, severity, ...(extra || {}) }] });
 const fixtures = [
   ["killed-2of3", { id: "qa-c1-1", severity: "major", text: "a", anchor: A, test: "t" }, [v("qa-c1-1", "uphold", "major"), v("qa-c1-1", "refute", "minor", { reason: R, quote: q }), v("qa-c1-1", "refute", "minor", { reason: R, quote: q })]],
+  ["duplicate-refute-counts-once", { id: "qa-c1-9", severity: "blocker", text: "i", anchor: A, test: "t" }, [v("qa-c1-9", "uphold", "blocker"), { verdicts: [v("qa-c1-9", "refute", "minor", { reason: R, quote: q }).verdicts[0], v("qa-c1-9", "refute", "minor", { reason: R, quote: q }).verdicts[0]] }, v("qa-c1-9", "uphold", "blocker")]],
   ["one-refute-survives", { id: "qa-c1-2", severity: "blocker", text: "b", anchor: A, test: "t" }, [v("qa-c1-2", "refute", "minor", { reason: R, quote: q }), v("qa-c1-2", "uphold", "blocker"), v("qa-c1-2", "uphold", "major", { reason: "short" })]],
   ["lowered-with-evidence", { id: "qa-c1-3", severity: "blocker", text: "c", anchor: A, test: "t" }, [v("qa-c1-3", "uphold", "major", { reason: R, quote: q }), v("qa-c1-3", "uphold", "major", { reason: R, quote: q }), v("qa-c1-3", "uphold", "blocker")]],
   ["two-returned-even-median", { id: "qa-c1-4", severity: "blocker", text: "d", anchor: A, test: "t" }, [v("qa-c1-4", "uphold", "minor", { reason: R, quote: q }), null, v("qa-c1-4", "uphold", "blocker")]],

@@ -45,7 +45,12 @@ def vr_evidence($fails; $id):
 def vr_outcome($fails):
   . as $f
   | ($f.severity | vr_rank) as $orig
-  | [($f.verdicts // [])[] | select(type == "object" and ((.invalid // false) | not))] as $vs
+  # One verdict per verifier: a repeated "v" keeps its first line (one voter, one vote).
+  | (reduce (($f.verdicts // [])[] | select(type == "object" and ((.invalid // false) | not))) as $x
+       ({seen: {}, out: []};
+        if ($x.v | type) == "number" then
+          ($x.v | tostring) as $k | if .seen[$k] then . else .seen[$k] = true | .out += [$x] end
+        else .out += [$x] end) | .out) as $vs
   | ($vs | length) as $n
   | if ($f.carried != null) then
       $f + {final: $f.severity, killed: false, closed: false, demoted_reason: null, reopened_closure: false}

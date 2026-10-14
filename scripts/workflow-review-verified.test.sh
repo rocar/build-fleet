@@ -56,6 +56,8 @@ let [c] = applyVerifiedVote([f], panels);
 check("vote-kill", c.killed && c.refuted && c.verdicts.length === 3 && eq(c.verdicts.map((v) => v.v), [1, 2, 3]));
 [c] = applyVerifiedVote([f], [panels[0], panels[1], null]);
 check("vote-one-refute-of-two-survives", !c.killed && c.severity === "major" && eq(c.verdicts.map((v) => v.v), [1, 2]));
+[c] = applyVerifiedVote([f], [panels[0], { verdicts: [panels[1].verdicts[0], panels[1].verdicts[0]] }, panels[0]]);
+check("vote-duplicate-verdict-counts-once", !c.killed && eq(c.verdicts.map((v) => v.v), [1, 2, 3]));
 [c] = applyVerifiedVote([{ ...f, carried: { from_cycle: 1, reason: "not-addressed" } }], panels);
 check("vote-carried-not-verified", c.verdicts.length === 0 && !c.refuted && c.severity === "major");
 [c] = applyVerifiedVote([{ ...f, closure: { file: "spec.md", text: "Retries are capped at 3 attempts" } }],

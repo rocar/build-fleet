@@ -389,8 +389,10 @@ function applyVerifiedVote(findings, panels) {
   const byId = {};
   (panels || []).forEach((p, i) => {
     if (!p || !Array.isArray(p.verdicts)) return;
+    const seen = {}; // one verdict per finding per verifier: a repeated id keeps its first
     for (const v of p.verdicts) {
-      if (!v || typeof v.id !== "string") continue;
+      if (!v || typeof v.id !== "string" || seen[v.id]) continue;
+      seen[v.id] = true;
       const { id, ...rest } = v;
       (byId[id] ||= []).push({ v: i + 1, ...rest });
     }

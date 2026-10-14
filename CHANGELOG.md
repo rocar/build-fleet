@@ -24,7 +24,9 @@ only (never across clones).
 - `scripts/quote-check.sh`, run by a hook when the review's scribe finishes, checks every quote word for
   word and records the result in `.sdd/<slug>/EVENTS.jsonl`; a quote that is not found voids its vote.
 - The finalize gate recomputes verified votes, refuses `quote-check-missing` and
-  `spec-changed-since-review`, and gains `--report`.
+  `spec-changed-since-review`, `review-changed-since-check` (REVIEW.md edited after its quotes were
+  checked) and `verified-eval-failed`, and gains `--report`. One verifier counts once per finding,
+  whatever it returns.
 - Event log essentials: `log_event`, and a guard that keeps agents from writing the log.
 
 ### Compatibility
