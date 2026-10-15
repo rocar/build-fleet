@@ -273,6 +273,27 @@ base; { printf '# Test Plan — f\n\n## Coverage matrix (draft)\n\n| Criterion |
 run f
 assert "renamed-matrix-heading-fails-closed" "[ $rc -eq 2 ] && has '\"untested\":[\"AC-1\",\"AC-2\"]'"
 
+# --- a file named like an awk assignment; a name of only slashes ---
+proj; printf 'DRIFT_GATE: on\n' | feat f; acc f AC-1 AC-2
+src 'k=v' <<'T'
+def test_one(): pass
+T
+src tests/t.py <<'T'
+def test_two(): pass
+T
+plan f <<'T'
+| AC-1 | `test_one` | unit | `k=v` |
+| AC-2 | `test_two` | unit | `tests/t.py` |
+T
+run f
+assert "file-named-like-assignment" "[ $rc -eq 0 ]"
+base; plan f <<'T'
+| AC-1 | `/` | unit | `tests/test_f.py` |
+| AC-2 | `test_two` | unit | `tests/test_f.py` |
+T
+run f
+assert "slash-only-name-fails" "[ $rc -eq 2 ] && has missing-test"
+
 # --- usage and unreadable workspace ---
 proj; run; assert "no-args-usage" "[ $rc -eq 1 ]"
 proj; run ../x; assert "bad-slug" "[ $rc -eq 1 ]"

@@ -43,11 +43,11 @@ has_word() {
         if (b !~ /[A-Za-z0-9_]/ && a !~ /[A-Za-z0-9_]/) { found = 1; exit }
         off = p
       } }
-    END { exit found ? 0 : 1 }' "$1"
+    END { exit found ? 0 : 1 }' < "$1"   # stdin, not an operand: awk reads "k=v" as an assignment
 }
 # has_name <file> <name> — the whole-word / per-segment / substring rule of the spec
 has_name() {
-  local f="$1" n="$2" seg rest
+  local f="$1" n="$2" seg rest seen=""
   case "$n" in
     */*)
       rest="$n"
@@ -56,8 +56,9 @@ has_name() {
         if [ "$seg" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
         [ -n "$seg" ] || continue
         has_name "$f" "$seg" || return 1
+        seen=1
       done
-      return 0 ;;
+      [ -n "$seen" ]; return ;;   # a name of only slashes names nothing
   esac
   if printf '%s' "$n" | grep -qE '^[A-Za-z0-9_]+$'; then has_word "$f" "$n"
   else grep -qF -- "$n" "$f"; fi
