@@ -48,9 +48,9 @@ timestamps (they have no Bash), a known issue from before this change.
 
 ## Word counts
 
-Agent bodies: 10,377 words before, 8,702 after (−16%). Descriptions: 8 agents from
-61–116 words to 35–40; 7 skills from 33–99 to 25–33. Caps: coder, devops and reviewer at
-800; qa 1,433, architect 1,359, product-owner 1,275, classifier 1,492, scribe 1,571.
+Agent bodies: 10,377 words before, 8,908 after the final-review and Gemini restorations. Descriptions: 8 agents from
+61–116 words to 35–40; 7 skills from 33–99 to 25–33. Caps: devops and reviewer at 800;
+coder 894, qa 1,433, architect 1,359, product-owner 1,411, classifier 1,492, scribe 1,571.
 Most of what remained is rules, which the inventory keeps.
 
 ## Change-review probe (plugin cbd434e, after the final-review fixes)
