@@ -21,6 +21,7 @@ want implement-repair-mode commands/implement.md   '**Repair mode.**'
 want implement-fail-line   commands/implement.md   'BUILD_FLEET_QA_VERIFY_FAIL: {"feature":"<slug>","reason":"drift","gate":'
 want implement-qa-fail     commands/implement.md   'QA_FAIL: drift' 3
 want implement-incomplete  commands/implement.md   '"reason":"drift-repair"'
+want implement-repair-phase commands/implement.md   "In repair mode (\`QA_FAIL: drift\`), \`PHASE\` may also be \`CHANGE_REVIEW\` or \`HANDOFF\`"
 want handoff-calls-gate    commands/handoff.md     'scripts/drift-gate.sh'
 want handoff-refuse        commands/handoff.md     'BUILD_FLEET_HANDOFF_REFUSE: {"feature":"<slug>","code":2,"reason":"drift","gate":'
 want handoff-resume        commands/handoff.md     'run the drift gate (step 4) and, if it passes, skip straight to step 9'

@@ -29,7 +29,10 @@ this orchestration owns its own preconditions.
 
 2. **Check the gate has passed.** `spec.md` STATUS must be `FINALIZED` and
    `PHASE` must be `BUILD` (tolerate a legacy `FINALIZE` phase value the same
-   way). If not, refuse and name the actual state:
+   way).
+   In repair mode (`QA_FAIL: drift`), `PHASE` may also be `CHANGE_REVIEW` or `HANDOFF`:
+   `handoff`'s drift gate stopped a built feature there. If not, refuse and name the
+   actual state:
    `BUILD_FLEET_BUILD_REFUSE: {"feature":"<slug>","code":2,"reason":"not-finalized","status":"<STATUS>","phase":"<PHASE>","detail":"run /build-fleet:finalize first"}`.
 
 3. **Check ESCALATION.md.** If `.sdd/<slug>/ESCALATION.md` exists, refuse
