@@ -31,7 +31,7 @@ code and prose are deleted, not branched.
 | D1 | Four files per feature: `spec.md` (with an acceptance section), `REVIEW.md`, `PROGRESS.md`, `DECISIONS.md`. `IMPL_NOTES.md` exists only once something is written to it. | The roadmap target. Each remaining file has one owner and one purpose. |
 | D2 | **No backward compatibility.** Every reference to `acceptance.md`, `TEST_PLAN.md` and `SKILL_MANIFEST.md` is deleted. New features are stamped `SDD_SCHEMA: 2`; any other forward-feature schema is refused at the entry points with `unsupported-schema`. | A dual-schema switch would carry two paths through every gate, command, workflow and agent — roughly as much added as removed, against the point of the lite release. No users depend on the old layout (Ray, 2026-10-16). |
 | D3 | Line budget and layout are part B; read instrumentation waits for 0.13 with the dashboard. | Instrumentation has no reader until the dashboard exists. |
-| D4 | The test plan lives **in the tests**: each test carries its criterion id in a marker comment (`# AC-3`, `// AC-3`) on or above it. The drift gate requires every criterion to appear in at least one test file. | One source of truth, kept next to the code it describes; nothing to hand-maintain. Known limit: a stale marker still counts. |
+| D4 | The test plan lives **in the tests**: each test carries a marker comment naming its feature and criterion — `# <slug>/AC-3`, `// <slug>/AC-3` — on or above it. The drift gate requires every criterion to appear in at least one test file. | One source of truth, kept next to the code it describes. The slug is required because criterion ids restart at `AC-1` in every feature while all features share the test tree: a bare `AC-3` would let one feature's tests cover, or fail, another's (Ray, 2026-10-16). Known limit: a stale marker still counts. |
 | D5 | REVIEW.md blocks are **findings-only**: a role heading plus finding lines (with their indented disposition / refutation / verification lines). The `status: concerns-raised \| approved` line is removed. | No gate has read the line since 0.9; it is the only non-finding content. A role with no findings writes its heading alone, so the gates still see that it reviewed. |
 | D6 | `IMPL_NOTES.md` is created by its first writer. The two readers that used it as a "coder has started" signal key on `BUILD_STATE` instead. | A clean coder run has nothing to note; an empty scaffold is noise. `BUILD_STATE` is set before coder runs (implement step c) and is the honest signal. |
 | D7 | Skill routing moves into PROGRESS as two fields, `CODER_SKILLS: <csv>` and `QA_SKILLS: <csv>`, written only when non-empty. | Only the skill lists were ever consumed. `feature_type`, `derived_from`, `rationale` and `tools_recommended` (binds nothing, by its own spec) stay in the classifier's `BUILD_FLEET_SKILL_MANIFEST:` signal line only. |
@@ -103,15 +103,19 @@ Each change gets its failing test first, in the hook's existing harness.
 
 - **`drift-gate.sh <slug> | --all`**:
   - Criteria: distinct ids in the spec's `## Acceptance…` section.
-  - Coverage: every criterion id occurs as a whole token in at least one regular, non-`.md` file under
-    the test roots (a `tests/README.md` listing criteria must not cover them — part C refused `*.md` locations for the same reason). Whole token = not preceded or followed by `[A-Za-z0-9_-]`, so `AC-3`
-    does not match `AC-30` or `AC-3a`, and `AC-3a` does not count for `AC-3`.
+  - Coverage: for every criterion id `AC-n`, the token `<slug>/AC-n` occurs in at least one
+    regular, non-`.md` file under the test roots (a `tests/README.md` listing criteria must
+    not cover them; part C refused `*.md` locations for the same reason). Token boundaries:
+    not preceded by `[A-Za-z0-9_./-]` and not followed by `[A-Za-z0-9_-]`, so
+    `calc/AC-3` does not match `calc/AC-30`, `calc/AC-3a` or `old-calc/AC-3`, and
+    `calc/AC-3a` does not count for `calc/AC-3`. Markers of other features are ignored.
   - Test roots: `TEST_ROOTS` from PROGRESS (comma-separated, project-relative), else
     `tests`. A root that is absolute, contains `..`, or lies under `.sdd/` is `bad-field`;
     a root that does not exist is `no-test-roots`.
   - Reasons, in order: `bad-field`, `unsupported-schema`, `no-criteria`, `no-test-roots`,
-    `untested` (a criterion with no marker), `unknown-criterion` (a marker in the test
-    roots naming an id the spec does not have — catches markers left stale by a revision).
+    `untested` (a criterion with no marker), `unknown-criterion` (a `<slug>/AC-n` marker for
+    this feature naming an id its spec does not have — catches markers left stale by a
+    revision).
   - Signal line: `BUILD_FLEET_DRIFT_GATE: {"feature","pass","reasons","untested","unknown"}`
     (plus `"unchecked":true` for `DRIFT_GATE: off`, `"in_progress":true` under `--all`).
     The removed fields (`missing`, `unparsed`, `gaps_open`) go; exit codes are unchanged.
@@ -133,7 +137,7 @@ Every edit names the new location only.
 
 - **product-owner** — writes acceptance criteria as the spec's last section; self-review
   and the PLAN_REVIEW criteria point there.
-- **qa** — no TEST_PLAN: tags each test with its criterion id, runs the drift gate as today;
+- **qa** — no TEST_PLAN: tags each test with a `<slug>/AC-n` marker, runs the drift gate as today;
   repair edits markers or tests; reads `QA_SKILLS`.
 - **coder** — creates IMPL_NOTES on first write; reads `CODER_SKILLS`; review format loses
   `status:`.
@@ -172,7 +176,7 @@ Every edit names the new location only.
   `validate-acceptance-count` on `spec.md`; `stop-tests` window on `BUILD_STATE`;
   `block-source-before-finalized` and `lite-next` `unsupported-schema` (forward refused,
   bug lane and product tier exempt); `drift-gate` — every reason, whole-token cases
-  (`AC-3` vs `AC-30`, `AC-3a`, `xAC-3`), `TEST_ROOTS` (csv, absolute, `..`, `.sdd/`,
+  (`calc/AC-3` vs `calc/AC-30`, `calc/AC-3a`, `old-calc/AC-3`, a bare `AC-3`, another feature's marker), `TEST_ROOTS` (csv, absolute, `..`, `.sdd/`,
   missing), `DRIFT_GATE` absent/off/garbage, `--all` with a schema-1 feature.
 - **Static guard:** `agent-surface.test.sh` retired-name scan (and a planted mention must
   fail it); the `retired:` inventory form.
