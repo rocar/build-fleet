@@ -138,16 +138,16 @@ check "router: shipped → nothing-to-do" "$(lite)" stop:nothing-to-do
 check ".sdd/ACTIVE is cleared on ship" "$(cat .sdd/ACTIVE)" ""
 check "with no active item, source writes are ALLOWED again" "$(gate pagination.py)" ALLOWED
 
-# ---------- DRIFT (a built feature's criteria stay mapped to named tests) ----------
+# ---------- DRIFT (a built feature's criteria stay marked in its tests) ----------
 echo "[DRIFT]"
 mkdir -p .sdd/pager-totals
-printf 'FEATURE: pager-totals\nPHASE: HANDOFF\nBUILD_STATE: done\nDRIFT_GATE: on\n' > .sdd/pager-totals/PROGRESS.md
-printf '# Acceptance Criteria — pager-totals\n\n- AC-1: a partial last page is counted.\n- AC-2: an empty list has no pages.\n' > .sdd/pager-totals/acceptance.md
-printf '# Test Plan — pager-totals\n\n## Coverage matrix\n\n| Criterion | Test name | Type | Location |\n|---|---|---|---|\n| AC-1 | `test_partial_last_page_is_counted` | unit | `tests/test_pagination.py::test_partial_last_page_is_counted` |\n| AC-2 | `test_empty_has_no_pages` | unit | `tests/test_pagination.py::test_empty_has_no_pages` |\n' > .sdd/pager-totals/TEST_PLAN.md
+printf 'SDD_SCHEMA: 2\nFEATURE: pager-totals\nPHASE: HANDOFF\nBUILD_STATE: done\n' > .sdd/pager-totals/PROGRESS.md
+printf 'STATUS: FINALIZED\n\n# pager-totals\n\n## Acceptance Criteria\n\n- **AC-1**: a partial last page is counted.\n- **AC-2**: an empty list has no pages.\n' > .sdd/pager-totals/spec.md
+printf '\n# pager-totals/AC-1\ndef test_partial_marker(): pass\n# pager-totals/AC-2\ndef test_empty_marker(): pass\n' >> tests/test_pagination.py
 drift(){ local rc=0; CLAUDE_PROJECT_DIR="$work" bash "$PLUGIN/scripts/drift-gate.sh" --all >/dev/null 2>&1 || rc=$?; printf '%s' "$rc"; }
-check "drift gate: every criterion mapped → pass" "$(drift)" 0
-sed 's/def test_empty_has_no_pages/def test_renamed_away/' tests/test_pagination.py > tests/renamed.tmp && mv tests/renamed.tmp tests/test_pagination.py
-check "drift gate: a mapped test renamed away → fail" "$(drift)" 2
+check "drift gate: every criterion marked → pass" "$(drift)" 0
+sed 's|# pager-totals/AC-2||' tests/test_pagination.py > tests/renamed.tmp && mv tests/renamed.tmp tests/test_pagination.py
+check "drift gate: a criterion's marker removed → fail" "$(drift)" 2
 
 echo
 echo "-----"
