@@ -12,7 +12,7 @@
 //
 // Reviewer roles are [architect, coder] (the product-owner drops out of the bug lane).
 // Evidence is the REPRODUCTION (the failing test / diagnosis.md reproduction steps), not
-// spec.md/acceptance.md — so the structured citation {file, locator} targets the reproduction.
+// spec.md — so the structured citation {file, locator} targets the reproduction.
 //
 // CONTRACT: docs/v0.2/CONTRACT.md (the scribe envelope is reused unchanged).
 //

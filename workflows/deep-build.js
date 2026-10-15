@@ -409,7 +409,7 @@ function partitionPrompt(feature, maxPartitions) {
   return `You are the architect planning a file partition for up to ${maxPartitions} coders to implement this feature IN PARALLEL against pre-existing failing tests.
 
 Read yourself (you have Read/Grep/Glob):
-- .sdd/${feature}/spec.md, acceptance.md, TEST_PLAN.md
+- .sdd/${feature}/spec.md (acceptance criteria included); qa's tests carry \`${feature}/AC-<n>\` markers
 - the tests/ directory (what test files exist)
 - the project layout (top-level dirs suggesting package/module boundaries)
 
@@ -436,9 +436,9 @@ Acceptance criteria you cover: ${JSON.stringify(partition.acceptance_criteria)}
 Tests you must make pass (they EXIST and currently FAIL — qa wrote them under M2 ordering):
 ${JSON.stringify(partition.tests)}
 
-Read .sdd/${feature}/spec.md and acceptance.md yourself for full context.
-If .sdd/${feature}/SKILL_MANIFEST.md exists, load and apply the skills it lists
-under the 'coder' role (per the skill-routing skill) before implementing; an
+Read .sdd/${feature}/spec.md yourself for full context, acceptance criteria included.
+If .sdd/${feature}/PROGRESS.md has CODER_SKILLS, load and apply the skills it lists
+(per the skill-routing skill) before implementing; an
 unavailable skill is a no-op — note it in your impl_notes and proceed.
 
 Your job:
@@ -453,7 +453,7 @@ Return the structured object: { label, files_modified, tests_passing, tests_fail
 function archReviewPrompt(partitions, coderResults, feature, violations) {
   return `You are the architect reviewing a merged deep-build diff. ${partitions.length} coders worked in parallel.
 
-Read .sdd/${feature}/spec.md, acceptance.md, DECISIONS.md yourself.
+Read .sdd/${feature}/spec.md and DECISIONS.md yourself.
 
 Partition plan: ${JSON.stringify(partitions, null, 2)}
 Coder summaries: ${JSON.stringify(coderResults.map((r) => r.summary), null, 2)}
@@ -470,7 +470,7 @@ Empty concerns + status "approved" if clean.`;
 function qaReviewPrompt(partitions, coderResults, feature) {
   return `You are qa reviewing a merged deep-build diff. Lens: coverage gaps + the M2 counterfactual.
 
-Read .sdd/${feature}/acceptance.md and TEST_PLAN.md yourself.
+Read .sdd/${feature}/spec.md's acceptance criteria yourself; tests carry \`${feature}/AC-<n>\` markers.
 
 Partition plan + coder summaries: ${JSON.stringify({ partitions, summaries: coderResults.map((r) => r.summary) }, null, 2)}
 

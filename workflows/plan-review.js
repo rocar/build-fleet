@@ -13,7 +13,7 @@
 //
 // Divergences from review.js:
 //   - reviewers INTERROGATE product artifacts (vision/backlog/STACK/DECISIONS),
-//     not spec.md/acceptance.md.
+//     not spec.md.
 //   - roles are [product-owner, architect, qa] — product lenses, not [architect,qa,coder].
 //     Self-interrogation is fine: the act surfaces risk, it does not vote.
 //   - NO cross-examination phase. NO survival vote. Findings are consolidated by
