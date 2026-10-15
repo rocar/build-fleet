@@ -162,6 +162,12 @@ stop at the spec if you want to be the one who approves.
   open.
 - Shell commands are not a way around the write gates.
 - Every gate fails closed: an unexpected state blocks rather than allows.
+- Every acceptance criterion maps to a named test that exists, checked before and
+  after the build and at ship. Run the same check in your CI:
+
+  ```bash
+  bash <path-to-build-fleet>/scripts/drift-gate.sh --all   # exit 2 on drift
+  ```
 
 The full hook table, the state machine, the product tier, headless use and the
 hidden steps are in **[docs/reference.md](docs/reference.md)**. The headless

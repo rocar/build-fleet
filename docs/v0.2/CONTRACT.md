@@ -44,11 +44,34 @@ verbatim before it.
 Stop reasons: `spec-ready`, `plan-ready`, `built`, `shipped`, `item-in-flight`, `parked`,
 `escalated`, `step-refused`, `no-progress`, `step-cap`, `unknown-state`, `nothing-to-do`,
 `known-cause` (triage closed a bug whose cause was already known; `next` is `start` with the fix),
-`spec-not-ready`, `not-built`; and `status`, used only by `lite-next.sh status` when the
+`spec-not-ready`, `not-built`, `drift` (the test plan failed the drift gate; `next` is `build`, which repairs it); and `status`, used only by `lite-next.sh status` when the
 next move is a step.
 
 The routing table lives in `scripts/lite-next.sh` and is specified in
 `docs/history/2026-10-15-lite.md` §3.3; `scripts/lite-next.test.sh` pins one case per row.
+
+### The drift gate
+
+`scripts/drift-gate.sh <slug>` prints one line; `--all` prints one per feature and a
+summary (it gates only built features: `BUILD_STATE: done`, or no BUILD_STATE at
+`CHANGE_REVIEW`/`HANDOFF`; it skips bugs and `_product`):
+
+```
+BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":<bool>,"reasons":[…],"untested":[…],"unknown":[…],"missing":[{"criterion","test","location","why"}],"unparsed":[…],"gaps_open":<bool>}
+BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":true,"unchecked":true}
+BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":true,"in_progress":true}
+BUILD_FLEET_DRIFT_GATE_SUMMARY: {"checked":N,"unchecked":M,"in_progress":K,"failed":[…]}
+```
+
+Reasons: `bad-field`, `no-test-plan`, `no-criteria`, `untested`, `unknown-criterion`,
+`missing-file`, `missing-test`, `gaps-open`, `unparsed`. The script's exit status (2 on
+any failure) exists for CI; inside the flow, read the line. The steps that run it add:
+
+```
+BUILD_FLEET_QA_VERIFY_FAIL: {"feature":"<slug>","reason":"drift","gate":{…}}       # implement; also "drift-gate-error"
+BUILD_FLEET_BUILD_INCOMPLETE: {"feature":"<slug>","failing_tests":<N>,"reason":"drift-repair"}
+BUILD_FLEET_HANDOFF_REFUSE: {"feature":"<slug>","code":2,"reason":"drift","gate":{…}}  # also "drift-gate-error"
+```
 
 ---
 

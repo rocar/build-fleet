@@ -162,6 +162,8 @@ CYCLE_TOTAL_MAX: <int>      # /build-fleet:review refuses to dispatch when CYCLE
 SPEC_MAX_KB: <int>          # optional — cap-spec-size hook: spec.md + acceptance.md byte budget (absent = no cap)
 AC_MAX: <int>               # optional — validate-acceptance-count hook: distinct AC-<n> ids (absent = no cap)
 LAST_REVIEW_OUTPUT_TOKENS: <int>   # scribe-written; /build-fleet:review refuses cost-runaway above 3× the header ceiling
+DRIFT_GATE: on | off        # drift gate (scripts/drift-gate.sh): on ⇒ every AC-n must map to a named test. new-feature writes on; absent/empty/off ⇒ unchecked
+QA_FAIL: drift              # the drift gate failed and the test plan still needs repair; /build-fleet:implement's repair mode clears it
 UPDATED: <iso8601>
 ```
 
@@ -350,6 +352,13 @@ gate passes) dispatches qa first, then coder:
 2. **coder implements to spec.** Coder refuses to begin until qa's failing tests
    exist and all fail, then iterates until every qa test passes, recording `gap:` /
    `deviation:` / `todo:` markers in `IMPL_NOTES.md`.
+
+**Drift gate.** `scripts/drift-gate.sh` proves every acceptance criterion maps to a
+named test in TEST_PLAN.md's coverage matrix. `/build-fleet:implement` runs it after
+qa's suite is verified (before coder) and again before `BUILD_STATE: done`; each failure
+gets one qa repair pass, then sets `QA_FAIL: drift` and stops. `/build-fleet:handoff`
+runs it before the change-cycle budget; a failure sets `QA_FAIL: drift` and refuses.
+With `QA_FAIL: drift` set, `/build-fleet:build` routes to implement's repair mode.
 
 Both roles first load any skills routed to them in `SKILL_MANIFEST.md` (advisory,
 never gating — see the `skill-routing` skill).

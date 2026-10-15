@@ -26,5 +26,22 @@ want handoff-refuse        commands/handoff.md     'BUILD_FLEET_HANDOFF_REFUSE: 
 want handoff-resume        commands/handoff.md     'run the drift gate (step 4) and, if it passes, skip straight to step 9'
 want handoff-refusal-case  commands/handoff.md     '- The drift gate fails'
 
+# ---- docs and qa's prompt (§3.4) ----
+want qa-description   agents/qa.md                  'and its repair pass when the drift gate fails'
+want qa-body          agents/qa.md                  'The drift gate (`scripts/drift-gate.sh`)'
+want skill-section    skills/test-plan/SKILL.md     '## The drift gate'
+want skill-name-rule  skills/test-plan/SKILL.md     'as declared in source'
+want protocol-gate    skills/sdd-protocol/SKILL.md  'DRIFT_GATE: on | off'
+want protocol-qafail  skills/sdd-protocol/SKILL.md  'QA_FAIL: drift'
+want protocol-build   skills/sdd-protocol/SKILL.md  '**Drift gate.**'
+want contract-line    docs/v0.2/CONTRACT.md         'BUILD_FLEET_DRIFT_GATE: {'
+want contract-summary docs/v0.2/CONTRACT.md         'BUILD_FLEET_DRIFT_GATE_SUMMARY: {'
+want contract-refuse  docs/v0.2/CONTRACT.md         'BUILD_FLEET_HANDOFF_REFUSE: {'
+want contract-stop    docs/v0.2/CONTRACT.md         '`drift` (the test plan failed the drift gate'
+want readme-ci        README.md                     'scripts/drift-gate.sh --all'
+want claude-md        CLAUDE.md                     'drift-gate'
+want changelog        CHANGELOG.md                  '`scripts/drift-gate.sh`'
+want smoke            docs/v0.5/smoke/smoke.sh      'echo "[DRIFT]"'
+
 printf '\npassed=%d failed=%d\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

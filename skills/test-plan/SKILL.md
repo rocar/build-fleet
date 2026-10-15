@@ -74,6 +74,32 @@ A non-empty `## Gaps` section is a `[blocker]` for CHANGE_REVIEW until
 resolved.
 ````
 
+## The drift gate
+
+`scripts/drift-gate.sh` enforces the coverage matrix for every feature whose
+PROGRESS.md carries `DRIFT_GATE: on` (new features get it). It reads:
+
+- **Criteria:** the distinct `AC-<n>` / `AC-<n><letter>` ids in `acceptance.md` (or,
+  without one, in spec.md's `## Acceptance…` section).
+- **The matrix:** table rows under the exact heading `## Coverage matrix`, up to the
+  next `## ` heading. Several tables under it are fine; header and separator rows are
+  skipped.
+  - Column 1: one or more ids, comma-separated.
+  - Column 2: the test name **as declared in source**: `test_retry`, or a description
+    string without the runner call or quotes (`retries 3 times`, not
+    `it('retries 3 times')`). A ` (failure)` suffix and a `[…]` parametrize id are
+    ignored. A Go subtest is `TestParent/child`.
+  - Column 4: `path/to/file::name` or a bare path, relative to the project root; not
+    under `.sdd/`, not a `.md` file.
+- **Gaps:** any `- ` bullet under `## Gaps` fails the gate; `None.` does not.
+
+It fails when a criterion has no row, a row names an unknown id, the file is missing,
+the name is not in the file (whole word for `[A-Za-z0-9_]` names, exact text
+otherwise), a gap is open, or a row cannot be read. It runs before coder, after
+coder and at handoff, and `drift-gate.sh --all` runs it in CI over every built
+feature. It proves the test exists, not that it tests the criterion; that stays
+your review.
+
 ## Discipline rules
 
 - Every acceptance criterion appears in the coverage matrix at least once,

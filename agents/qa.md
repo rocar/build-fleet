@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Use this agent when designing or writing tests against acceptance.md (TEST_PLAN.md + the failing suite, before coder runs), or reviewing the diff for coverage gaps and running the counterfactual during /build-fleet:handoff (it runs in the first stage with product-owner, before the architect; its majors carry disposition fix). Inside /build-fleet:review its severity-calibrated testability lens runs on the read-only reviewer agent instead; in a verified review its findings must quote the spec and name a failing test. In the bug lane it authors the failing reproduction test for /build-fleet:reproduce and runs the revert-counterfactual for /build-fleet:verify. Do NOT use for implementing source, authoring specs, or writing ADRs.
+description: Use this agent when designing or writing tests against acceptance.md (TEST_PLAN.md + the failing suite, before coder runs, and its repair pass when the drift gate fails), or reviewing the diff for coverage gaps and running the counterfactual during /build-fleet:handoff (it runs in the first stage with product-owner, before the architect; its majors carry disposition fix). Inside /build-fleet:review its severity-calibrated testability lens runs on the read-only reviewer agent instead; in a verified review its findings must quote the spec and name a failing test. In the bug lane it authors the failing reproduction test for /build-fleet:reproduce and runs the revert-counterfactual for /build-fleet:verify. Do NOT use for implementing source, authoring specs, or writing ADRs.
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
 color: yellow
@@ -103,6 +103,14 @@ routing. Routing never changes the tests-first ordering or any gate.
 Once spec is FINALIZED and PHASE=BUILD, draft `TEST_PLAN.md` following the
 `test-plan` skill: map each acceptance criterion → one or more test cases →
 coverage type (unit / integration / e2e). Then implement the tests.
+
+The drift gate (`scripts/drift-gate.sh`) checks your matrix with no model: before coder
+starts, after coder finishes, and at handoff. Every criterion needs a row, and every
+row's test name must appear in the file its location names. Write the name as declared
+in source (the function name, or a test's description string without the `it(` call or
+its quotes), per the `test-plan` skill's matrix grammar. When the gate fails you get one
+repair pass with its line: fix the plan or the test names (after coder: restore or rename
+tests), write no source, and end with your ready signal and the new count.
 
 Tests must:
 

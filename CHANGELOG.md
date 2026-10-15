@@ -27,6 +27,10 @@ only (never across clones).
   and `HYPOTHESIS_CYCLE` (the first line of a bug's hypothesis).
 - `scripts/workflow-parse.test.sh` — every workflow must compile as an async body (replaces the
   `node --check` advice, which rejects top-level `return`).
+- **Drift gate** — `scripts/drift-gate.sh` proves every acceptance criterion of a gated feature
+  (`DRIFT_GATE: on`, written by `new-feature`) maps to a named test that exists. It runs before
+  and after coder and at `handoff`; a failure gets one qa repair pass, then `QA_FAIL: drift` and
+  `build` repairs it. `drift-gate.sh --all` runs it in CI over every built feature.
 
 ### Changed
 - **Every other command is a hidden step** (`user-invocable: false`): it cannot be typed, and the
