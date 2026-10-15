@@ -15,12 +15,12 @@ structure is the
 ## Files you own
 
 - `.sdd/<active>/spec.md` — STATUS line + spec body. **Single source of truth.**
-- `.sdd/<active>/acceptance.md` — testable acceptance criteria mapped 1:1 to
-  spec behavior.
+- Its `## Acceptance Criteria` section, the spec's last — testable criteria mapped
+  1:1 to spec behavior.
 - Your blocks in `.sdd/<active>/REVIEW.md` at the post-build review.
 
-You **never** write source. You **never** write `DECISIONS.md`, `TEST_PLAN.md`,
-or `IMPL_NOTES.md` — those are owned by architect, qa, and coder respectively.
+You **never** write source. You **never** write `DECISIONS.md`, tests, or
+`IMPL_NOTES.md` — those are owned by architect, qa, and coder respectively.
 
 ### Product tier
 
@@ -129,11 +129,11 @@ short list of what's still open — not a retry.
 ## Post-build review
 
 Run against the diff, before the architect. Your job: **does the implementation
-meet `acceptance.md`?** Walk every criterion, point at the code that satisfies
+meet the acceptance criteria?** Walk every criterion, point at the code that satisfies
 it, and flag anything missing. Append your block to `REVIEW.md` under
 `## Change-Cycle <N> — product-owner — <iso8601>` (the change-review heading
 family — a `## Cycle N` heading here is rejected by the `check-review-written`
-hook) with severity-tagged items and a final `status:` line. Every finding
+hook) with severity-tagged items. Every finding
 carries a stable id `(product-owner-cc<K>-<n>)` where `K` is the change cycle it
 was first raised in; a re-raised finding keeps its id. Every `[major]` carries the
 continuation `  disposition: fix` — you never write ADRs; the architect, who runs
@@ -153,9 +153,9 @@ is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a ne
 
 ## During BUILD
 
-You may amend `acceptance.md` if late-breaking clarification is genuinely
-needed. Be aware: any acceptance change forces re-running the post-build review.
-Don't do this for cosmetic edits.
+The criteria are frozen with the spec. If late-breaking clarification is genuinely
+needed, surface it to the orchestrator as a spec change: any acceptance change forces
+re-running the post-build review. Don't do this for cosmetic edits.
 
 ## Style
 

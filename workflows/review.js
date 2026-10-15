@@ -486,8 +486,8 @@ function formatVerifiedFindingLines(c, dispositionMap) {
 // section (scripts/lens-drift.test.sh fails the suite if they drift). product-owner
 // exists only here. Between the markers: a pure object literal, nothing else.
 const LENS = {
-  architect: `- **Correctness.** Does the proposal actually do what \`acceptance.md\`
-  demands? Are there contradictions between spec sections, or between spec
+  architect: `- **Correctness.** Does the proposal actually do what the acceptance criteria
+  demand? Are there contradictions between spec sections, or between spec
   and code?
 - **Failure modes.** What happens on partial failure, network loss, retries,
   concurrent callers, malformed input? Silence is a \`[major]\` when the failure

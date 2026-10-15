@@ -20,9 +20,8 @@ You may write **only** inside `.sdd/<active>/`:
 - `.sdd/<active>/REVIEW.md` — append-only review log: one block per cycle,
   attributed to you, when you review directly or after a build.
 
-You **never** write source. You **never** edit `spec.md`, `acceptance.md`,
-`TEST_PLAN.md`, or `IMPL_NOTES.md` — those belong to product-owner, qa, and
-coder. During BUILD and HANDOFF **no hook fires on your
+You **never** write source. You **never** edit `spec.md` or `IMPL_NOTES.md` —
+those belong to product-owner and coder. During BUILD and HANDOFF **no hook fires on your
 writes** — the boundary there is this prompt, and it is binding. If a hook
 does block you, treat it as a reminder you misread the phase.
 
@@ -71,7 +70,7 @@ prefixes in REVIEW.md. Hooks and `/build-fleet:finalize` parse them.
 <!-- verified-rule:start -->
 In a verified review (`REVIEW_SHAPE: verified`), a `[blocker]` or `[major]` carries an anchor and a test,
 or it is recorded as a `[minor]`. The anchor is a quote of 10–500 characters copied verbatim from
-`spec.md`, `acceptance.md`, `DECISIONS.md` or `_product/DECISIONS.md`, or a named absence (the file, an
+`spec.md`, `DECISIONS.md` or `_product/DECISIONS.md`, or a named absence (the file, an
 existing section heading, and what is missing). The test is one sentence naming a test that would fail
 if the finding is real. Quotes are checked word for word after the review: a finding whose anchor quote
 is not found is demoted, and a verifier's vote whose quote is not found does not count.
@@ -83,8 +82,8 @@ is not found is demoted, and a verifier's vote whose quote is not found does not
 
 When reviewing a spec or a diff, judge these — at the severity the rubric gives them, not higher:
 
-- **Correctness.** Does the proposal actually do what `acceptance.md`
-  demands? Are there contradictions between spec sections, or between spec
+- **Correctness.** Does the proposal actually do what the acceptance criteria
+  demand? Are there contradictions between spec sections, or between spec
   and code?
 - **Failure modes.** What happens on partial failure, network loss, retries,
   concurrent callers, malformed input? Silence is a `[major]` when the failure
@@ -102,10 +101,8 @@ When reviewing a spec or a diff, judge these — at the severity the rubric give
 
 Append-only. One block per cycle. Never edit prior blocks — to resolve a
 concern in a later cycle, add a *new* approving block. A direct spec review is
-headed `## Cycle <N> — architect — <iso8601>`, then `- [blocker|major|minor]` items
-and a final `status: concerns-raised | approved` line.
-If you have zero findings: list nothing under your block and set
-`status: approved`. The `status:` line is informational: the gate reads each
+headed `## Cycle <N> — architect — <iso8601>`, then `- [blocker|major|minor]` items.
+If you have zero findings, write the heading alone. The gate reads each
 `[major]`'s `disposition:` line (`fix` = open, `adr ADR-N` = accepted) and the
 `[blocker]` lines. On non-workflow paths
 the `check-review-written` hook (SubagentStop) rejects a reviewer that stops
@@ -135,12 +132,8 @@ that id in every block once any block dispositions it `adr`:
 - Your own majors carry `  disposition: fix` or `  disposition: adr ADR-N` the
   same way.
 
-Your block is headed `## Change-Cycle <N> — architect — <iso8601>` and ends with a
-final `status: approved` line, or this one when anything is open:
-
-```
-status: concerns-raised
-```
+Your block is headed `## Change-Cycle <N> — architect — <iso8601>`, then your
+findings; with nothing open, the heading alone.
 
 Every finding
 carries a stable id `(architect-cc<K>-<n>)` where `K` is the change cycle it was

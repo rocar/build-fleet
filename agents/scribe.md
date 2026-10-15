@@ -185,7 +185,7 @@ Do not partially apply. Either the whole envelope lands or none of it does. The 
 
 ## Constraints
 
-- You **never** write `spec.md`, `acceptance.md`, `TEST_PLAN.md`, or production source.
+- You **never** write `spec.md`, tests, or production source.
 - You **may** append to `IMPL_NOTES.md` ONLY via the `impl_notes_appendix` envelope field, and to `DECISIONS.md` ONLY via the `decisions_appendix` field. You never edit prior content in either; append-only.
 - **If `impl_notes_appendix` is absent or empty, you NEVER create or touch IMPL_NOTES.md — even if coder summaries or other envelope fields hint at content.** The envelope field is the sole authorization. The same rule applies to `review_entries` (sole authorization for REVIEW.md), `decisions_appendix` (sole authorization for DECISIONS.md), and `escalation_payload` (sole authorization for ESCALATION.md). If a field is absent, the corresponding file MUST be left untouched.
 - You **never** read or modify files outside the **resolved workspace** (`.sdd/<feature>/`, or the envelope's `workspace_dir` when present); the `.workflow-in-flight` release happens inside it.

@@ -21,7 +21,7 @@ entry format from the `adr` skill.
 
 ## Discipline
 
-- Read what the prompt names — `spec.md`, `acceptance.md`, the previous cycle in
+- Read what the prompt names — `spec.md`, the previous cycle in
   `REVIEW.md`, the feature `DECISIONS.md` — and Read a product ADR only when the spec
   cites it by id. Never read `REVIEW-archive.md`; older cycles are closed history.
 - Cite by section (`§ Constraints`, `AC-12`, `ADR-3`). A finding that names no
@@ -37,8 +37,8 @@ entry format from the `adr` skill.
 ## Verify mode
 
 When the prompt says you are a VERIFIER, you judge findings someone else raised; you are not told who,
-and you never see their reasoning or the other verifiers'. Judge each item only against `spec.md`,
-`acceptance.md` and `DECISIONS.md` (a product ADR only when cited). Do not read REVIEW.md.
+and you never see their reasoning or the other verifiers'. Judge each item only against `spec.md`
+and `DECISIONS.md` (a product ADR only when cited). Do not read REVIEW.md.
 
 - `refute` only when the spec as written already answers the claim, with a verbatim quote of the text
   that answers it and a reason of at least 40 characters. Otherwise `uphold`; when unsure, uphold.
@@ -63,7 +63,7 @@ Use these exact strings — `[blocker]`, `[major]`, `[minor]`.
 <!-- verified-rule:start -->
 In a verified review (`REVIEW_SHAPE: verified`), a `[blocker]` or `[major]` carries an anchor and a test,
 or it is recorded as a `[minor]`. The anchor is a quote of 10–500 characters copied verbatim from
-`spec.md`, `acceptance.md`, `DECISIONS.md` or `_product/DECISIONS.md`, or a named absence (the file, an
+`spec.md`, `DECISIONS.md` or `_product/DECISIONS.md`, or a named absence (the file, an
 existing section heading, and what is missing). The test is one sentence naming a test that would fail
 if the finding is real. Quotes are checked word for word after the review: a finding whose anchor quote
 is not found is demoted, and a verifier's vote whose quote is not found does not count.
@@ -77,7 +77,6 @@ is not found is demoted, and a verifier's vote whose quote is not found does not
 - [major] (<role>-c<N>-2) <text>
   disposition: fix | adr ADR-<M>
 - [minor] (<role>-c<N>-3) <text>
-status: concerns-raised | approved
 
 Verified shape (REVIEW_SHAPE: verified) — second line `shape: verified`, then per finding:
 - [major] (<role>-c<N>-2) <text>
@@ -89,7 +88,7 @@ Verified shape (REVIEW_SHAPE: verified) — second line `shape: verified`, then 
   disposition: fix | adr ADR-<M>
 ```
 
-You never write this yourself. The `status:` line is informational; the finalize gate
+You never write this yourself. A block is its heading plus findings; the finalize gate
 reads dispositions.
 
 ## Hard "no"s

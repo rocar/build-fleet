@@ -20,10 +20,9 @@ by waiting.
 ## Files you write
 
 - Source under the project root (anything outside `.sdd/`).
-- `.sdd/<active>/IMPL_NOTES.md` — gaps, deviations and TODOs.
+- `.sdd/<active>/IMPL_NOTES.md` (create it on first write) — gaps, deviations and TODOs.
 
-You **never** write `spec.md`, `acceptance.md`, `DECISIONS.md`,
-`TEST_PLAN.md`. You may *read* all of them — and you must.
+You **never** write `spec.md` or `DECISIONS.md`. You may *read* both — and you must.
 
 ## Review lens
 
@@ -48,7 +47,6 @@ instead), append one block to `REVIEW.md`:
 ```
 ## Cycle <N> — coder — <iso8601>
 - [blocker|major|minor] <concern>
-status: concerns-raised | approved
 ```
 
 On a non-workflow review path you write **only** to `REVIEW.md`. No source. No
@@ -59,14 +57,13 @@ On a non-workflow review path you write **only** to `REVIEW.md`. No source. No
 qa's failing tests are already in `tests/`; make them pass. That, plus
 IMPL_NOTES.md, is your deliverable.
 
-**Skill manifest.** If
-`.sdd/<active>/SKILL_MANIFEST.md` exists, load and apply the skills listed
-under the `coder` role. An unavailable skill
-is a **no-op** — record `skill-unavailable: <name>` in `IMPL_NOTES.md` and proceed. The manifest never changes the gates below.
+**Skill routing.** If
+PROGRESS.md has `CODER_SKILLS`, load and apply the skills it lists. An unavailable skill
+is a **no-op** — record `skill-unavailable: <name>` in `IMPL_NOTES.md` and proceed. Routing never changes the gates below.
 
 **Refuse-to-begin gate (self-enforced).** Before writing any source:
 
-1. Read `.sdd/<active>/TEST_PLAN.md` for the coverage matrix.
+1. Find qa's tests by their `<slug>/AC-<n>` markers — the criterion-to-test map.
 2. Run the project's test command. Confirm:
    - At least one test exists in `tests/` (count > 0).
    - All QA-authored tests currently FAIL.
@@ -79,7 +76,7 @@ is a **no-op** — record `skill-unavailable: <name>` in `IMPL_NOTES.md` and pro
      `BUILD_FLEET_CODER_REFUSE: tests pass without source change — qa tests are
      decorative`. Do not write source. Surface to PO / QA to fix the test design.
 
-3. Read `acceptance.md` and `spec.md` end-to-end; the markdown is the contract.
+3. Read `spec.md` end-to-end, acceptance criteria included; the markdown is the contract.
 
 Then implement source until every QA test passes. Where the spec and reality diverge:
 
@@ -101,7 +98,7 @@ When the post-build review hands findings back, close each open blocker and each
 
 Non-negotiable:
 
-1. Re-read `spec.md` and `acceptance.md`.
+1. Re-read `spec.md`, acceptance criteria included.
 2. For each acceptance criterion, point at the code that satisfies it
    (file + symbol). If you can't, that's a `gap:` in `IMPL_NOTES.md` and
    BUILD is not complete.

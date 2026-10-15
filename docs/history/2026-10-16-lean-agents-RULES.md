@@ -10,7 +10,7 @@ each; the drift tests pin their text.
 
 - [x] architect R1: "You may write **only** inside `.sdd/<active>/`." → "You may write **only** inside `.sdd/<active>/`:"
 - [x] architect R2: "`.sdd/<active>/DECISIONS.md` — append-only ADR log. New ADRs only; never" → "`.sdd/<active>/DECISIONS.md` — append-only ADR log. New ADRs only; never"
-- [x] architect R3: "You **never** write source. You **never** edit `spec.md`, `acceptance.md`," → "You **never** write source. You **never** edit `spec.md`, `acceptance.md`,"
+- [x] architect R3: "You **never** write source. You **never** edit `spec.md`, `acceptance.md`," → "You **never** write source. You **never** edit `spec.md` or `IMPL_NOTES.md` —"
 - [x] architect R4: "`.sdd/_product/STACK.md` — the **stack-of-record**: languages/runtimes," → "`.sdd/_product/STACK.md` — the **stack-of-record**: languages/runtimes,"
 - [x] architect R5: "be overridden by revising the product tier — not by a feature-local decision." → "be overridden by revising the product tier — not by a feature-local decision."
 - [x] architect R6: "The orchestrator scaffolds these files before delegating; fill them with `Edit`" → "The orchestrator scaffolds these files before delegating; fill them with `Edit`"
@@ -24,7 +24,7 @@ each; the drift tests pin their text.
 - [x] architect R14: "<!-- verified-rule:start -->" → "<!-- verified-rule:start -->"
 - [x] architect R15: "## Review lens" → "## Review lens"
 - [x] architect R16: "Append-only. One block per cycle. Never edit prior blocks — to resolve a" → "Append-only. One block per cycle. Never edit prior blocks — to resolve a"
-- [x] architect R17: "If you have zero findings: list nothing under your block and set" → "If you have zero findings: list nothing under your block and set"
+- [x] architect R17: "If you have zero findings: list nothing under your block and set" → "If you have zero findings, write the heading alone. The gate reads each"
 - [x] architect R18: "the `check-review-written` hook (SubagentStop) rejects a reviewer that stops" → "the `check-review-written` hook (SubagentStop) rejects a reviewer that stops"
 - [x] architect R19: "Every design decision that survives a review cycle — including PO's" → "Every design decision that survives a review cycle — including PO's"
 - [x] architect R20: "recorded, append a new ADR before approving. If the diff contradicts an" → "recorded, append a new ADR before approving. If the diff contradicts an"
@@ -41,7 +41,7 @@ each; the drift tests pin their text.
 - [x] architect R31: "out-of-radius change is a `[major]`/`[blocker]`." → "out-of-radius change is a `[major]`/`[blocker]`."
 - [x] architect R32: "**Greenfield vs brownfield (the orchestrator tells you which):**" → "**Greenfield vs brownfield (the orchestrator tells you which):**"
 - [x] architect R33: "(at plan-review/plan-finalize, or explicit human promotion). Frame migrations as" → "(at plan-review/plan-finalize, or explicit human promotion). Frame migrations as"
-- [x] architect R34: "status: concerns-raised" → "status: concerns-raised"
+- [x] architect R34: "status: concerns-raised" → retired: the review block `status:` line no longer exists
 
 ## classifier
 
@@ -105,10 +105,10 @@ each; the drift tests pin their text.
 - [x] coder R2: "Only while `.sdd/<active>/spec.md` STATUS is `FINALIZED` and" → "Only while `.sdd/<active>/spec.md` STATUS is `FINALIZED` and"
 - [x] coder R3: "**stop and surface it** — do not work around it by writing into `.sdd/` or" → "**stop and surface it** — do not work around it by writing into `.sdd/` or"
 - [x] coder R4: "- Source under the project root (anything outside `.sdd/`)." → "- Source under the project root (anything outside `.sdd/`)."
-- [x] coder R5: "You **never** write `spec.md`, `acceptance.md`, `DECISIONS.md`," → "You **never** write `spec.md`, `acceptance.md`, `DECISIONS.md`,"
+- [x] coder R5: "You **never** write `spec.md`, `acceptance.md`, `DECISIONS.md`," → "You **never** write `spec.md` or `DECISIONS.md`. You may *read* both — and you must."
 - [x] coder R6: "## Review lens" → "## Review lens"
 - [x] coder R7: "On a non-workflow review path you write **only** to `REVIEW.md`. No source. No" → "On a non-workflow review path you write **only** to `REVIEW.md`. No source. No"
-- [x] coder R8: "`.sdd/<active>/SKILL_MANIFEST.md`. If it exists, load and apply the skills listed" → "`.sdd/<active>/SKILL_MANIFEST.md` exists, load and apply the skills listed"
+- [x] coder R8: "`.sdd/<active>/SKILL_MANIFEST.md`. If it exists, load and apply the skills listed" → "PROGRESS.md has `CODER_SKILLS`, load and apply the skills it lists. An unavailable skill"
 - [x] coder R9: "is a **no-op** — record `skill-unavailable: <name>` in `IMPL_NOTES.md` and proceed" → "is a **no-op** — record `skill-unavailable: <name>` in `IMPL_NOTES.md` and proceed"
 - [x] coder R10: "**Refuse-to-begin gate (self-enforced).** Before writing any source:" → "**Refuse-to-begin gate (self-enforced).** Before writing any source:"
 - [x] coder R11: "- All QA-authored tests currently FAIL." → "- All QA-authored tests currently FAIL."
@@ -132,7 +132,7 @@ each; the drift tests pin their text.
 
 - [x] devops R1: "`.sdd/<active>/PROGRESS.md` shows `PHASE: HANDOFF`. If PHASE is anything" → "`.sdd/<active>/PROGRESS.md` shows `PHASE: HANDOFF`. If PHASE is anything"
 - [x] devops R2: "- Wire up or update CI: ensure the project's test command runs in CI and" → "- Wire up or update CI: ensure the project's test command runs in CI and"
-- [x] devops R3: "You **never** write `spec.md`, `acceptance.md`, source code, or tests. If" → "You **never** write `spec.md`, `acceptance.md`, source code, or tests. If"
+- [x] devops R3: "You **never** write `spec.md`, `acceptance.md`, source code, or tests. If" → "You **never** write `spec.md`, source code, or tests. If"
 - [x] devops R4: "do not silently add it — surface it as a `[blocker]` back to architect." → "do not silently add it — surface it as a `[blocker]` back to architect."
 - [x] devops R5: "## Refusal conditions" → "## Refusal conditions"
 - [x] devops R6: "- `ESCALATION.md` exists for the active feature." → "- `ESCALATION.md` exists for the active feature."
@@ -151,8 +151,8 @@ each; the drift tests pin their text.
 
 - [x] product-owner R1: "`sdd-spec-template` skill — use it verbatim." → "`sdd-spec-template` skill — use it verbatim."
 - [x] product-owner R2: "- `.sdd/<active>/spec.md` — STATUS line + spec body. **Single source of truth.**" → "- `.sdd/<active>/spec.md` — STATUS line + spec body. **Single source of truth.**"
-- [x] product-owner R3: "- `.sdd/<active>/acceptance.md` — testable acceptance criteria mapped 1:1 to" → "- `.sdd/<active>/acceptance.md` — testable acceptance criteria mapped 1:1 to"
-- [x] product-owner R4: "You **never** write source. You **never** write `DECISIONS.md`, `TEST_PLAN.md`," → "You **never** write source. You **never** write `DECISIONS.md`, `TEST_PLAN.md`,"
+- [x] product-owner R3: "- `.sdd/<active>/acceptance.md` — testable acceptance criteria mapped 1:1 to" → "- Its `## Acceptance Criteria` section, the spec's last — testable criteria mapped"
+- [x] product-owner R4: "You **never** write source. You **never** write `DECISIONS.md`, `TEST_PLAN.md`," → "You **never** write source. You **never** write `DECISIONS.md`, tests, or"
 - [x] product-owner R5: "`- [ ] <feature-slug>   PENDING   depends-on: <none | other-slug>`, **followed by an" → "`- [ ] <feature-slug>   PENDING   depends-on: <none | other-slug>`, **followed by an"
 - [x] product-owner R6: "Group rows under `## Phase N: <name> — STATUS: pending`. Sequence by dependency: a" → "Group rows under `## Phase N: <name> — STATUS: pending`. Sequence by dependency: a"
 - [x] product-owner R7: "**Phase 1 is a walking skeleton.** The smallest vertical slice that produces the" → "**Phase 1 is a walking skeleton.** The smallest vertical slice that produces the"
@@ -183,7 +183,7 @@ each; the drift tests pin their text.
 - [x] product-owner R32: "carries a stable id `(product-owner-cc<K>-<n>)` where `K` is the change cycle it" → "carries a stable id `(product-owner-cc<K>-<n>)` where `K` is the change cycle it"
 - [x] product-owner R33: "continuation `  disposition: fix` — you never write ADRs; the architect, who runs" → "continuation `  disposition: fix` — you never write ADRs; the architect, who runs"
 - [x] product-owner R34: "is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a new" → "is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a new"
-- [x] product-owner R35: "needed. Be aware: any acceptance change forces re-running" → "needed. Be aware: any acceptance change forces re-running"
+- [x] product-owner R35: "needed. Be aware: any acceptance change forces re-running" → "needed, surface it to the orchestrator as a spec change: any acceptance change forces"
 - [x] product-owner R36: "- The orchestrator routes; you author. Do not assign work to other agents." → "- The orchestrator routes; you author. Do not assign work to other agents."
 - [x] product-owner R37: "- [major] (product-owner-cc1-2) AC-9 met only for the happy path" → "- [major] (product-owner-cc1-2) AC-9 met only for the happy path"
 - [x] product-owner R38: "   If no, rewrite it." → "   If no, rewrite it."
@@ -194,21 +194,21 @@ each; the drift tests pin their text.
 
 ## qa
 
-- [x] qa R1: "- `.sdd/<active>/TEST_PLAN.md` — test design mapped to acceptance criteria." → "- `.sdd/<active>/TEST_PLAN.md` — test design mapped to acceptance criteria."
-- [x] qa R2: "- `tests/` (and any project-specific test locations) — actual tests, **only" → "- `tests/` (and any project-specific test locations) — actual tests, **only"
+- [x] qa R1: "- `.sdd/<active>/TEST_PLAN.md` — test design mapped to acceptance criteria." → retired: TEST_PLAN.md no longer exists; the criterion map is the markers (qa R44)
+- [x] qa R2: "- `tests/` (and any project-specific test locations) — actual tests, **only" → "- `tests/` (and any project-specific test locations) — actual tests, each marked with"
 - [x] qa R3: "HANDOFF), **no hook confines you to `tests/`** — the only thing keeping you" → "HANDOFF), **no hook confines you to `tests/`** — the only thing keeping you"
-- [x] qa R4: "You **never** write `spec.md`, `acceptance.md`, `DECISIONS.md`, or" → "You **never** write `spec.md`, `acceptance.md`, `DECISIONS.md`, or"
+- [x] qa R4: "You **never** write `spec.md`, `acceptance.md`, `DECISIONS.md`, or" → "You **never** write `spec.md`, `DECISIONS.md`, or production source — in"
 - [x] qa R5: "## Severity rubric (verbatim — required in-body)" → "## Severity rubric (verbatim — required in-body)"
 - [x] qa R6: "Use the exact strings `[blocker]`, `[major]`, `[minor]` in REVIEW.md." → "Use the exact strings `[blocker]`, `[major]`, `[minor]` in REVIEW.md."
 - [x] qa R7: "<!-- verified-rule:start -->" → "<!-- verified-rule:start -->"
 - [x] qa R8: "## Review lens" → "## Review lens"
 - [x] qa R9: "On non-workflow paths the `check-review-written` hook (SubagentStop) rejects a" → "On non-workflow paths the `check-review-written` hook (SubagentStop) rejects a"
-- [x] qa R10: "`.sdd/<active>/SKILL_MANIFEST.md`. If it exists, load and apply the skills listed" → "`.sdd/<active>/SKILL_MANIFEST.md` exists, load and apply the skills listed"
-- [x] qa R11: "craft shapes your plan. An unavailable skill is a **no-op** — note" → "under the `qa` role. An unavailable skill is a **no-op** — note"
-- [x] qa R12: "`test-plan` skill: map each acceptance criterion → one or more test cases →" → "`test-plan` skill: map each acceptance criterion → one or more test cases →"
-- [x] qa R13: "The drift gate (`scripts/drift-gate.sh`) checks your matrix with no model: before coder" → "The drift gate (`scripts/drift-gate.sh`) checks your matrix with no model: before coder"
-- [x] qa R14: "in source (the function name, or a test's description string without the `it(` call or" → "in source (the function name, or a test's description string without the `it(` call or"
-- [x] qa R15: "repair pass with its line: fix the plan or the test names (after coder: restore or rename" → "repair pass with its line: fix the plan or the test names (after coder: restore or rename"
+- [x] qa R10: "`.sdd/<active>/SKILL_MANIFEST.md`. If it exists, load and apply the skills listed" → "PROGRESS.md has `QA_SKILLS`, load and apply the skills it lists. An unavailable skill"
+- [x] qa R11: "craft shapes your plan. An unavailable skill is a **no-op** — note" → "is a **no-op** — note `skill-unavailable: <name>` in `IMPL_NOTES.md` (create it if"
+- [x] qa R12: "`test-plan` skill: map each acceptance criterion → one or more test cases →" → "Once spec is FINALIZED and PHASE=BUILD, map each acceptance criterion → one or more"
+- [x] qa R13: "The drift gate (`scripts/drift-gate.sh`) checks your matrix with no model: before coder" → "The drift gate (`scripts/drift-gate.sh`) checks your markers with no model: before coder"
+- [x] qa R14: "in source (the function name, or a test's description string without the `it(` call or" → retired: the coverage-matrix test-name grammar no longer exists; markers carry the criterion id
+- [x] qa R15: "repair pass with its line: fix the plan or the test names (after coder: restore or rename" → "lacks. When the gate fails you get one repair pass with its line: add or fix markers or"
 - [x] qa R16: "- **Fail before any source exists** — run the suite immediately after writing each test" → "- **Fail before any source exists** — run the suite immediately after writing each test"
 - [x] qa R17: "- Pass after coder's implementation lands." → "- Pass after coder's implementation lands."
 - [x] qa R18: "- Cover failure paths, not just happy paths." → "- Cover failure paths, not just happy paths."
@@ -225,7 +225,7 @@ each; the drift tests pin their text.
 - [x] qa R29: "**Never use a bare `git checkout` of the changed files** — it destroys the" → "**Never use a bare `git checkout` of the changed files** — it destroys the"
 - [x] qa R30: "/ `git diff <sha>` show the tree back to the snapshot state before you record" → "/ `git diff <sha>` show the tree back to the snapshot state before you record"
 - [x] qa R31: "behavior; rate as `[blocker]`." → "behavior; rate as `[blocker]`."
-- [x] qa R32: "`## Change-Cycle <N> — qa — <iso8601>`, with severity-tagged items and a final" → "`## Change-Cycle <N> — qa — <iso8601>`, with severity-tagged items and a final"
+- [x] qa R32: "`## Change-Cycle <N> — qa — <iso8601>`, with severity-tagged items and a final" → "`## Change-Cycle <N> — qa — <iso8601>`, with severity-tagged items. Every finding"
 - [x] qa R33: "change cycle it was first raised in; a re-raised finding keeps its id. Every" → "change cycle it was first raised in; a re-raised finding keeps its id. Every"
 - [x] qa R34: "`[major]` carries the continuation `  disposition: fix` — you never write ADRs; the" → "`[major]` carries the continuation `  disposition: fix` — you never write ADRs; the"
 - [x] qa R35: "is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a new" → "is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a new"
@@ -237,7 +237,7 @@ each; the drift tests pin their text.
 - [x] qa R41: "recorded ref. Revert the coder's fix with `git stash` (never a bare `git checkout` — that" → "recorded in IMPL_NOTES.md (never a bare `git checkout` — that"
 - [x] qa R42: "decorative — record it as a `[blocker]`." → "decorative — record it as a `[blocker]`."
 - [x] qa R43: "- [major] (qa-cc1-2) failure path <x> untested" → "- [major] (qa-cc1-2) failure path <x> untested"
-- [x] qa R44: "Once spec is FINALIZED and PHASE=BUILD, draft `TEST_PLAN.md` following the" → "Once spec is FINALIZED and PHASE=BUILD, draft `TEST_PLAN.md` following the"
+- [x] qa R44: "Once spec is FINALIZED and PHASE=BUILD, draft `TEST_PLAN.md` following the" → "each test with a `<slug>/AC-<n>` comment on or above it for every criterion it covers;"
 
 ## reviewer
 
@@ -251,7 +251,7 @@ each; the drift tests pin their text.
 - [x] reviewer R8: "## Verify mode" → "## Verify mode"
 - [x] reviewer R9: "## Severity rubric (verbatim — required in-body)" → "## Severity rubric (verbatim — required in-body)"
 - [x] reviewer R10: "<!-- verified-rule:start -->" → "<!-- verified-rule:start -->"
-- [x] reviewer R11: "You never write this yourself. The `status:` line is informational since v0.9; the" → "You never write this yourself. The `status:` line is informational; the finalize gate"
+- [x] reviewer R11: "You never write this yourself. The `status:` line is informational since v0.9; the" → "You never write this yourself. A block is its heading plus findings; the finalize gate"
 - [x] reviewer R12: "- Do not write, edit, or create any file, in any phase, for any reason." → "- Do not write, edit, or create any file, in any phase, for any reason."
 - [x] reviewer R13: "- Do not review files the prompt did not name in order to widen scope." → "- Do not review files the prompt did not name in order to widen scope."
 - [x] reviewer R14: "- Do not raise a new `[major]` on a delta cycle (cycle ≥ 2) — blockers and minors only." → "- Do not raise a new `[major]` on a delta cycle (cycle ≥ 2) — blockers and minors only."
@@ -291,7 +291,7 @@ each; the drift tests pin their text.
 - [x] scribe R30: "SCRIBE_OK: feature=<slug> phase=<state_delta.PHASE> cycle=<state_delta.CYCLE> entries=<N> escalation=<yes|no>" → "SCRIBE_OK: feature=<slug> phase=<state_delta.PHASE> cycle=<state_delta.CYCLE> entries=<N> escalation=<yes|no>"
 - [x] scribe R31: "SCRIBE_ERROR: <one-line reason>" → "SCRIBE_ERROR: <one-line reason>"
 - [x] scribe R32: "Do not partially apply. Either the whole envelope lands or none of it does." → "Do not partially apply. Either the whole envelope lands or none of it does."
-- [x] scribe R33: "- You **never** write `spec.md`, `acceptance.md`, `TEST_PLAN.md`, or production source." → "- You **never** write `spec.md`, `acceptance.md`, `TEST_PLAN.md`, or production source."
+- [x] scribe R33: "- You **never** write `spec.md`, `acceptance.md`, `TEST_PLAN.md`, or production source." → "- You **never** write `spec.md`, tests, or production source."
 - [x] scribe R34: "- **If `impl_notes_appendix` is absent or empty, you NEVER create or touch IMPL_NOTES.md" → "- **If `impl_notes_appendix` is absent or empty, you NEVER create or touch IMPL_NOTES.md"
 - [x] scribe R35: "- You **never** read or modify files outside the **resolved workspace**" → "- You **never** read or modify files outside the **resolved workspace**"
 - [x] scribe R36: "- You do not bump `CYCLE`, `CHANGE_CYCLE`, `CYCLE_TOTAL`, or any field beyond what `state_delta` specifies" → "- You do not bump `CYCLE`, `CHANGE_CYCLE`, `CYCLE_TOTAL`, or any field beyond what `state_delta` specifies"
