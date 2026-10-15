@@ -27,12 +27,23 @@ only (never across clones).
   and `HYPOTHESIS_CYCLE` (the first line of a bug's hypothesis).
 - `scripts/workflow-parse.test.sh` — every workflow must compile as an async body (replaces the
   `node --check` advice, which rejects top-level `return`).
-- **Drift gate** — `scripts/drift-gate.sh` proves every acceptance criterion of a gated feature
-  (`DRIFT_GATE: on`, written by `new-feature`) maps to a named test that exists. It runs before
-  and after coder and at `handoff`; a failure gets one qa repair pass, then `QA_FAIL: drift` and
+- **Drift gate** — `scripts/drift-gate.sh` proves every acceptance criterion in a feature's spec
+  is named by a `<slug>/AC-<n>` marker comment in a test file under the test roots (`TEST_ROOTS`,
+  else whichever of `tests`, `test`, `spec` exist), and that no marker names a criterion the spec
+  lacks. On by default (`DRIFT_GATE: off` opts a feature with no tests out). It runs before and
+  after coder and at `handoff`; a failure gets one qa repair pass, then `QA_FAIL: drift` and
   `build` repairs it. `drift-gate.sh --all` runs it in CI over every built feature.
 
 ### Changed
+- **Four files per feature.** A feature is `spec.md` (ending with its `## Acceptance Criteria`),
+  `PROGRESS.md`, `DECISIONS.md` and `REVIEW.md`; `IMPL_NOTES.md` exists only once something is
+  written to it. The test plan is the tests' own `<slug>/AC-<n>` markers. Skill routing is two
+  PROGRESS fields, `CODER_SKILLS` and `QA_SKILLS`. Review blocks are findings only: a role heading
+  plus its finding lines.
+- **The spec's budget is in lines:** `SPEC_MAX_LINES` (150 standard, 400 large) replaces
+  `SPEC_MAX_KB`; `AC_MAX` counts the spec's acceptance section.
+- `stop-tests` skips its green-suite check before coder is dispatched (`BUILD_STATE` absent) and
+  while a deep-build workflow is running, instead of reading TEST_PLAN/IMPL_NOTES content.
 - **Lean agents** — every agent and skill description is one line of at most 40 words that says
   when to use it and when not to; agent bodies describe the role, not the workflow, at about 800
   words (a few have a named cap). No rule was cut: `docs/history/2026-10-16-lean-agents-RULES.md`
@@ -58,6 +69,9 @@ only (never across clones).
 
 ### Removed
 - `park`, `resolve-escalation`, `plan-finalize` — their behavior moved into `status`, unchanged.
+- `acceptance.md`, `TEST_PLAN.md` and `SKILL_MANIFEST.md` from a feature's layout; the `test-plan`
+  skill (skills 7 → 6); `SPEC_MAX_KB`; the review block's `status:` line and the `status` field of
+  the reviewer payloads.
 
 ### Fixed
 - The review gates (`finalize-gate`, `change-review-gate`, the `check-review-written` hook) missed every
@@ -69,9 +83,12 @@ only (never across clones).
 ### Breaking
 - Headless callers that typed a hidden step (`claude -p "/build-fleet:review"`) must drive the
   lite commands instead. Signal lines from the hidden steps are unchanged.
-- **Compatibility:** the `.sdd/` schema gains the optional fields above (additive; a feature past
-  BUILD without `BUILD_STATE` is treated as built). Signal grammar adds `BUILD_FLEET_LITE_NEXT` and
-  `BUILD_FLEET_LITE_DONE` (additive).
+- **Compatibility:** forward features are `SDD_SCHEMA: 2`. **Breaking:** a forward feature started
+  before 0.12.0 is refused (`unsupported-schema`) by the lite router and the source-write gate —
+  park it (`/build-fleet:status park <reason>`) and start it again; nothing is migrated.
+  `drift-gate.sh --all` reports such features unchecked. The bug lane and the product tier are
+  unchanged (schema 1). Signal grammar adds `BUILD_FLEET_LITE_NEXT` and `BUILD_FLEET_LITE_DONE`; the
+  `BUILD_FLEET_DRIFT_GATE` line drops `missing`, `unparsed` and `gaps_open`.
 
 ## [0.11.0] — 2026-10-14
 

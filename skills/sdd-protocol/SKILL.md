@@ -164,7 +164,7 @@ DRIFT_GATE: on | off        # drift gate (scripts/drift-gate.sh): absent/empty/o
 TEST_ROOTS: <csv>           # optional — drift gate test roots, project-relative; absent ⇒ whichever of tests, test, spec exist
 CODER_SKILLS: <csv>         # optional — domain skills coder loads at BUILD (skill-routing; written by new-feature)
 QA_SKILLS: <csv>            # optional — domain skills qa loads at BUILD
-QA_FAIL: drift              # the drift gate failed and the test plan still needs repair; /build-fleet:implement's repair mode clears it
+QA_FAIL: drift              # the drift gate failed and the criterion markers still need repair; /build-fleet:implement's repair mode clears it
 UPDATED: <iso8601>
 ```
 

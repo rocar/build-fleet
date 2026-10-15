@@ -44,7 +44,7 @@ verbatim before it.
 Stop reasons: `spec-ready`, `plan-ready`, `built`, `shipped`, `item-in-flight`, `parked`,
 `escalated`, `step-refused`, `no-progress`, `step-cap`, `unknown-state`, `nothing-to-do`,
 `known-cause` (triage closed a bug whose cause was already known; `next` is `start` with the fix),
-`spec-not-ready`, `not-built`, `drift` (the test plan failed the drift gate; `next` is `build`, which repairs it); and `status`, used only by `lite-next.sh status` when the
+`spec-not-ready`, `not-built`, `drift` (the tests' criterion markers failed the drift gate; `next` is `build`, which repairs it), `unsupported-schema` (the active feature was started by an older build-fleet; `next` is `status park <reason>`); and `status`, used only by `lite-next.sh status` when the
 next move is a step.
 
 The routing table lives in `scripts/lite-next.sh` and is specified in
@@ -54,17 +54,21 @@ The routing table lives in `scripts/lite-next.sh` and is specified in
 
 `scripts/drift-gate.sh <slug>` prints one line; `--all` prints one per feature and a
 summary (it gates only built features: `BUILD_STATE: done`, or no BUILD_STATE at
-`CHANGE_REVIEW`/`HANDOFF`; it skips bugs and `_product`):
+`CHANGE_REVIEW`/`HANDOFF`; it skips bugs and `_product`, and reports a forward feature
+whose `SDD_SCHEMA` is not 2 as unchecked with its `schema`). A criterion is covered when a
+regular, non-`.md` file under the test roots (`TEST_ROOTS`, else whichever of `tests`,
+`test`, `spec` exist) carries the marker `<slug>/AC-<n>`:
 
 ```
-BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":<bool>,"reasons":[…],"untested":[…],"unknown":[…],"missing":[{"criterion","test","location","why"}],"unparsed":[…],"gaps_open":<bool>}
+BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":<bool>,"reasons":[…],"untested":[…],"unknown":[…]}
 BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":true,"unchecked":true}
+BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":true,"unchecked":true,"schema":"<value>"}
 BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":true,"in_progress":true}
 BUILD_FLEET_DRIFT_GATE_SUMMARY: {"checked":N,"unchecked":M,"in_progress":K,"failed":[…]}
 ```
 
-Reasons: `bad-field`, `no-test-plan`, `no-criteria`, `untested`, `unknown-criterion`,
-`missing-file`, `missing-test`, `gaps-open`, `unparsed`. The script's exit status (2 on
+Reasons: `bad-field`, `unsupported-schema`, `no-criteria`, `no-test-roots`, `untested`,
+`unknown-criterion`. `DRIFT_GATE: off` is the only unchecked forward feature. The script's exit status (2 on
 any failure) exists for CI; inside the flow, read the line. The steps that run it add:
 
 ```
@@ -556,13 +560,11 @@ Open: `BUILD_MODE` lands in M4. Until then, treat absent field as `standard`.
 
 | File | Workflow-mutated? | Writer (v0.2) | Append-only? |
 |---|---|---|---|
-| `spec.md` | No | PO subagent (direct from command, not workflow) | No |
-| `acceptance.md` | No | PO subagent | No |
+| `spec.md` (acceptance criteria included) | No | PO subagent (direct from command, not workflow) | No |
 | `PROGRESS.md` | Yes (via scribe) | scribe (workflow phases), commands (non-workflow phases) | No |
 | `REVIEW.md` | Yes (via scribe) | scribe | **Yes** |
 | `DECISIONS.md` | Maybe (ADR-emitting reviewer phase) | architect subagent (inside workflow, via dedicated `agent("architect-adr",...)` call) | **Yes** |
-| `TEST_PLAN.md` | No (M2 makes this BUILD-phase, qa subagent direct) | qa subagent | No |
-| `IMPL_NOTES.md` | No (BUILD phase, coder direct) | coder subagent | Append semantically |
+| `IMPL_NOTES.md` | No (BUILD phase, coder direct; created on first write) | coder subagent (+ qa snapshot SHAs, scribe appendix) | Append semantically |
 | `ESCALATION.md` | Yes (when survival vote escalates) | scribe (writes once on escalation_payload) | Write-once |
 
 **M3 (deep-build) adds:** `PARTITION_PROGRESS.md` for per-coder progress tracking, scribe-mutated.
@@ -595,7 +597,7 @@ Every workflow's *final phase* produces this envelope and passes it to the scrib
     }
   ],
   "review_entries": [                 // array — verbatim REVIEW.md blocks scribe appends
-    "## Cycle 2 — architect — 2026-05-30T...\n- [blocker] ...\nstatus: concerns-raised"
+    "## Cycle 2 — architect — 2026-05-30T...\n- [blocker] ..."
   ],
   "decisions_appendix": null,         // string | null — v0.9. ADR blocks the scribe appends verbatim to the workspace DECISIONS.md (mirrors impl_notes_appendix)
   "state_delta": {                    // object — fields scribe writes to PROGRESS.md

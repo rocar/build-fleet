@@ -19,9 +19,9 @@ agents/                       # 8 role subagents: product-owner, architect, code
                               #   qa, devops, classifier, reviewer, scribe
 commands/                     # 24 slash commands: 5 user-facing (start, build,
                               #   ship, fix, status) + 19 hidden steps
-skills/                       # 7 skills: sdd-protocol (+references/), adr,
+skills/                       # 6 skills: sdd-protocol (+references/), adr,
                               #   review-rubric, sdd-spec-template,
-                              #   sdd-diagnosis-template, test-plan, skill-routing
+                              #   sdd-diagnosis-template, skill-routing
 hooks/hooks.json              # hook registration (the ONLY registration point)
 hooks/scripts/                # 12 gate scripts + their *.test.sh harnesses
 workflows/                    # 4 dynamic workflows: review.js, deep-build.js,
@@ -34,7 +34,8 @@ scripts/                      # deterministic helpers (next-feature, intent-bloc
                               #   lite-next — the lite commands' router, drift-gate,
                               #   agent-surface — the agent/skill surface guard)
                               #   + their *.test.sh
-scripts/lib/                  # shared verified-review rules (jq) and REVIEW.md block helpers
+scripts/lib/                  # shared verified-review rules (jq), REVIEW.md block helpers,
+                              #   and the acceptance-criteria reader (criteria.sh)
 docs/                         # contracts, smoke fixtures, history
 .github/workflows/ci.yml      # CI: test matrix + release-channel check
 ```

@@ -50,7 +50,7 @@ its first words become the feature's slug:
     invoice PDF paths. Out of scope: currency conversion.
 
 /build-fleet:build       # your approval: finalizes the spec, then qa writes the failing suite and coder implements
-/build-fleet:ship        # change review against acceptance.md, fixes, then devops
+/build-fleet:ship        # change review against the acceptance criteria, fixes, then devops
 ```
 
 `start` drafts the spec and runs the adversarial review until it is clean, then stops.
@@ -73,12 +73,12 @@ Don't paste a long document into the command argument. Instead:
 **Your document does not become `spec.md`.** The product-owner *translates* it into
 the eight sections the `validate-spec-status` hook enforces — Overview, Goals,
 Non-goals, Behavior, Interfaces / Contracts, Constraints, Risks, Acceptance
-Criteria — plus a separate `acceptance.md` of testable criteria. That translation is
+Criteria, the testable criteria the tests are marked with. That translation is
 where prose requirements become verifiable ones, and it is the step worth watching.
 
 **Review the translation before you build.** When `start` stops with the spec ready,
-and before `/build-fleet:build`, have the spec's author read `.sdd/<slug>/spec.md` and
-`acceptance.md` next to the original document. Correct anything dropped or misread
+and before `/build-fleet:build`, have the spec's author read `.sdd/<slug>/spec.md`
+next to the original document. Correct anything dropped or misread
 there (then run `start` again so review sees it) — it is far cheaper than at any
 later gate.
 
@@ -93,17 +93,17 @@ through the feature loop above.
 
 | Step | What guarantees it |
 |---|---|
-| High-level spec → testable criteria | PO writes `acceptance.md` separately from the narrative spec |
+| High-level spec → testable criteria | PO writes a testable `## Acceptance Criteria` section, ids `AC-<n>` |
 | Review is evidence-based | Reviewers must cite `{file, locator}`; an uncited refutation is discarded |
 | No premature code | `block-source-before-finalized` rejects every non-`.sdd/` write until FINALIZED; `guard-bash-writes` closes the shell escape hatch |
 | Tests precede implementation | `/build` sequences qa → coder; coder refuses to start until the failing suite exists |
-| Every criterion is covered | At CHANGE_REVIEW each acceptance criterion must name the test exercising it — a gap is a `[blocker]` |
+| Every criterion is covered | Each test carries `<slug>/AC-<n>` markers; the drift gate fails a criterion with none, and at CHANGE_REVIEW a gap is a `[blocker]` |
 | Tests actually pin behavior | **Counterfactual gate:** revert the change and every test must go red |
 | Nothing ships red | `/handoff` refuses on missing or failing tests |
 
 Hooks block with a non-zero exit and actionable feedback — agents cannot talk past a
-gate. The full record (`spec.md` → `acceptance.md` → `TEST_PLAN.md` →
-`IMPL_NOTES.md` → `REVIEW.md` → `DECISIONS.md`) stays in `.sdd/<slug>/`, committed.
+gate. The full record (`spec.md` → `REVIEW.md` → `DECISIONS.md` →
+`IMPL_NOTES.md`) stays in `.sdd/<slug>/`, committed.
 
 ## 6. Things to know before the pilot
 

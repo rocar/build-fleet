@@ -251,8 +251,8 @@ rubric is mirrored in the agent's prompt body) with that role's lens injected.
 Cycle 1 is a full review; **cycle ≥ 2 is a delta review** — verify closure of prior
 `fix` findings and blockers by id, new findings at blocker severity only, enforced
 in code (a post-cycle-1 major is demoted to minor), not only asked for in the
-prompt. Each reviewer reads `spec.md` + `acceptance.md` + prior `REVIEW.md` itself
-and returns a schema-validated `{role, status, concerns:[{id, severity, text}]}` —
+prompt. Each reviewer reads `spec.md` (acceptance criteria included) + prior `REVIEW.md`
+itself and returns a schema-validated `{role, concerns:[{id, severity, text}]}` —
 stable IDs shaped `<role>-c<cycle>-<n>` that persist across re-raises. A `null`
 return (agent error / schema failure) is a **transient fault, not a review
 outcome**: the workflow cleans up the marker and returns `incomplete` without
@@ -265,8 +265,8 @@ verdict.
 **Phase 2 — Cross-examination.** Every concern is merged into one pool; each
 reviewer is handed **only its peers'** concerns and must `refute` or `affirm` each.
 A refutation only counts if it is *substantive*: **≥40 characters** of reasoning
-**and** a structured `{file, locator}` citation against `spec.md`, `acceptance.md`
-or `DECISIONS.md` (e.g. `{acceptance.md, "line 14"}` or `{DECISIONS.md, "ADR-7"}`
+**and** a structured `{file, locator}` citation against `spec.md` or
+`DECISIONS.md` (e.g. `{spec.md, "AC-4"}` or `{DECISIONS.md, "ADR-7"}`
 — citing an ADR by id is itself a substantive refutation). Affirm is the safe
 default and needs no citation. Self-refutation is impossible — the pool excludes
 your own concerns, and the vote filters same-role refutations anyway.
@@ -371,14 +371,14 @@ feature that keeps escalating, getting reset, and never converging.
 
 **Phase 2 (cross-examination):**
 
-- The **coder** refutes `qa-c1-2`: *"acceptance.md already enumerates the
-  429/timeout negative path as a required case"* + citation
-  `{acceptance.md, "line 14"}` (≥40 chars ✓, citation ✓, coder ≠ qa ✓).
+- The **coder** refutes `qa-c1-2`: *"the spec's acceptance criteria already
+  enumerate the 429/timeout negative path as a required case"* + citation
+  `{spec.md, "AC-4"}` (≥40 chars ✓, citation ✓, coder ≠ qa ✓).
 - No one substantively refutes `architect-c1-1` (qa affirms it).
 - `coder-c1-3` is a minor — irrelevant to the gate regardless.
 
 **Phase 3 (survival vote):** `qa-c1-2` is killed — rendered as a
-`refuted-by: coder — reason … (cites acceptance.md line 14)` continuation.
+`refuted-by: coder — reason … (cites spec.md AC-4)` continuation.
 `architect-c1-1` survives unrefuted; no major is left standing.
 
 **Phase 4 (disposition):** skipped — zero surviving majors, so the architect leg

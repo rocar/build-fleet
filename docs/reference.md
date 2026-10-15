@@ -110,10 +110,10 @@ gates, and writes `.sdd/` state, but never writes source itself.
 
 | Role | Subagent | Writes | Model |
 |---|---|---|---|
-| Product Owner | `build-fleet:product-owner` | `spec.md`, `acceptance.md`, product `vision.md` + `backlog.md` | opus |
+| Product Owner | `build-fleet:product-owner` | `spec.md` (acceptance criteria included), product `vision.md` + `backlog.md` | opus |
 | Architect | `build-fleet:architect` | `DECISIONS.md`, product `STACK.md`, review notes | opus |
 | Coder | `build-fleet:coder` | source, `IMPL_NOTES.md` | sonnet |
-| QA | `build-fleet:qa` | `tests/`, `TEST_PLAN.md` | sonnet |
+| QA | `build-fleet:qa` | `tests/`, each marked `<slug>/AC-<n>` | sonnet |
 | DevOps | `build-fleet:devops` | CI/CD, release notes | sonnet |
 | Classifier | `build-fleet:classifier` | *(read-only — emits a routing verdict + skill manifest)* | sonnet |
 | Reviewer | `build-fleet:reviewer` | *(read-only — the workflow-only reviewer for `/build-fleet:review`'s fan-out, cross-examination and disposition legs; Read/Grep/Glob, lens injected per role)* | sonnet |
@@ -261,7 +261,7 @@ Re-check or override at any time:
 build-fleet stays **process machinery** — it ships no domain-craft skills. What it
 ships is a routing convention (the **`skill-routing`** skill): the classifier maps
 a feature's stack + type to the *names* of domain skills (generic role-craft names,
-e.g. `api-design`, `cli-testing`), persists them to `SKILL_MANIFEST.md`, and the
+e.g. `api-design`, `cli-testing`), persists them to PROGRESS.md as `CODER_SKILLS` / `QA_SKILLS`, and the
 BUILD roles **load them if available**. An unavailable skill is a no-op — recorded
 (`skill-unavailable: <name>`) and the role proceeds with normal craft. Routing is
 advisory; it never changes the tier or build mode.
@@ -397,7 +397,7 @@ Ask Claude in plain words if you want one run directly.
 
 | Command | Phase | What it does |
 |---|---|---|
-| `/build-fleet:new-feature <slug> [details]` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` + `acceptance.md`. Takes the feature description from an optional inline `[details]` arg (wins), else the conversation, else a backlog intent; asks in a structured clarify loop if none is usable. Inherits the product stack if present. |
+| `/build-fleet:new-feature <slug> [details]` | SPEC | Scaffolds `.sdd/<slug>/`, runs the classifier, has PO draft `spec.md` with its acceptance criteria. Takes the feature description from an optional inline `[details]` arg (wins), else the conversation, else a backlog intent; asks in a structured clarify loop if none is usable. Inherits the product stack if present. |
 | `/build-fleet:dispatch <description>` | — | Previews the classifier's verdict for a description: tier, risk, and the review roster and budget new-feature would seed. Writes no state. |
 | `/build-fleet:review` | REVIEW | Runs the adversarial review workflow. (Skipped for trivial.) Accepts `--roles` / `--cycle-budget` (else `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET`). |
 | `/build-fleet:revise` | REVIEW | Hand the product-owner exactly the open review items to close. |
@@ -432,7 +432,8 @@ Ask Claude in plain words if you want one run directly.
 ## Tests-first BUILD
 
 In standard BUILD, `/build-fleet:implement` sequences **qa before coder**: qa
-authors a failing test suite from `acceptance.md` first, and coder refuses to begin
+authors a failing test suite from the spec's acceptance criteria first, marking each
+test with the criteria it covers (`<slug>/AC-<n>`), and coder refuses to begin
 until those tests exist. CHANGE_REVIEW then applies a counterfactual gate — *would
 each test fail without coder's change?* — so the suite actually pins the behavior
 rather than rubber-stamping it.
@@ -524,13 +525,10 @@ directory — never inside the plugin:
     PROGRESS.md          # PRODUCT / SIZE / PHASE / CYCLE / UPDATED
     REVIEW.md            # append-only PLAN_REVIEW interrogation log
   <feature>/
-    spec.md              # PO — STATUS: DRAFT|IN_REVIEW|FINALIZED|BLOCKED
-    acceptance.md        # PO — testable criteria
+    spec.md              # PO — STATUS: DRAFT|IN_REVIEW|FINALIZED|BLOCKED; ends with ## Acceptance Criteria
     DECISIONS.md         # architect — append-only ADRs
-    SKILL_MANIFEST.md    # routed domain skills for this feature (advisory)
-    TEST_PLAN.md         # qa
-    IMPL_NOTES.md        # coder
-    REVIEW.md            # append-only review log (every cycle)
+    IMPL_NOTES.md        # created on first write — coder gaps/deviations, qa snapshot SHAs
+    REVIEW.md            # append-only review log, findings only (created by the first review)
     REVIEW-archive.md    # scripts/review-rotate.sh — cycles older than the previous one
     PROGRESS.md          # orchestrator — phase, TIER, BUILD_MODE, handoff state
     ESCALATION.md        # only if review cycles exhausted
@@ -627,7 +625,7 @@ inheritance, the DEVELOPING loop, escalation policy, file ownership, and the
 automatically by the commands and agents. Read it at
 `skills/sdd-protocol/SKILL.md`. Supporting craft skills: `sdd-spec-template`,
 `sdd-diagnosis-template` (the bug lane's `diagnosis.md` contract), `review-rubric`,
-`adr`, `test-plan`, and `skill-routing`.
+`adr`, and `skill-routing`.
 
 ---
 

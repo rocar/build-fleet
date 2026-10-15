@@ -334,7 +334,7 @@ if printf '%s' "$out" | grep -qF '"stop":"unknown-state"'; then pass=$((pass+1))
 # ---- drift repair: QA_FAIL: drift sends build to implement, stops ship ----
 for bs in unset started needs-iteration done; do
   proj; { printf 'PHASE: BUILD\nQA_FAIL: drift\n'; [ "$bs" = unset ] || printf 'BUILD_STATE: %s\n' "$bs"; } | feature f FINALIZED
-  check "build-drift-repair-$bs" '"step":"implement","args":"","why":"repair the test plan"' build
+  check "build-drift-repair-$bs" '"step":"implement","args":"","why":"repair the criterion markers"' build
 done
 proj; feature f FINALIZED <<'EOF'
 PHASE: HANDOFF

@@ -56,7 +56,7 @@ if [ "$(resolve_lane "$slug")" = "bug" ]; then
 fi
 
 # Schema: this plugin reads the four-file layout only (SDD_SCHEMA: 2). A forward feature
-# scaffolded by an older build-fleet keeps its criteria and test plan in files nothing
+# scaffolded by an older build-fleet keeps its criteria and test map in files nothing
 # reads any more, so its gates would pass on nothing. Refuse source writes; .sdd/ stays
 # writable above, so parking it by hand still works.
 schema=$(read_progress_field "$slug" SDD_SCHEMA)

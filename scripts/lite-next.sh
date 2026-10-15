@@ -169,8 +169,8 @@ route_feature(){
         else S spec-not-ready "start" "review has open items"; fi
         return
       fi
-      # a test plan that failed the drift gate: implement runs only its qa repair pass
-      if [ "$qf" = drift ]; then T implement "" "repair the test plan"; return; fi
+      # markers that failed the drift gate: implement runs only its qa repair pass
+      if [ "$qf" = drift ]; then T implement "" "repair the criterion markers"; return; fi
       case "$bs" in
         "") case "$phase" in
               CHANGE_REVIEW|HANDOFF) S built "ship" "already past BUILD" ;;
@@ -182,7 +182,7 @@ route_feature(){
         *) S unknown-state "" "BUILD_STATE '$bs' not recognised" ;;
       esac ;;
     ship)
-      if [ "$qf" = drift ]; then S drift "build" "the test plan has drifted; build repairs it"; return; fi
+      if [ "$qf" = drift ]; then S drift "build" "the criterion markers have drifted; build repairs it"; return; fi
       if [ "$bs" = done ] || { [ -z "$bs" ] && { [ "$phase" = CHANGE_REVIEW ] || [ "$phase" = HANDOFF ]; }; }; then
         case "$phase" in
           BUILD|CHANGE_REVIEW|HANDOFF) T handoff "" "built; change review, then devops" ;;

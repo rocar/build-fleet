@@ -49,7 +49,7 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
      `"pass":true` (an unchecked feature included) → continue. `"pass":false` → set
      `QA_FAIL: drift` in PROGRESS.md, emit
      `BUILD_FLEET_HANDOFF_REFUSE: {"feature":"<slug>","code":2,"reason":"drift","gate":<the gate line's JSON>}`
-     and stop; the lite `build` command repairs the test plan. No line at all (exit 1) →
+     and stop; the lite `build` command repairs the criterion markers. No line at all (exit 1) →
      emit `BUILD_FLEET_HANDOFF_REFUSE: {"feature":"<slug>","code":2,"reason":"drift-gate-error"}`
      with its stderr and stop.
 

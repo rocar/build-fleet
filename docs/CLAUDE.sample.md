@@ -69,8 +69,8 @@ the hooks enforce it either way.
 
 ## Working inside the loop
 
-- **`.sdd/<item>/` is the plan and the shared memory.** `spec.md` + `acceptance.md`
-  are the contract, `PROGRESS.md` is the state, `IMPL_NOTES.md` and `DECISIONS.md`
+- **`.sdd/<item>/` is the plan and the shared memory.** `spec.md`, acceptance
+  criteria included, is the contract, `PROGRESS.md` is the state, `IMPL_NOTES.md` and `DECISIONS.md`
   hold deviations and rationale. Keep no parallel plan file — writes outside `.sdd/`
   are gate-blocked before FINALIZE anyway.
 - **One item in flight.** Don't open a second feature; `/build-fleet:status park <reason>` is
@@ -91,7 +91,7 @@ Stay in your lane. Reviewers (architect, qa) write only inside `.sdd/<active>/` 
 never source. The coder writes source only while `PHASE: BUILD`, and only once qa's
 failing tests exist. Devops writes CI/release artifacts only after the CHANGE_REVIEW
 gate passes. Use subagents for research and exploration only — anything that **writes**
-goes through a fleet role. Load any skills routed to you in `SKILL_MANIFEST.md`.
+goes through a fleet role. Load any skills routed to you in PROGRESS.md (`CODER_SKILLS` / `QA_SKILLS`).
 
 ## Standards
 
