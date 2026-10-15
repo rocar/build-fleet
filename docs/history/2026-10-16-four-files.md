@@ -103,8 +103,8 @@ Each change gets its failing test first, in the hook's existing harness.
 
 - **`drift-gate.sh <slug> | --all`**:
   - Criteria: distinct ids in the spec's `## Acceptance…` section.
-  - Coverage: every criterion id occurs as a whole token in at least one regular file under
-    the test roots. Whole token = not preceded or followed by `[A-Za-z0-9_-]`, so `AC-3`
+  - Coverage: every criterion id occurs as a whole token in at least one regular, non-`.md` file under
+    the test roots (a `tests/README.md` listing criteria must not cover them — part C refused `*.md` locations for the same reason). Whole token = not preceded or followed by `[A-Za-z0-9_-]`, so `AC-3`
     does not match `AC-30` or `AC-3a`, and `AC-3a` does not count for `AC-3`.
   - Test roots: `TEST_ROOTS` from PROGRESS (comma-separated, project-relative), else
     `tests`. A root that is absolute, contains `..`, or lies under `.sdd/` is `bad-field`;
