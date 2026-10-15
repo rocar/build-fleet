@@ -39,7 +39,8 @@ only (never across clones).
   `PROGRESS.md`, `DECISIONS.md` and `REVIEW.md`; `IMPL_NOTES.md` exists only once something is
   written to it. The test plan is the tests' own `<slug>/AC-<n>` markers. Skill routing is two
   PROGRESS fields, `CODER_SKILLS` and `QA_SKILLS`. Review blocks are findings only: a role heading
-  plus its finding lines.
+  plus its finding lines. Across the plugin's shipped files the change is 431 lines added and 575
+  deleted (net −144).
 - **The spec's budget is in lines:** `SPEC_MAX_LINES` (150 standard, 400 large) replaces
   `SPEC_MAX_KB`; `AC_MAX` counts the spec's acceptance section.
 - `stop-tests` skips its green-suite check before coder is dispatched (`BUILD_STATE` absent) and
