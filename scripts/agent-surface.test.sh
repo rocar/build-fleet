@@ -11,7 +11,7 @@ ok() { pass=$((pass+1)); printf 'ok   %s\n' "$1"; }
 no() { fail=$((fail+1)); printf 'FAIL %s — %s\n' "$1" "$2"; }
 
 # Agents whose bodies and descriptions are not cut yet; each lean task removes its name.
-PENDING="skill:adr skill:review-rubric skill:sdd-diagnosis-template skill:sdd-protocol skill:sdd-spec-template skill:skill-routing skill:test-plan"
+PENDING=""
 
 # Body caps: name:cap:reason. Absent ⇒ 800.
 CAPS="

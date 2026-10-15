@@ -1,6 +1,6 @@
 ---
 name: skill-routing
-description: The build-fleet convention for routing domain-appropriate skills to role agents based on the product stack and feature type. Defines the SKILL_MANIFEST schema, the stack→skill mapping table, the classifier's emission rules, and the advisory load-if-available semantics. Consult it when the classifier emits a skill manifest, when new-feature persists it, and when coder/qa honor it during BUILD.
+description: How domain skills reach role agents: the SKILL_MANIFEST schema, the stack-to-skill table, the classifier's emission rules and load-if-available semantics. Consult when emitting, persisting or honouring a skill manifest.
 ---
 
 # Skill Routing

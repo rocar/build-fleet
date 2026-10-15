@@ -31,7 +31,8 @@ scripts/                      # deterministic helpers (next-feature, intent-bloc
                               #   acquire-active, finalize-gate, change-review-gate,
                               #   review-rotate, adr-index, workflow-determinism-lint,
                               #   pin-workflow, quote-check, review-carry,
-                              #   lite-next — the lite commands' router, drift-gate)
+                              #   lite-next — the lite commands' router, drift-gate,
+                              #   agent-surface — the agent/skill surface guard)
                               #   + their *.test.sh
 scripts/lib/                  # shared verified-review rules (jq) and REVIEW.md block helpers
 docs/                         # contracts, smoke fixtures, history

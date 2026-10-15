@@ -1,6 +1,6 @@
 ---
 name: test-plan
-description: QA's test design checklist for .sdd/<feature>/TEST_PLAN.md. Maps each acceptance criterion to one or more test cases and a coverage type (unit, integration, e2e). Consult during BUILD when drafting the test plan and during CHANGE_REVIEW when reviewing coverage.
+description: The TEST_PLAN.md structure: each acceptance criterion mapped to named tests and a coverage type, in the matrix grammar the drift gate reads. Consult when drafting a test plan or reviewing coverage.
 ---
 
 # Test Plan

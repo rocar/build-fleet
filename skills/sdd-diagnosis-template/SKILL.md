@@ -1,6 +1,6 @@
 ---
 name: sdd-diagnosis-template
-description: The canonical diagnosis.md structure for the build-fleet troubleshoot-fix bug lane. Defines the required STATUS line (REPORTED|REPRODUCING|DIAGNOSED|CONFIRMED|FIXED), the required section headings, and the contract the validate-diagnosis-status PostToolUse hook enforces. Consult whenever drafting, advancing, or reviewing a diagnosis.md for an active bug.
+description: The diagnosis.md structure for a bug: the STATUS line, the required sections, and what the diagnosis hook enforces. Consult when drafting, advancing or reviewing a diagnosis.
 ---
 
 # SDD Diagnosis Template

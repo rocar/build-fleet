@@ -33,6 +33,11 @@ only (never across clones).
   `build` repairs it. `drift-gate.sh --all` runs it in CI over every built feature.
 
 ### Changed
+- **Lean agents** — every agent and skill description is one line of at most 40 words that says
+  when to use it and when not to; agent bodies describe the role, not the workflow, at about 800
+  words (a few have a named cap). No rule was cut: `docs/history/2026-10-16-lean-agents-RULES.md`
+  quotes each one before and after. `scripts/agent-surface.test.sh` guards description length,
+  body caps, the inventory, and pins every agent's `tools:` list.
 - **Every other command is a hidden step** (`user-invocable: false`): it cannot be typed, and the
   lite commands run it. Ask Claude in plain words to run one directly.
 - **`build`, `ship` and `status` are human-only** (`disable-model-invocation`): running `build` is

@@ -1,6 +1,6 @@
 ---
 name: adr
-description: The Architecture Decision Record format for .sdd/<feature>/DECISIONS.md and the product-scope .sdd/_product/DECISIONS.md. Append-only entries, one per design decision that survived review; product ADRs may be PROVISIONAL until ratified. Consult whenever recording, citing, or reviewing ADRs.
+description: The ADR format for a feature's or product's DECISIONS.md: append-only entries, one per decision that survived review; product ADRs stay provisional until ratified. Consult when recording, citing or reviewing an ADR.
 ---
 
 # ADR Format

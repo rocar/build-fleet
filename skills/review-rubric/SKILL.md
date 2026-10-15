@@ -1,6 +1,6 @@
 ---
 name: review-rubric
-description: The shared severity vocabulary every reviewer uses in .sdd/<feature>/REVIEW.md — blocker, major, minor — with exact definitions and gate effects. Consult during /build-fleet:review and /build-fleet:handoff, and whenever assigning a severity to a finding.
+description: The blocker, major and minor severity definitions and their gate effects, shared by every reviewer writing REVIEW.md. Consult whenever assigning or checking a finding's severity.
 ---
 
 # Review Rubric

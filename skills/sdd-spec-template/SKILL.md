@@ -1,6 +1,6 @@
 ---
 name: sdd-spec-template
-description: The canonical spec.md structure for the build-fleet SDD workflow. Defines the required STATUS line, the required section order, what each section must contain, and the contract that the validate-spec-status PostToolUse hook enforces. Consult whenever drafting, revising, or reviewing a spec.md for an active feature.
+description: The spec.md structure: the STATUS line, the required sections in order, what each must contain, and what the spec hook enforces. Consult when drafting, revising or reviewing a spec.
 ---
 
 # SDD Spec Template

@@ -1,6 +1,6 @@
 ---
 name: sdd-protocol
-description: The canonical spec-driven development protocol for the build-fleet agent software house. Defines the SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF state machine, the .sdd/ workspace layout and file ownership, the deterministic phase gates, the bounded review-cycle and human-escalation policy, and the blocker/major/minor severity rubric. This is the single source of truth for how the fleet runs. Consult it whenever orchestrating a feature or bug, transitioning phases, running a review, finalizing a spec, handing off to devops, or deciding whether to escalate — and any time a build-fleet command or role agent needs the workflow rules.
+description: The build-fleet rulebook: phases and gates, the .sdd/ layout and file ownership, review budgets, escalation, the bug lane and the product tier. Consult whenever orchestrating, changing phase, reviewing, finalizing, handing off or escalating.
 ---
 
 # SDD Protocol
