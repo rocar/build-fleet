@@ -25,6 +25,8 @@ cblock() { local p="$1" c="$2" r="$3"; shift 3; { printf '## Change-Cycle %s —
 dblock() { local p="$1" d="$2" c="$3" r="$4"; shift 4; { printf '## Change-Cycle %s %s %s %s 2026-10-12T00:00:00Z\n' "$c" "$d" "$r" "$d"; for l in "$@"; do printf '%s\n' "$l"; done; printf 'status: approved\n\n'; } >> "$p/.sdd/feat/REVIEW.md"; }
 # sblock <proj> <cycle> <role> <body-lines…>   (a SPEC-review block, must never match)
 sblock() { local p="$1" c="$2" r="$3"; shift 3; { printf '## Cycle %s — %s — 2026-10-12T00:00:00Z\n' "$c" "$r"; for l in "$@"; do printf '%s\n' "$l"; done; printf 'status: concerns-raised\n\n'; } >> "$p/.sdd/feat/REVIEW.md"; }
+# nblock <proj> <cycle> <role> <body-lines…> — a findings-only block (no status: line)
+nblock() { local p="$1" c="$2" r="$3"; shift 3; { printf '## Change-Cycle %s — %s — 2026-10-12T00:00:00Z\n' "$c" "$r"; for l in "$@"; do printf '%s\n' "$l"; done; printf '\n'; } >> "$p/.sdd/feat/REVIEW.md"; }
 run() { out=$( cd "$1" && CLAUDE_PROJECT_DIR="$1" bash "$GATE" feat 2>/dev/null ); rc=$?; }
 assert() { local name="$1" cond="$2"; if eval "$cond"; then pass=$((pass+1)); printf 'ok   %-48s\n' "$name"; else fail=$((fail+1)); printf 'FAIL %-48s (%s) out=%s\n' "$name" "$cond" "${out:-}"; fi; }
 
@@ -187,5 +189,13 @@ assert "crlf-review-blank-line-fails-closed" "[ $rc -eq 2 ] && printf '%s' \"\$o
 p=$(new_proj nested 1); cblock "$p" 1 product-owner; cblock "$p" 1 qa; cblock "$p" 1 architect '  - [blocker] (architect-cc1-1) nested under a note'
 run "$p"
 assert "indented-finding-bullet-refuses" "[ $rc -eq 2 ] && printf '%s' \"\$out\" | grep -q unparsed-findings"
+
+# --- findings-only blocks (no status: line) evaluate exactly as before ---
+p=$(new_proj nostatus 1); nblock "$p" 1 product-owner; nblock "$p" 1 qa; nblock "$p" 1 architect
+run "$p"
+assert "no-status-line-zero-findings-pass" "[ $rc -eq 0 ]"
+p=$(new_proj nostatus-fix 1); nblock "$p" 1 product-owner; nblock "$p" 1 qa '- [major] (qa-cc1-1) failure path untested' '  disposition: fix'; nblock "$p" 1 architect
+run "$p"
+assert "no-status-line-fix-major-refuses" "[ $rc -eq 2 ] && printf '%s' \"\$out\" | grep -q '\"open_majors\":\\[\"qa-cc1-1\"\\]'"
 
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]

@@ -176,10 +176,9 @@ const CODER_SUMMARY_SCHEMA = {
 const BUILD_REVIEW_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["role", "status", "concerns"],
+  required: ["role", "concerns"],
   properties: {
     role: { type: "string", enum: ["architect", "qa"] },
-    status: { type: "string", enum: ["concerns-raised", "approved"] },
     concerns: {
       type: "array",
       items: {
