@@ -148,7 +148,7 @@ and still needs repair. It is cleared by the run that passes the gate.
 - **`implement` in repair mode.** When PROGRESS.md has `QA_FAIL: drift`, the re-run guard
   (precondition 4) admits the run whatever the BUILD_STATE, and the run does only the
   repair pass: no authoring pass, no coder. Whether the suite must be red or green follows
-  `BUILD_STATE` (unset → red, as before coder; `started` or `done` → green, as after
+  `BUILD_STATE` (unset → red, as before coder; `started`, `needs-iteration` or `done` → green, as after
   coder). Outcomes are those of the matching step above, and passing clears `QA_FAIL`.
   Unset `BUILD_STATE` continues to step c and coder, as a normal build.
 
