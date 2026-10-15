@@ -41,6 +41,7 @@ each; the drift tests pin their text.
 - [x] architect R31: "out-of-radius change is a `[major]`/`[blocker]`." → "out-of-radius change is a `[major]`/`[blocker]`."
 - [x] architect R32: "**Greenfield vs brownfield (the orchestrator tells you which):**" → "**Greenfield vs brownfield (the orchestrator tells you which):**"
 - [x] architect R33: "(at plan-review/plan-finalize, or explicit human promotion). Frame migrations as" → "(at plan-review/plan-finalize, or explicit human promotion). Frame migrations as"
+- [x] architect R34: "status: concerns-raised" → "status: concerns-raised"
 
 ## classifier
 
@@ -124,6 +125,8 @@ each; the drift tests pin their text.
 - [x] coder R22: "- No speculative abstraction. If three call sites become two with a helper," → "- No speculative abstraction. If three call sites become two with a helper,"
 - [x] coder R23: "**GREEN** without breaking the suite, and stay within the stated **blast radius** — don't widen it." → "**GREEN** without breaking the suite, and stay within the stated **blast radius** — don't widen it."
 - [x] coder R24: "Record `gap:`/`deviation:`/`todo:` in `IMPL_NOTES.md`; emit `BUILD_FLEET_FIX_DONE: <count> tests green`." → "Record `gap:`/`deviation:`/`todo:` in `IMPL_NOTES.md`; emit `BUILD_FLEET_FIX_DONE: <count> tests green`."
+- [x] coder R25: "`.sdd/<slug>/diagnosis.md`: implement the recorded **fix strategy** so the reproducing test(s) turn" → "`.sdd/<slug>/diagnosis.md`: implement the recorded **fix strategy** so the reproducing test(s) turn"
+- [x] coder R26: "  *what* should be rewritten." → "  *what* should be rewritten."
 
 ## devops
 
@@ -187,6 +190,7 @@ each; the drift tests pin their text.
 - [x] product-owner R39: "   criterion? If no, add coverage." → "   criterion? If no, add coverage."
 - [x] product-owner R40: "Surface what you caught in a short `## Self-review notes` block at the top" → "Surface what you caught in a short `## Self-review notes` block at the top"
 - [x] product-owner R41: "1. Re-read `sdd-spec-template` and confirm every required section is" → "1. Re-read `sdd-spec-template` and confirm every required section is"
+- [x] product-owner R42: "These intents are **interrogated at PLAN_REVIEW** (clarity, clean sibling boundaries," → "These intents are **interrogated at PLAN_REVIEW** (clarity, clean sibling boundaries,"
 
 ## qa
 

@@ -15,14 +15,15 @@ PENDING=""
 
 # Body caps: name:cap:reason. Absent ⇒ 800.
 CAPS="
+coder:894:refuse-to-begin gate, deviation rules and bug-lane duties after the final-review restorations
 scribe:1571:the numbered write procedure is the contract every workflow apply step depends on
 classifier:1492:tier criteria, the risk table and both verdict shapes decide routing
-product-owner:1275:product-tier backlog grammar and intent rules that next-feature and plan-review parse
+product-owner:1411:product-tier backlog grammar and intent rules that next-feature and plan-review parse
 architect:1359:mirrored rubric, verified rule and lens (about 300 words) plus the product-tier stack and brownfield rules
 qa:1433:mirrored rubric, verified rule and lens (about 300 words) plus the counterfactual snapshot procedure
 "
 # Inventory size: every rule line (- [ ] or - [x]). Adding or removing a rule edits this.
-RULES_COUNT=264
+RULES_COUNT=268
 
 # Recorded allowlists (exact, order included). A deliberate change edits this line too.
 TOOLS="
@@ -40,9 +41,13 @@ words() { printf '%s\n' "$1" | awk '{ for (i = 1; i <= NF; i++) if ($i != "|") w
 body_words() { awk '/^---$/{n++; next} n>=2' "$1" | awk '{ for (i = 1; i <= NF; i++) if ($i != "|") w++ } END { print w + 0 }'; }
 pending() { case " $PENDING " in *" $1 "*) return 0 ;; esac; return 1; }
 
+# desc_cont <file> — prints 1 when the description: line is followed by an indented
+# continuation line (a plain multi-line YAML scalar), which fm() would not read
+desc_cont() { awk '/^---$/{n++; next} n==1 { if (d && /^[ \t]/) { print 1; exit } d = (index($0, "description:") == 1) }' "$1"; }
 check_desc() {  # <file> <name> <agent?>
   local d n; d=$(fm "$1" description)
   case "$d" in ''|'>'*|'|'*) no "$2 description one line" "missing or folded"; return ;; esac
+  [ -z "$(desc_cont "$1")" ] || { no "$2 description one line" "continues on the next line"; return; }
   n=$(words "$d")
   if [ "$n" -le 40 ]; then ok "$2 description <= 40 words ($n)"; else no "$2 description <= 40 words" "$n words"; fi
   case "$d" in *'/build-fleet:'*) no "$2 description names no hidden step" "contains /build-fleet:" ;; *) ok "$2 description names no hidden step" ;; esac
@@ -91,6 +96,8 @@ else
   done < "$inv"
   [ "$bad" -eq 0 ] && ok "rules inventory: $n checked, all found"
 fi
+
+if [ -z "$PENDING" ]; then ok "nothing pending"; else no "nothing pending" "PENDING=\"$PENDING\""; fi
 
 printf '\npassed=%d failed=%d\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

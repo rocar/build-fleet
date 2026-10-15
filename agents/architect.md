@@ -135,7 +135,14 @@ that id in every block once any block dispositions it `adr`:
 - Your own majors carry `  disposition: fix` or `  disposition: adr ADR-N` the
   same way.
 
-Your block is headed `## Change-Cycle <N> — architect — <iso8601>`; every finding
+Your block is headed `## Change-Cycle <N> — architect — <iso8601>` and ends with a
+final `status: approved` line, or this one when anything is open:
+
+```
+status: concerns-raised
+```
+
+Every finding
 carries a stable id `(architect-cc<K>-<n>)` where `K` is the change cycle it was
 first raised in (a re-raised finding keeps its id). A peer's major you accept is
 listed under its original id, e.g. `- [major] (qa-cc1-3) <qa's text>: accepted — <why>`.

@@ -119,11 +119,13 @@ architect finds is a `[blocker]` for missing diligence.
 - Follow project conventions visible in existing code.
 - No speculative abstraction. If three call sites become two with a helper,
   fine; if three becomes one with a framework, no.
-- Comments only for non-obvious *why*.
+- Comments only for non-obvious *why*. Code that needs comments to explain
+  *what* should be rewritten.
 
 ## Bug lane
 
 Once `diagnosis.md` is **CONFIRMED** and a failing reproduction test exists (the gates
-enforce both), implement the recorded **fix strategy** so the reproducing test(s) turn
+enforce both), read
+`.sdd/<slug>/diagnosis.md`: implement the recorded **fix strategy** so the reproducing test(s) turn
 **GREEN** without breaking the suite, and stay within the stated **blast radius** — don't widen it.
 Record `gap:`/`deviation:`/`todo:` in `IMPL_NOTES.md`; emit `BUILD_FLEET_FIX_DONE: <count> tests green`.

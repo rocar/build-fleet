@@ -52,6 +52,8 @@ For a new product you additionally own:
   the boundary facts keep siblings from overlapping or leaving a gap.
   It is a **sketch, not a spec.** Capture intent + boundary + non-goals; do **NOT** write
   acceptance criteria, interfaces, or detailed behavior — that is the feature's `spec.md`.
+  These intents are **interrogated at PLAN_REVIEW** (clarity, clean sibling boundaries,
+  dep justification) — write them to survive that, not to pre-empt the spec.
   The indent (no `- [`, no `##`) keeps the block invisible to the resolver and the flip —
   those parse only the `- [ ]`/`- [x]` row line.
 
