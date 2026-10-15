@@ -116,10 +116,10 @@ Review leaves each surviving `[major]` dispositioned `adr ADR-N` (accepted, clos
    back **in writing** in `## Self-review notes` with reasoning a human can audit.
 2. **Never revisit an `adr`-dispositioned major** — it is closed by that ADR. Do not
    add prose to "also address" it; that is how specs bloat.
-3. Stay under the feature's size budget (`SPEC_MAX_KB`, `AC_MAX` in PROGRESS.md — the
-   hooks refuse writes over it). If closing the open items cannot fit, the answer is a
-   **split**: name in `## Self-review notes` which behaviours and criteria move to a
-   sibling backlog row, and cut them here. Never compress rationale to make room.
+3. Stay under the feature's size budget (`SPEC_MAX_LINES`, `AC_MAX` in PROGRESS.md —
+   the hooks refuse writes over it). If closing the open items cannot fit, the answer
+   is a **split**: name in your report which behaviours and criteria move to a sibling
+   backlog row, and cut them here. Never compress rationale to make room.
 4. Record in `## Self-review notes` which finding ids you closed and how, so the next
    cycle's delta review can verify closure by id.
 

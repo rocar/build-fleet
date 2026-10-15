@@ -179,9 +179,10 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    `/build-fleet:handoff`. *(Defaulting an unrecognized/missing signal to failure is
    deliberate — the safe default is "not shipped," never a false advance.)*
 
-10. **On devops success.** Edit `spec.md` STATUS line to retain
-    `FINALIZED` (no flip) and append a `## Implementation` section if not
-    already present, noting the CHANGE_CYCLE that approved and the date.
+10. **On devops success.** Leave `spec.md` untouched (it is frozen and at its line
+    budget). Record the ship in PROGRESS.md: `SHIPPED: <iso8601>` and
+    `SHIPPED_CHANGE_CYCLE: <the CHANGE_CYCLE that approved>` (add the lines if absent;
+    an `.sdd/` write, always gate-permitted).
     Tell the user the feature is shipped (or in the project's equivalent
     of shipped — opened PR, queued release, etc.).
 

@@ -181,6 +181,22 @@ T
 run f
 assert "path-with-spaces" "[ $rc -eq 0 ]"
 
+# --- final review: --markers, no-test-roots hint, .sdd never a root ---
+base; printf '# csv-f/AC-9\n' >> "$P/tests/test_f.py"; run --markers f
+assert "markers-mode-lists-ids" "[ $rc -eq 0 ] && [ \"\$out\" = \"\$(printf 'AC-1\nAC-2')\" ]"
+proj; mkdir -p "$P/.sdd/import"; printf 'SDD_SCHEMA: 2\n' > "$P/.sdd/import/PROGRESS.md"; src tests/t.py <<'T'
+# csv-import/AC-1
+T
+run --markers import
+assert "markers-mode-ignores-suffix-slug" "[ $rc -eq 0 ] && [ -z \"\$out\" ]"
+base; rm -rf "$P/tests"; err=$( cd "$P" && CLAUDE_PROJECT_DIR="$P" bash "$GATE" f 2>&1 >/dev/null )
+assert "no-test-roots-hint" "printf '%s' \"\$err\" | grep -q 'TEST_ROOTS'"
+base 'TEST_ROOTS: ./.sdd
+'; run f
+assert "test-roots-dot-slash-sdd" "[ $rc -eq 2 ] && has '\"reasons\":[\"bad-field\"]'"
+proj; printf 'PHASE: BUILD\nTEST_ROOTS: .\n' | feat f; spec f AC-1; printf '{"m":"f/AC-1"}\n' > "$P/.sdd/f/EVENTS.jsonl"; run f
+assert "dot-root-skips-sdd" "[ $rc -eq 2 ] && has '\"untested\":[\"AC-1\"]'"
+
 # --- usage ---
 proj; run ../x
 assert "bad-slug" "[ $rc -eq 1 ]"

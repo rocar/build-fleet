@@ -12,6 +12,21 @@ want() {
   else fail=$((fail+1)); printf 'FAIL %s — %s lacks [%s] (x%s, found %s)\n' "$1" "$2" "$3" "${4:-1}" "${c:-0}"; fi
 }
 
+# wantnot <name> <file> <fixed string> — the string must NOT appear
+wantnot() {
+  if grep -qF -- "$3" "$ROOT/$2" 2>/dev/null; then fail=$((fail+1)); printf 'FAIL %s — %s still has [%s]\n' "$1" "$2" "$3"
+  else pass=$((pass+1)); printf 'ok   %s\n' "$1"; fi
+}
+
+# ---- four-file layout (final review) ----
+wantnot handoff-no-spec-append   commands/handoff.md   '## Implementation'
+want    handoff-ship-fields      commands/handoff.md   'SHIPPED_CHANGE_CYCLE:'
+want    deep-build-started-always commands/deep-build.md 'set `BUILD_STATE: started` on every dispatch'
+want    qa-test-roots            agents/qa.md          'TEST_ROOTS'
+want    implement-test-roots     commands/implement.md 'TEST_ROOTS'
+want    implement-markers-mode   commands/implement.md 'drift-gate.sh" --markers <slug>'
+wantnot implement-rows-wording   commands/implement.md 'the rows the gate names'
+
 # ---- flow (§3.3) ----
 want new-feature-schema    commands/new-feature.md '   SDD_SCHEMA: 2'
 want implement-calls-gate  commands/implement.md   'scripts/drift-gate.sh'

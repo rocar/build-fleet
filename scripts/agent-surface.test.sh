@@ -100,7 +100,7 @@ fi
 
 # Retired layout: no shipped surface may name a file the four-file layout removed, or the
 # retired test-plan skill. History, the changelog and test harnesses are exempt.
-retired=$(cd "$ROOT" && /usr/bin/grep -rnE 'acceptance\.md|TEST_PLAN\.md|SKILL_MANIFEST\.md|`test-plan`|skills/test-plan' \
+retired=$(cd "$ROOT" && /usr/bin/grep -rnE 'acceptance\.md|TEST_PLAN\.md|SKILL_MANIFEST\.md|`test-plan`|skills/test-plan|SPEC_MAX_KB|DRIFT_GATE: on$' \
   agents commands skills workflows hooks scripts docs/v0.2 docs/*.md README.md CLAUDE.md 2>/dev/null \
   | /usr/bin/grep -v '\.test\.sh:' || true)
 if [ -z "$retired" ]; then ok "no retired layout names"

@@ -77,7 +77,9 @@ absent) and proceed. Routing never changes the tests-first ordering or any gate.
 Once spec is FINALIZED and PHASE=BUILD, map each acceptance criterion → one or more
 test cases → coverage type (unit / integration / e2e), then implement the tests. Mark
 each test with a `<slug>/AC-<n>` comment on or above it for every criterion it covers;
-every criterion needs at least one marker.
+every criterion needs at least one marker. If the project keeps tests outside `tests/`,
+`test/` and `spec/` (colocated, e.g. `src/`), set `TEST_ROOTS: <dir>[,<dir>…]` in
+PROGRESS.md before writing them.
 
 The drift gate (`scripts/drift-gate.sh`) checks your markers with no model: before coder
 starts, after coder finishes, and at handoff. Every criterion in the spec needs a

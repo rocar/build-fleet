@@ -164,6 +164,7 @@ DRIFT_GATE: on | off        # drift gate (scripts/drift-gate.sh): absent/empty/o
 TEST_ROOTS: <csv>           # optional — drift gate test roots, project-relative; absent ⇒ whichever of tests, test, spec exist
 CODER_SKILLS: <csv>         # optional — domain skills coder loads at BUILD (skill-routing; written by new-feature)
 QA_SKILLS: <csv>            # optional — domain skills qa loads at BUILD
+SHIPPED: <iso8601>          # handoff, on devops success (with SHIPPED_CHANGE_CYCLE: <n>, the change cycle that approved)
 QA_FAIL: drift              # the drift gate failed and the criterion markers still need repair; /build-fleet:implement's repair mode clears it
 UPDATED: <iso8601>
 ```

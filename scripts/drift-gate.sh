@@ -9,12 +9,14 @@
 # [A-Za-z0-9_-] — so `#calc/AC-3` and `//calc/AC-3` match, `calc/AC-30`, `old-calc/AC-3`
 # and `calc/AC-3a` do not count for `calc/AC-3`. Other features' markers are ignored.
 # Test roots = TEST_ROOTS (comma-separated, project-relative) if set, else whichever of
-# tests, test, spec exist. .git/ and node_modules/ are skipped.
+# tests, test, spec exist. .git/, node_modules/ and .sdd/ are skipped.
 #
 # Reasons, in this order: bad-field unsupported-schema no-criteria no-test-roots untested
 # unknown-criterion.
 #
-# Usage: drift-gate.sh <slug> | drift-gate.sh --all
+# Usage: drift-gate.sh <slug> | drift-gate.sh --all | drift-gate.sh --markers <slug>
+#   --markers prints the ids marked `<slug>/AC-…` under the test roots, one per line (exit 0;
+#   1 on bad usage) — the same matcher, for callers that only ask "are there markers?".
 # Output (stdout): one `BUILD_FLEET_DRIFT_GATE: {…}` line per feature; --all adds one
 #   `BUILD_FLEET_DRIFT_GATE_SUMMARY: {"checked","unchecked","in_progress","failed"}` line.
 #   --all reports a forward feature whose SDD_SCHEMA is not 2 as unchecked (never failed).
@@ -26,8 +28,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/criteria.sh
 . "$HERE/lib/criteria.sh"
 
-usage() { echo "usage: drift-gate.sh <slug> | drift-gate.sh --all" >&2; exit 1; }
-[ $# -eq 1 ] || usage
+usage() { echo "usage: drift-gate.sh <slug> | drift-gate.sh --all | drift-gate.sh --markers <slug>" >&2; exit 1; }
+[ $# -eq 1 ] || [ $# -eq 2 -a "${1:-}" = "--markers" ] || usage
 command -v jq >/dev/null 2>&1 || { echo "drift-gate.sh: jq is required" >&2; exit 1; }
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 1
 
@@ -40,7 +42,7 @@ js() { jq -n --arg s "$1" '$s'; }
 # markers <slug> <root>… — distinct AC ids marked `<slug>/AC-…` under the roots, sorted
 markers() {
   local slug="$1"; shift
-  find "$@" \( -name .git -o -name node_modules \) -prune -o -type f ! -name '*.md' \
+  find "$@" \( -name .git -o -name node_modules -o -name .sdd \) -prune -o -type f ! -name '*.md' \
       -exec env SLUG="$slug" awk '
     BEGIN { pre = ENVIRON["SLUG"] "/AC-"; L = length(pre) }
     { line = $0; sub(/\r$/, "", line); off = 0
@@ -54,6 +56,25 @@ markers() {
         }
         off = p
       } }' {} + 2>/dev/null | LC_ALL=C sort -u
+}
+
+# test_roots <workspace-dir> — the test roots, one per line; returns 1 on a bad TEST_ROOTS
+test_roots() {
+  local tr e oldifs out=""
+  tr=$(field "$1/PROGRESS.md" TEST_ROOTS)
+  if [ -n "$tr" ]; then
+    case ",$tr," in *,,*) return 1 ;; esac
+    oldifs="$IFS"; IFS=','; set -f
+    for e in $tr; do
+      while case "$e" in ./*) true ;; *) false ;; esac; do e="${e#./}"; done
+      case "$e" in ""|/*|*..*|-*|.sdd|.sdd/*) IFS="$oldifs"; set +f; return 1 ;; esac
+      out="${out}${out:+$'\n'}./$e"
+    done
+    IFS="$oldifs"; set +f
+  else
+    for e in tests test spec; do [ -d "$e" ] && out="${out}${out:+$'\n'}./$e"; done
+  fi
+  printf '%s' "$out"
 }
 
 emit() {  # emit <slug_json> <reasons> <untested> <unknown>
@@ -77,18 +98,7 @@ check_one() {
   esac
   [ "$(field "$d/PROGRESS.md" SDD_SCHEMA)" = 2 ] || { emit "$sj" unsupported-schema "" ""; return; }
 
-  tr=$(field "$d/PROGRESS.md" TEST_ROOTS)
-  if [ -n "$tr" ]; then
-    case ",$tr," in *,,*) emit "$sj" bad-field "" ""; return ;; esac
-    oldifs="$IFS"; IFS=','; set -f
-    for e in $tr; do
-      case "$e" in /*|*..*|.sdd|.sdd/*) IFS="$oldifs"; set +f; emit "$sj" bad-field "" ""; return ;; esac
-      add roots "$e"
-    done
-    IFS="$oldifs"; set +f
-  else
-    for e in tests test spec; do [ -d "$e" ] && add roots "$e"; done
-  fi
+  roots=$(test_roots "$d") || { emit "$sj" bad-field "" ""; return; }
 
   crit=$(spec_criteria "$d/spec.md")
   [ -n "$crit" ] || add reasons no-criteria
@@ -101,6 +111,7 @@ EOF_R
   fi
   if [ -n "$missing_root" ]; then
     add reasons no-test-roots
+    echo "drift-gate.sh: '$slug' has no test roots — set TEST_ROOTS: <dir>[,<dir>…] in $d/PROGRESS.md (project-relative; e.g. src for colocated tests), or create tests/, test/ or spec/." >&2
   else
     oldifs="$IFS"; IFS=$'\n'; set -f
     # shellcheck disable=SC2086
@@ -124,6 +135,18 @@ EOF_F
   [ -z "$unknown" ] || add reasons unknown-criterion
   emit "$sj" "$reasons" "$untested" "$unknown"
 }
+
+if [ "$1" = "--markers" ]; then
+  case "$2" in */*|..|.|-*|"") echo "drift-gate.sh: bad slug '$2'" >&2; exit 1 ;; esac
+  [ -f ".sdd/$2/PROGRESS.md" ] || { echo "drift-gate.sh: .sdd/$2/PROGRESS.md not found" >&2; exit 1; }
+  roots=$(test_roots ".sdd/$2") || { echo "drift-gate.sh: bad TEST_ROOTS for '$2'" >&2; exit 1; }
+  [ -n "$roots" ] || exit 0
+  oldifs="$IFS"; IFS=$'\n'; set -f
+  # shellcheck disable=SC2086
+  markers "$2" $roots
+  IFS="$oldifs"; set +f
+  exit 0
+fi
 
 if [ "$1" != "--all" ]; then
   case "$1" in */*|..|.|-*|"") echo "drift-gate.sh: bad slug '$1'" >&2; exit 1 ;; esac

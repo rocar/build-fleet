@@ -13,7 +13,7 @@ ROOT="$(cd "$DIR/.." && pwd)"
 REVIEW="$ROOT/workflows/review.js"
 
 # Findings-only review blocks: no workflow asks a role for, or renders, a status: line.
-if /usr/bin/grep -nE 'status: \$\{|"status"|status: \{ type|^- status:' "$ROOT/workflows/review.js" "$ROOT/workflows/deep-build.js"; then
+if /usr/bin/grep -nE 'status: \$\{|"status"|status: \{ type|^- status:|role:"[a-z-]+", status|status "approved"' "$ROOT"/workflows/*.js; then
   echo "FAIL workflows-no-status-line"; exit 1
 fi
 echo "ok   workflows-no-status-line"

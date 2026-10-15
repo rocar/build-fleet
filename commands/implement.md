@@ -40,9 +40,10 @@ this orchestration owns its own preconditions.
    `/build-fleet:status resolve` is the sanctioned unblock path.
 
 4. **Re-run guard (the orchestration is NOT idempotent).** If PROGRESS.md carries
-   `BUILD_STATE` (any value), or any test file already carries a `<slug>/AC-` marker
-   (`grep -rl -- '<slug>/AC-' <test roots>` finds one — a qa run that wrote tests and
-   failed before step c), a re-run would re-dispatch qa over an existing suite. Refuse:
+   `BUILD_STATE` (any value), or a test already carries one of this feature's markers
+   (`bash "${CLAUDE_PLUGIN_ROOT}/scripts/drift-gate.sh" --markers <slug>` prints any id —
+   a qa run that wrote tests and failed before step c), a re-run would re-dispatch qa
+   over an existing suite. Refuse:
    `BUILD_FLEET_BUILD_REFUSE: {"feature":"<slug>","code":2,"reason":"build-already-started"}`
    and tell the user how to proceed instead: dispatch coder manually for an
    iteration, run `/build-fleet:deep-build` (which requires the existing failing
@@ -66,7 +67,10 @@ a. **Dispatch qa first.** Use the Task tool to invoke `build-fleet:qa` with this
    > PHASE=BUILD for feature `<slug>`. STATUS=FINALIZED. Write the failing test suite
    > under the test roots, from the acceptance criteria in `.sdd/<slug>/spec.md`. Mark
    > each test with a `<slug>/AC-<n>` comment (on or above it) for every criterion it
-   > covers; every criterion needs at least one marker.
+   > covers; every criterion needs at least one marker. The drift gate looks under
+   > `TEST_ROOTS` in PROGRESS.md, else whichever of `tests/`, `test/`, `spec/` exist; if
+   > this project keeps tests elsewhere (colocated, e.g. `src/`), set
+   > `TEST_ROOTS: <dir>[,<dir>…]` in PROGRESS.md before writing them.
    > Every test must initially FAIL. When the full failing suite is in place, emit
    > exactly: `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/`. Do NOT signal coder
    > or write any source — only tests.
@@ -128,7 +132,7 @@ b2. **Drift gate (before coder).** Run
      BUILD_FLEET_QA_VERIFY_FAIL: {"feature":"<slug>","reason":"drift","gate":<the gate line's JSON>}
      ```
      and stop. Coder is not dispatched and `BUILD_STATE` stays absent. The user fixes
-     the rows the gate names; the lite `build` command then re-enters in repair mode.
+     the markers or test roots the gate names; the lite `build` command then re-enters in repair mode.
 
 c. **Mark the build started.** qa's failing suite is verified.
    Set `BUILD_STATE: started` in `.sdd/<slug>/PROGRESS.md` (add the line if it is absent; an `.sdd/` write, always

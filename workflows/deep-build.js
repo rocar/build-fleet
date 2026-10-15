@@ -463,8 +463,8 @@ Your lens: design adherence, scalability, failure modes, security, blast radius.
 SEAMS between partitions — single-partition correctness is easy; integration points (contracts,
 error envelopes, type assumptions across partitions) are where parallel coding fails.
 
-Return the structured object: { role:"architect", status, concerns:[{id,severity,text}] }.
-Empty concerns + status "approved" if clean.`;
+Return the structured object: { role:"architect", concerns:[{id,severity,text}] }.
+Empty concerns if clean.`;
 }
 
 function qaReviewPrompt(partitions, coderResults, feature) {
@@ -481,8 +481,8 @@ Your job:
 3. Failure paths covered? Missing → [major].
 4. Integration tests spanning partitions — ownership gap → [major].
 
-Return the structured object: { role:"qa", status, concerns:[{id,severity,text}] }.
-Empty concerns + status "approved" if clean.`;
+Return the structured object: { role:"qa", concerns:[{id,severity,text}] }.
+Empty concerns if clean.`;
 }
 
 function mergeConcerns(reviews) {
