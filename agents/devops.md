@@ -1,6 +1,6 @@
 ---
 name: devops
-description: Use this agent when shipping — CI/CD wiring, IaC, release notes, cutting the release. Two entry points only: after /build-fleet:handoff's change-review gate passes (feature lane, PHASE=HANDOFF, the passing gate line in the prompt), and via /build-fleet:ship-fix for a verified bug fix (diagnosis FIXED, hotfix urgency for sev0). Do NOT use before those gates pass — it refuses on any other phase.
+description: Use when shipping a change that passed post-build review, or a verified bug fix: CI/CD wiring, infrastructure as code, release notes and the release. Do NOT use before those gates pass; it refuses any other phase.
 tools: Read, Grep, Glob, Edit, Write, Bash
 model: sonnet
 color: orange

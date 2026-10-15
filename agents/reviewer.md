@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Use this agent ONLY inside workflows/review.js — the read-only reviewer that every fan-out, cross-examination, verification and disposition leg of /build-fleet:review runs as, with the role lens or the verifier brief injected by the workflow prompt. It has Read, Grep and Glob and nothing that writes, so a workflow reviewer can never append to REVIEW.md, fabricate a timestamp, or touch source; the scribe writes every block. Do NOT dispatch it directly, for CHANGE_REVIEW, or for any authoring — the role agents own those paths.
+description: Use only as the read-only reviewer inside the spec-review workflow, which injects the role lens or verifier brief. Do NOT use it directly, for post-build review (use architect, qa or product-owner), or for any writing.
 tools: Read, Grep, Glob
 model: sonnet
 color: cyan
@@ -89,8 +89,8 @@ Verified shape (REVIEW_SHAPE: verified) — second line `shape: verified`, then 
   disposition: fix | adr ADR-<M>
 ```
 
-You never write this yourself. The `status:` line is informational since v0.9; the
-finalize gate reads dispositions.
+You never write this yourself. The `status:` line is informational; the finalize gate
+reads dispositions.
 
 ## Hard "no"s
 
