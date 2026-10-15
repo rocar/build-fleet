@@ -88,6 +88,7 @@ else
       '- [ ] '*) pending "$a" || { no "rule kept: $line" "unchecked"; bad=1; } ;;
       '- [x] '*)
         n=$((n+1))
+        case "$line" in *'→ retired: '?*) continue ;; esac
         q=$(printf '%s' "$line" | sed -n 's/.*→ "\(.*\)"[[:space:]]*$/\1/p')
         if [ -z "$q" ] || [ ! -f "$ROOT/agents/$a.md" ] || ! awk '/^---$/{n++; next} n>=2' "$ROOT/agents/$a.md" | grep -qF -- "$q"; then
           no "rule kept: $line" "new quote not found in agents/$a.md"; bad=1
@@ -96,6 +97,15 @@ else
   done < "$inv"
   [ "$bad" -eq 0 ] && ok "rules inventory: $n checked, all found"
 fi
+
+# Retired layout: no shipped surface may name a file the four-file layout removed, or the
+# retired test-plan skill. History, the changelog and test harnesses are exempt.
+retired=$(cd "$ROOT" && /usr/bin/grep -rnE 'acceptance\.md|TEST_PLAN\.md|SKILL_MANIFEST\.md|`test-plan`|skills/test-plan' \
+  agents commands skills workflows hooks scripts docs/v0.2 README.md CLAUDE.md 2>/dev/null \
+  | /usr/bin/grep -v '\.test\.sh:' || true)
+if [ -z "$retired" ]; then ok "no retired layout names"
+else no "no retired layout names" "$(printf '%s\n' "$retired" | head -5) … ($(printf '%s\n' "$retired" | grep -c .) lines)"; fi
+if [ ! -d "$ROOT/skills/test-plan" ]; then ok "test-plan skill removed"; else no "test-plan skill removed" "skills/test-plan exists"; fi
 
 if [ -z "$PENDING" ]; then ok "nothing pending"; else no "nothing pending" "PENDING=\"$PENDING\""; fi
 
