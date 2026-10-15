@@ -55,13 +55,14 @@ the next `## ` heading. The header row and the `|---|` separator are skipped.
 - Column 4: the location. The part before the first `::` is the file path, relative to
   the project root.
 
-A row with fewer than four cells, no backticked name, no id in column 1, or an empty
+A location with no `::` is a bare file path. A row with fewer than four cells, no backticked name, no id in column 1, or an empty
 location is `unparsed`.
 
 **Checks.** The gate fails when any of these holds:
 
 | Reason | When |
 |---|---|
+| `bad-field` | `DRIFT_GATE` has a value other than absent, empty, `on` or `off` |
 | `no-test-plan` | the feature is gated but TEST_PLAN.md does not exist |
 | `no-criteria` | the feature is gated but has no criteria |
 | `untested` | a criterion has no matrix row |
