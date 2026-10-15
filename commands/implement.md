@@ -45,6 +45,14 @@ this orchestration owns its own preconditions.
    iteration, run `/build-fleet:deep-build` (which requires the existing failing
    suite and is resumable), or `/build-fleet:handoff` if BUILD completed.
 
+   **Repair mode.** If PROGRESS.md carries `QA_FAIL: drift`, an earlier run stopped on
+   the drift gate. The guard admits this run whatever the BUILD_STATE, and the run is a
+   repair: skip step a (qa's authoring pass) and go straight to the repair pass.
+   - `BUILD_STATE` absent → the repair pass of step b2 (the suite must be red). On a
+     pass, continue to step c and coder as a normal build.
+   - `BUILD_STATE` `started`, `needs-iteration` or `done` → the repair pass of step e2
+     (the suite must be green). Coder is not dispatched.
+
 ## What you do (tests-first ordering)
 
 a. **Dispatch qa first.** Use the Task tool to invoke `build-fleet:qa` with this
@@ -89,6 +97,30 @@ b. **Wait for QA's signal and verify.** When qa's Task call returns, parse its
    PHASE stays BUILD. The user resolves the discrepancy externally (re-run qa
    manually or edit the test suite); a blind re-run of `/build-fleet:implement` will
    refuse via the precondition-4 re-run guard.
+
+b2. **Drift gate (before coder).** Run
+   `bash "${CLAUDE_PLUGIN_ROOT}/scripts/drift-gate.sh" "<slug>"` and relay its
+   `BUILD_FLEET_DRIFT_GATE:` line. `"pass":true` (an unchecked feature included) →
+   step c. No line at all (exit 1) → emit
+   `BUILD_FLEET_QA_VERIFY_FAIL: {"feature":"<slug>","reason":"drift-gate-error"}` with
+   its stderr and stop. `"pass":false` → the **repair pass**, once. Use the Task tool
+   to invoke `build-fleet:qa` with:
+
+   > PHASE=BUILD for feature `<slug>`. The drift gate failed: `<the gate line>`. Fix
+   > `.sdd/<slug>/TEST_PLAN.md`, or add or rename tests under `tests/`, so every
+   > acceptance criterion maps to a named test, per the `test-plan` skill's matrix
+   > grammar. Write no source. Every test must still FAIL. End with exactly:
+   > `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/` giving the new count.
+
+   Verify the suite against that count by step b's rules (a failure there emits step
+   b's line and stops), then run the gate again.
+   - Pass → remove `QA_FAIL` from PROGRESS.md if present; step c.
+   - Still failing → set `QA_FAIL: drift` in PROGRESS.md, emit
+     ```
+     BUILD_FLEET_QA_VERIFY_FAIL: {"feature":"<slug>","reason":"drift","gate":<the gate line's JSON>}
+     ```
+     and stop. Coder is not dispatched and `BUILD_STATE` stays absent. The user fixes
+     the rows the gate names; the lite `build` command then re-enters in repair mode.
 
 c. **Mark the build started.** qa's failing suite is verified.
    Set `BUILD_STATE: started` in `.sdd/<slug>/PROGRESS.md` (add the line if it is absent; an `.sdd/` write, always
@@ -193,7 +225,8 @@ e. **Wait for coder's Task call to return, then branch.**
    This is the tests-first violation check.
 
    **Branch — coder completed.** When coder's Task call returns and the source has
-   been written, run the test suite one final time. If all tests pass, emit:
+   been written, run the test suite one final time. If all tests pass, run step e2;
+   when it passes, emit:
 
    ```
    BUILD_FLEET_BUILD_COMPLETE: {"feature":"<slug>","tests_passing":<N>,"impl_notes_path":".sdd/<slug>/IMPL_NOTES.md"}
@@ -213,6 +246,26 @@ e. **Wait for coder's Task call to return, then branch.**
    then surface the failing tests. Coder needs to iterate — the user can dispatch
    coder again manually (this command does not auto-loop). STATUS stays FINALIZED,
    PHASE stays BUILD.
+
+e2. **Drift gate (after coder).** Before `BUILD_STATE: done`, run the gate as in step
+   b2 (no line → step b2's `drift-gate-error` line). `"pass":true` → emit
+   `BUILD_FLEET_BUILD_COMPLETE` and set `BUILD_STATE: done` as above. `"pass":false` →
+   the repair pass, once, with this brief:
+
+   > PHASE=BUILD for feature `<slug>`; the source is built. The drift gate failed:
+   > `<the gate line>`. Restore or rename tests under `tests/`, or fix
+   > `.sdd/<slug>/TEST_PLAN.md`, so every acceptance criterion maps to a named test.
+   > Write no source. The suite must stay green. End with exactly:
+   > `BUILD_FLEET_QA_TESTS_READY: <count> tests in tests/`.
+
+   Then run the suite and the gate again:
+   - Suite green, gate passes → remove `QA_FAIL` if present, emit
+     `BUILD_FLEET_BUILD_COMPLETE`, set `BUILD_STATE: done`.
+   - Suite red (a restored test fails: behaviour is missing) → remove `QA_FAIL` if
+     present, set `BUILD_STATE: needs-iteration`, emit
+     `BUILD_FLEET_BUILD_INCOMPLETE: {"feature":"<slug>","failing_tests":<N>,"reason":"drift-repair"}`
+     and stop. The next lite `build` resumes coder through deep-build.
+   - Gate still failing → set `QA_FAIL: drift`, emit step b2's `drift` line, stop.
 
 ## Hard rules
 

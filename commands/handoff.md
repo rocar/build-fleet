@@ -27,8 +27,8 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    HANDOFF` in that case). Run the gate to confirm the current change cycle
    still passes —
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/change-review-gate.sh" "<slug>"` — and
-   on `"pass":true` skip straight to step 9. On `"pass":false` the workspace was
-   edited by hand since; continue at step 3 as a normal run. If the gate prints
+   on `"pass":true` run the drift gate (step 4) and, if it passes, skip straight to step 9.
+   On `"pass":false` the workspace was edited by hand since; continue at step 3 as a normal run. If the gate prints
    no `BUILD_FLEET_CHANGE_REVIEW_GATE:` line it could not evaluate (exit 1: no
    PROGRESS.md, a non-integer `CHANGE_CYCLE`, jq missing); refuse with its
    stderr. The same holds wherever this command runs the gate.
@@ -43,6 +43,15 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
      `stop-tests.sh`'s detection). If tests fail, refuse with the failing
      output. The `stop-tests` hook would catch this at session-end anyway;
      catching it here gives a clearer error.
+   - Run the drift gate: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/drift-gate.sh" "<slug>"`,
+     and relay its `BUILD_FLEET_DRIFT_GATE:` line. This runs before the change-cycle
+     budget and before `CHANGE_CYCLE` moves, so a failure never spends a review cycle.
+     `"pass":true` (an unchecked feature included) → continue. `"pass":false` → set
+     `QA_FAIL: drift` in PROGRESS.md, emit
+     `BUILD_FLEET_HANDOFF_REFUSE: {"feature":"<slug>","code":2,"reason":"drift","gate":<the gate line's JSON>}`
+     and stop; the lite `build` command repairs the test plan. No line at all (exit 1) →
+     emit `BUILD_FLEET_HANDOFF_REFUSE: {"feature":"<slug>","code":2,"reason":"drift-gate-error"}`
+     with its stderr and stop.
 
 5. **Check the change-cycle budget.** Read `CHANGE_CYCLE:` from PROGRESS.md.
    The budget is 3 change-review cycles. If `CHANGE_CYCLE >= 3`, run the gate
@@ -260,6 +269,8 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
   (`HANDOFF` is a resume, step 2).
 - ESCALATION.md exists → refuse.
 - No tests, or test command fails → refuse with the failing output.
+- The drift gate fails, or prints no line → `BUILD_FLEET_HANDOFF_REFUSE` with reason
+  `drift` (and `QA_FAIL: drift` set) or `drift-gate-error`.
 - The gate prints no `BUILD_FLEET_CHANGE_REVIEW_GATE:` line (exit 1) → refuse
   with its stderr.
 - `CHANGE_CYCLE` budget exhausted with the gate failing (`open-blockers` or

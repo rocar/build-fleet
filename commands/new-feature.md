@@ -75,6 +75,7 @@ spec STATUS contract.
    BUILD_CYCLE_BUDGET: 3
    CYCLE_TOTAL: 0
    CYCLE_TOTAL_MAX: 6
+   DRIFT_GATE: on
    UPDATED: <iso8601>
    ```
 
