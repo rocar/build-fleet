@@ -11,10 +11,11 @@ ok() { pass=$((pass+1)); printf 'ok   %s\n' "$1"; }
 no() { fail=$((fail+1)); printf 'FAIL %s — %s\n' "$1" "$2"; }
 
 # Agents whose bodies and descriptions are not cut yet; each lean task removes its name.
-PENDING="architect classifier product-owner qa scribe skill:adr skill:review-rubric skill:sdd-diagnosis-template skill:sdd-protocol skill:sdd-spec-template skill:skill-routing skill:test-plan"
+PENDING="architect classifier product-owner scribe skill:adr skill:review-rubric skill:sdd-diagnosis-template skill:sdd-protocol skill:sdd-spec-template skill:skill-routing skill:test-plan"
 
 # Body caps: name:cap:reason. Absent ⇒ 800.
 CAPS="
+qa:1433:mirrored rubric, verified rule and lens (about 300 words) plus the counterfactual snapshot procedure
 "
 # Recorded allowlists (exact, order included). A deliberate change edits this line too.
 TOOLS="

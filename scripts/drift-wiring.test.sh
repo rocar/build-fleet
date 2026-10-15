@@ -30,7 +30,7 @@ want handoff-resume        commands/handoff.md     'run the drift gate (step 4) 
 want handoff-refusal-case  commands/handoff.md     '- The drift gate fails'
 
 # ---- docs and qa's prompt (§3.4) ----
-want qa-description   agents/qa.md                  'and its repair pass when the drift gate fails'
+want qa-description   agents/qa.md                  'repairing it after a drift-gate failure'
 want qa-body          agents/qa.md                  'The drift gate (`scripts/drift-gate.sh`)'
 want skill-section    skills/test-plan/SKILL.md     '## The drift gate'
 want skill-name-rule  skills/test-plan/SKILL.md     'as declared in source'
