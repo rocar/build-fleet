@@ -45,24 +45,23 @@ case "$phase" in
   *) exit 0 ;;
 esac
 
-# Tests-first window inside BUILD: between qa authoring the failing suite and
-# coder implementing against it, the suite is REQUIRED to be red — that failing
-# suite IS the counterfactual the protocol is built on. Enforcing a green suite
-# in that window contradicts the very phase this gate exists to cover, and would
-# wedge every feature's BUILD until escalation. Detected with the same signal
-# /build-fleet:implement's re-run guard uses: qa has written TEST_PLAN.md and coder
-# has not yet recorded work in IMPL_NOTES.md. The gate re-engages the moment
-# coder writes, and is never skipped in CHANGE_REVIEW/HANDOFF.
-# "Has content" = at least one line that is neither blank nor a markdown heading,
-# so the scaffolded header alone does not count as authored.
-has_content() {
-  [ -f "$1" ] && grep -qvE '^[[:space:]]*($|#)' "$1"
-}
-if [ "$phase" = "BUILD" ] \
-   && has_content ".sdd/${slug}/TEST_PLAN.md" \
-   && ! has_content ".sdd/${slug}/IMPL_NOTES.md"; then
-  echo "build-fleet: '${slug}' is in the BUILD tests-first window — qa's suite is authored and coder has recorded no work in IMPL_NOTES.md, so a red suite is the expected state. stop-tests gate skipped; it re-engages once coder writes." >&2
-  exit 0
+# Tests-first window inside BUILD: qa's failing suite IS the counterfactual, so a red
+# suite is expected (a) before coder is dispatched — BUILD_STATE absent; implement sets
+# `started` just before coder runs — and (b) while a deep-build workflow runs in the
+# background (BUILD_STATE `started` and a non-empty .workflow-in-flight marker): its
+# coders are mid-flight when the main session's turn ends. A standard build sets
+# `done`/`needs-iteration` before its turn ends, so `started` with no live workflow is
+# an interrupted coder run, and the gate enforces. Never skipped outside BUILD.
+if [ "$phase" = "BUILD" ]; then
+  bstate=$(read_progress_field "$slug" BUILD_STATE)
+  if [ -z "$bstate" ]; then
+    echo "build-fleet: '${slug}' is in the BUILD tests-first window — coder has not been dispatched (BUILD_STATE absent), so a red suite is the expected state. stop-tests gate skipped." >&2
+    exit 0
+  fi
+  if [ "$bstate" = "started" ] && [ -s ".sdd/${slug}/.workflow-in-flight" ]; then
+    echo "build-fleet: '${slug}' has a build workflow in flight — its coders are mid-run. stop-tests gate skipped." >&2
+    exit 0
+  fi
 fi
 
 # Stack detection: independent fall-throughs, NOT an elif chain — a repo with
