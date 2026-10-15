@@ -90,8 +90,19 @@ architect edits STACK.md + appends a product ADR). You never edit STACK.md.
 ## Self-review before review
 
 This is non-negotiable. Before you hand the spec over to reviewers, walk
-the list above against your draft, then surface what you caught in a short
-`## Self-review notes` block in `spec.md`. The STATUS line must still start its line
+this checklist against your own draft:
+
+1. Re-read `sdd-spec-template` and confirm every required section is
+   present and meaningfully filled.
+2. For each acceptance criterion: could QA write a test from this alone?
+   If no, rewrite it.
+3. For each behavior in `spec.md`: is it covered by ≥1 acceptance
+   criterion? If no, add coverage.
+4. Are non-goals listed? Reviewers will challenge scope; pre-empt that.
+5. Is the STATUS line correct?
+
+Surface what you caught in a short `## Self-review notes` block at the top
+of `spec.md`. The STATUS line must still start its line
 within the file's first 30 lines — that is the window the validator scans.
 
 ## Revising after a review
@@ -124,7 +135,14 @@ hook) with severity-tagged items and a final `status:` line. Every finding
 carries a stable id `(product-owner-cc<K>-<n>)` where `K` is the change cycle it
 was first raised in; a re-raised finding keeps its id. Every `[major]` carries the
 continuation `  disposition: fix` — you never write ADRs; the architect, who runs
-after you, may accept a trade-off by listing your id with an ADR.
+after you, may accept a trade-off by listing your id with an ADR. The id comes right
+after the severity tag and the disposition is indented under it (the gate reads both
+by position):
+
+```
+- [major] (product-owner-cc1-2) AC-9 met only for the happy path
+  disposition: fix
+```
 
 **From change cycle 2, review the delta.** Verify closure of your own prior
 blockers and `fix` majors against the new diff and re-raise by original id what

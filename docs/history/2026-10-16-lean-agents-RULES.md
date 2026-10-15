@@ -39,6 +39,8 @@ each; the drift tests pin their text.
 - [x] architect R29: "writes** — the boundary there is this prompt, and it is binding. If a hook" → "writes** — the boundary there is this prompt, and it is binding. If a hook"
 - [x] architect R30: "refutation counts only if it is ≥40 chars and cites the reproduction. The hypothesis is CONFIRMED" → "refutation counts only if it is ≥40 chars and cites the reproduction. The hypothesis is CONFIRMED"
 - [x] architect R31: "out-of-radius change is a `[major]`/`[blocker]`." → "out-of-radius change is a `[major]`/`[blocker]`."
+- [x] architect R32: "**Greenfield vs brownfield (the orchestrator tells you which):**" → "**Greenfield vs brownfield (the orchestrator tells you which):**"
+- [x] architect R33: "(at plan-review/plan-finalize, or explicit human promotion). Frame migrations as" → "(at plan-review/plan-finalize, or explicit human promotion). Frame migrations as"
 
 ## classifier
 
@@ -180,6 +182,11 @@ each; the drift tests pin their text.
 - [x] product-owner R34: "is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a new" → "is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a new"
 - [x] product-owner R35: "needed. Be aware: any acceptance change forces re-running" → "needed. Be aware: any acceptance change forces re-running"
 - [x] product-owner R36: "- The orchestrator routes; you author. Do not assign work to other agents." → "- The orchestrator routes; you author. Do not assign work to other agents."
+- [x] product-owner R37: "- [major] (product-owner-cc1-2) AC-9 met only for the happy path" → "- [major] (product-owner-cc1-2) AC-9 met only for the happy path"
+- [x] product-owner R38: "   If no, rewrite it." → "   If no, rewrite it."
+- [x] product-owner R39: "   criterion? If no, add coverage." → "   criterion? If no, add coverage."
+- [x] product-owner R40: "Surface what you caught in a short `## Self-review notes` block at the top" → "Surface what you caught in a short `## Self-review notes` block at the top"
+- [x] product-owner R41: "1. Re-read `sdd-spec-template` and confirm every required section is" → "1. Re-read `sdd-spec-template` and confirm every required section is"
 
 ## qa
 
@@ -225,6 +232,8 @@ each; the drift tests pin their text.
 - [x] qa R40: "STATUS `REPORTED → REPRODUCING`. You may write `tests/` at any bug phase; you never write source." → "STATUS `REPORTED → REPRODUCING`. You may write `tests/` at any bug phase; you never write source."
 - [x] qa R41: "recorded ref. Revert the coder's fix with `git stash` (never a bare `git checkout` — that" → "recorded in IMPL_NOTES.md (never a bare `git checkout` — that"
 - [x] qa R42: "decorative — record it as a `[blocker]`." → "decorative — record it as a `[blocker]`."
+- [x] qa R43: "- [major] (qa-cc1-2) failure path <x> untested" → "- [major] (qa-cc1-2) failure path <x> untested"
+- [x] qa R44: "Once spec is FINALIZED and PHASE=BUILD, draft `TEST_PLAN.md` following the" → "Once spec is FINALIZED and PHASE=BUILD, draft `TEST_PLAN.md` following the"
 
 ## reviewer
 

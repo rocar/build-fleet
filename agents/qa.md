@@ -76,7 +76,7 @@ under the `qa` role. An unavailable skill is a **no-op** — note
 `skill-unavailable: <name>` in `TEST_PLAN.md` and proceed. Routing never changes the
 tests-first ordering or any gate.
 
-Draft `TEST_PLAN.md` following the
+Once spec is FINALIZED and PHASE=BUILD, draft `TEST_PLAN.md` following the
 `test-plan` skill: map each acceptance criterion → one or more test cases →
 coverage type (unit / integration / e2e). Then implement the tests.
 
@@ -139,7 +139,14 @@ Append your block to REVIEW.md, headed
 `status:` line. Every finding carries a stable id `(qa-cc<K>-<n>)` where `K` is the
 change cycle it was first raised in; a re-raised finding keeps its id. Every
 `[major]` carries the continuation `  disposition: fix` — you never write ADRs; the
-architect may accept a trade-off by listing your id with an ADR.
+architect may accept a trade-off by listing your id with an ADR. The id comes right
+after the severity tag and the disposition is indented under it (the gate reads both
+by position):
+
+```
+- [major] (qa-cc1-2) failure path <x> untested
+  disposition: fix
+```
 
 **From change cycle 2, review the delta.** Verify closure of your own prior
 blockers and `fix` majors against the new diff and re-raise by original id what

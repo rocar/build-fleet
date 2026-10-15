@@ -21,6 +21,9 @@ product-owner:1275:product-tier backlog grammar and intent rules that next-featu
 architect:1359:mirrored rubric, verified rule and lens (about 300 words) plus the product-tier stack and brownfield rules
 qa:1433:mirrored rubric, verified rule and lens (about 300 words) plus the counterfactual snapshot procedure
 "
+# Inventory size: every rule line (- [ ] or - [x]). Adding or removing a rule edits this.
+RULES_COUNT=264
+
 # Recorded allowlists (exact, order included). A deliberate change edits this line too.
 TOOLS="
 architect:Read, Grep, Glob, Edit
@@ -68,7 +71,11 @@ done
 # "<old>" → "<new>"" after it. Every [x] line's <new> quote must appear verbatim on one
 # line of that agent's file; no [ ] line may remain for an agent that is not pending.
 inv="$ROOT/docs/history/2026-10-16-lean-agents-RULES.md"
-if [ -f "$inv" ]; then
+if [ ! -f "$inv" ]; then
+  no "rules inventory present" "$inv missing"
+else
+  total=$(grep -c '^- \[[ x]\] ' "$inv" || true)
+  if [ "$total" -eq "$RULES_COUNT" ]; then ok "rules inventory has $RULES_COUNT lines"; else no "rules inventory has $RULES_COUNT lines" "$total lines"; fi
   bad=0; n=0
   while IFS= read -r line; do
     a=$(printf '%s' "$line" | sed -E 's/^- \[[ x]\] ([^ ]+) .*/\1/')
@@ -77,7 +84,7 @@ if [ -f "$inv" ]; then
       '- [x] '*)
         n=$((n+1))
         q=$(printf '%s' "$line" | sed -n 's/.*→ "\(.*\)"[[:space:]]*$/\1/p')
-        if [ -z "$q" ] || [ ! -f "$ROOT/agents/$a.md" ] || ! grep -qF -- "$q" "$ROOT/agents/$a.md"; then
+        if [ -z "$q" ] || [ ! -f "$ROOT/agents/$a.md" ] || ! awk '/^---$/{n++; next} n>=2' "$ROOT/agents/$a.md" | grep -qF -- "$q"; then
           no "rule kept: $line" "new quote not found in agents/$a.md"; bad=1
         fi ;;
     esac
