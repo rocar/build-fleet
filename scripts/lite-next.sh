@@ -152,7 +152,7 @@ route_feature(){
       [ "$cyc" -gt 0 ] || { T review "" "the draft has not been reviewed"; return; }
       gate_report "$slug" || return
       if [ "$rpass" = true ]; then S spec-ready "build" "review is clean"; return; fi
-      if [ "$rchanged" = true ] || newer "$d/spec.md" "$d/REVIEW.md" || newer "$d/acceptance.md" "$d/REVIEW.md"; then
+      if [ "$rchanged" = true ] || newer "$d/spec.md" "$d/REVIEW.md"; then
         T review "" "the spec changed since the last review"
       elif [ "$rrevisable" = no ]; then
         T review "" "the review is incomplete; revise cannot close it"
@@ -235,7 +235,11 @@ route_active(){
   if [ "$lane" != "$want" ] || [ -n "$a" ]; then
     S item-in-flight "status park <reason>" "'$slug' ($lane) is in flight"; return
   fi
-  if [ "$lane" = bug ]; then route_bug "$slug" "$phase"; else route_feature "$c" "$slug" "$phase"; fi
+  if [ "$lane" = bug ]; then route_bug "$slug" "$phase"; return; fi
+  if [ "$(field "$p" SDD_SCHEMA)" != 2 ]; then
+    S unsupported-schema "status park <reason>" "'$slug' was started by an older build-fleet; park it and start it again"; return
+  fi
+  route_feature "$c" "$slug" "$phase"
 }
 
 decide(){  # decide <cmd> <args>

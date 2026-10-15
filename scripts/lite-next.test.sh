@@ -17,7 +17,7 @@ proj(){ n=$((n+1)); P="$work/p$n"; mkdir -p "$P/.sdd"; : > "$P/.sdd/ACTIVE"; }
 feature(){
   mkdir -p "$P/.sdd/$1"; printf '%s\n' "$1" > "$P/.sdd/ACTIVE"
   printf 'STATUS: %s\n\n# Spec\n' "$2" > "$P/.sdd/$1/spec.md"
-  { printf 'SDD_SCHEMA: 1\nFEATURE: %s\n' "$1"; cat; } > "$P/.sdd/$1/PROGRESS.md"
+  { printf 'SDD_SCHEMA: 2\nFEATURE: %s\n' "$1"; cat; } > "$P/.sdd/$1/PROGRESS.md"
 }
 # bug <slug> [HYPOTHESIS_CYCLE] — PROGRESS.md fields on stdin
 bug(){
@@ -325,7 +325,7 @@ proj; printf '../x\n' > "$P/.sdd/ACTIVE"; check active-traversal '"stop":"unknow
 proj; printf 'ghost\n' > "$P/.sdd/ACTIVE"; check active-no-progress '"stop":"unknown-state"' build
 proj; mkdir -p "$P/.sdd/f"; printf 'f\r\n' > "$P/.sdd/ACTIVE"
 printf 'STATUS: FINALIZED\r\n' > "$P/.sdd/f/spec.md"
-printf 'SDD_SCHEMA: 1\r\nPHASE: BUILD\r\nBUILD_STATE: done\r\n' > "$P/.sdd/f/PROGRESS.md"
+printf 'SDD_SCHEMA: 2\r\nPHASE: BUILD\r\nBUILD_STATE: done\r\n' > "$P/.sdd/f/PROGRESS.md"
 check crlf-progress '"stop":"built"' build
 proj; nojq="$work/nojq"; mkdir -p "$nojq"
 for c in bash awk tr sed cat cut dirname grep head; do ln -sf "$(command -v "$c")" "$nojq/$c"; done
@@ -343,6 +343,32 @@ QA_FAIL: drift
 EOF
 check ship-drift '"stop":"drift","next":"/build-fleet:build"' ship
 
+# ---- schema: a forward feature from an older layout stops unsupported-schema ----
+proj; feature f FINALIZED <<'EOF'
+PHASE: BUILD
+EOF
+sed -i.bak 's/^SDD_SCHEMA: 2$/SDD_SCHEMA: 1/' "$P/.sdd/f/PROGRESS.md"
+check schema-1-feature-stops '"stop":"unsupported-schema","next":"/build-fleet:status park <reason>"' build
+check schema-1-start-stops '"stop":"unsupported-schema"' start
+check schema-1-status-reports '"stop":"unsupported-schema"' status
+proj; feature f FINALIZED <<'EOF'
+PHASE: BUILD
+EOF
+sed -i.bak '/^SDD_SCHEMA:/d' "$P/.sdd/f/PROGRESS.md"
+check schema-absent-feature-stops '"stop":"unsupported-schema"' build
+proj; bug b <<'EOF'
+PHASE: REPORT
+EOF
+out="$(run fix)"
+if printf '%s' "$out" | grep -qF unsupported-schema; then fail=$((fail+1)); echo "FAIL schema-1-bug-unaffected got[$out]"; else pass=$((pass+1)); echo "ok   schema-1-bug-unaffected"; fi
+proj; feature f DRAFT <<'EOF'
+PHASE: REVIEW
+CYCLE: 1
+TIER: standard
+EOF
+touch -t 202601010000 "$P/.sdd/f/spec.md"; printf 'x\n' > "$P/.sdd/f/REVIEW.md"; touch -t 202601010100 "$P/.sdd/f/REVIEW.md"
+printf 'AC-1\n' > "$P/.sdd/f/acceptance.md"; touch -t 202601010200 "$P/.sdd/f/acceptance.md"
+report "$OPEN"; check acceptance-md-not-freshness '"step":"revise"' start
 rc=0; bash "$ROUTER" bogus >/dev/null 2>&1 || rc=$?
 if [ "$rc" = 1 ]; then pass=$((pass+1)); echo "ok   bad-usage"; else fail=$((fail+1)); echo "FAIL bad-usage rc=$rc"; fi
 
