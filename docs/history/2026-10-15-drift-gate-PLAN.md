@@ -386,7 +386,7 @@ printf '\npassed=%d failed=%d\n' "$pass" "$fail"
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `bash scripts/drift-gate.test.sh | tail -3`
-Expected: most cases `FAIL` (the script does not exist yet; `run` gets exit 127) and a final `passed=<few> failed=<many>` with failed > 0. The three `usage` cases may pass by accident (127 ≠ 1, so they fail too — any non-zero failed count is the expected RED).
+Expected: nearly every case `FAIL`s (the script does not exist yet, so `bash` exits 127), ending `passed=<n> failed=<m>` with m > 40. A negative assertion such as `all-skips-bug-and-product` can pass on empty output; that is fine.
 
 - [ ] **Step 3: Write the implementation**
 
