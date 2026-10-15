@@ -22,6 +22,8 @@ want implement-fail-line   commands/implement.md   'BUILD_FLEET_QA_VERIFY_FAIL: 
 want implement-qa-fail     commands/implement.md   'QA_FAIL: drift' 3
 want implement-incomplete  commands/implement.md   '"reason":"drift-repair"'
 want implement-repair-phase commands/implement.md   "In repair mode (\`QA_FAIL: drift\`), \`PHASE\` may also be \`CHANGE_REVIEW\` or \`HANDOFF\`"
+want implement-repair-path  commands/implement.md   '`BUILD_STATE` absent and `PHASE` `BUILD` → the repair pass of step b2'
+want implement-repair-phase-reset commands/implement.md 'in repair mode at `PHASE` `CHANGE_REVIEW` or `HANDOFF`, also set `PHASE: BUILD`'
 want handoff-calls-gate    commands/handoff.md     'scripts/drift-gate.sh'
 want handoff-refuse        commands/handoff.md     'BUILD_FLEET_HANDOFF_REFUSE: {"feature":"<slug>","code":2,"reason":"drift","gate":'
 want handoff-resume        commands/handoff.md     'run the drift gate (step 4) and, if it passes, skip straight to step 9'
@@ -40,6 +42,7 @@ want contract-summary docs/v0.2/CONTRACT.md         'BUILD_FLEET_DRIFT_GATE_SUMM
 want contract-refuse  docs/v0.2/CONTRACT.md         'BUILD_FLEET_HANDOFF_REFUSE: {'
 want contract-stop    docs/v0.2/CONTRACT.md         '`drift` (the test plan failed the drift gate'
 want readme-ci        README.md                     'scripts/drift-gate.sh --all'
+want readme-shipped        README.md                     'For a shipped feature, fix the row or test the line names'
 want claude-md        CLAUDE.md                     'drift-gate'
 want changelog        CHANGELOG.md                  '`scripts/drift-gate.sh`'
 want smoke            docs/v0.5/smoke/smoke.sh      'echo "[DRIFT]"'

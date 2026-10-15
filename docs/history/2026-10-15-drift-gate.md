@@ -222,7 +222,9 @@ Also:
 2. A fresh feature built with `start`/`build`/`ship` carries `DRIFT_GATE: on` and passes
    the gate at all three firing points.
 3. Removing a mapped test from a shipped feature makes `drift-gate.sh --all` exit 2 and
-   name the criterion; `ship` then stops with `drift` and `build` repairs it.
+   name the criterion. For a feature still in flight, `ship` then stops with `drift` and
+   `build` repairs it; a shipped feature is no longer active, so its row or test is fixed
+   by hand (amended after the final review).
 4. A repo with only pre-gate features reports every one as unchecked and exits 0; a
    feature still in spec reports in-progress and does not fail CI.
 

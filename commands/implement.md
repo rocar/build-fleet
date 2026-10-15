@@ -51,10 +51,11 @@ this orchestration owns its own preconditions.
    **Repair mode.** If PROGRESS.md carries `QA_FAIL: drift`, an earlier run stopped on
    the drift gate. The guard admits this run whatever the BUILD_STATE, and the run is a
    repair: skip step a (qa's authoring pass) and go straight to the repair pass.
-   - `BUILD_STATE` absent → the repair pass of step b2 (the suite must be red). On a
-     pass, continue to step c and coder as a normal build.
-   - `BUILD_STATE` `started`, `needs-iteration` or `done` → the repair pass of step e2
-     (the suite must be green). Coder is not dispatched.
+   - `BUILD_STATE` absent and `PHASE` `BUILD` → the repair pass of step b2 (the suite
+     must be red). On a pass, continue to step c and coder as a normal build.
+   - Otherwise (`BUILD_STATE` `started`, `needs-iteration` or `done`, or `PHASE`
+     `CHANGE_REVIEW` / `HANDOFF`, which means built) → the repair pass of step e2 (the
+     suite must be green). Coder is not dispatched.
 
 ## What you do (tests-first ordering)
 
@@ -267,7 +268,8 @@ e2. **Drift gate (after coder).** Before `BUILD_STATE: done`, run the gate as in
    - Suite red (a restored test fails: behaviour is missing) → remove `QA_FAIL` if
      present, set `BUILD_STATE: needs-iteration`, emit
      `BUILD_FLEET_BUILD_INCOMPLETE: {"feature":"<slug>","failing_tests":<N>,"reason":"drift-repair"}`
-     and stop. The next lite `build` resumes coder through deep-build.
+     and stop. When this runs in repair mode at `PHASE` `CHANGE_REVIEW` or `HANDOFF`, also set `PHASE: BUILD`
+     (as a change-review bounce does), so deep-build can take it. The next lite `build` resumes coder through deep-build.
    - Gate still failing → set `QA_FAIL: drift`, emit step b2's `drift` line, stop.
 
 ## Hard rules

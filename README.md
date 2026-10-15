@@ -169,6 +169,9 @@ stop at the spec if you want to be the one who approves.
   bash <path-to-build-fleet>/scripts/drift-gate.sh --all   # exit 2 on drift
   ```
 
+  For a shipped feature, fix the row or test the line names: `build` repairs only the
+  feature in flight.
+
 The full hook table, the state machine, the product tier, headless use and the
 hidden steps are in **[docs/reference.md](docs/reference.md)**. The headless
 contract is [docs/v0.2/CONTRACT.md](docs/v0.2/CONTRACT.md).
