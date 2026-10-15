@@ -139,9 +139,10 @@ route_idle(){  # nothing in .sdd/ACTIVE
 }
 
 route_feature(){
-  local c="$1" slug="$2" phase="$3" d=".sdd/$2" st tier cyc bs
+  local c="$1" slug="$2" phase="$3" d=".sdd/$2" st tier cyc bs qf
   st=$(field "$d/spec.md" STATUS); tier=$(field "$d/PROGRESS.md" TIER)
   cyc=$(num "$(field "$d/PROGRESS.md" CYCLE)"); bs=$(field "$d/PROGRESS.md" BUILD_STATE)
+  qf=$(field "$d/PROGRESS.md" QA_FAIL)
   case "$c" in
     start)
       [ "$st" = FINALIZED ] && { S spec-ready "build" "the spec is finalized"; return; }
@@ -168,6 +169,8 @@ route_feature(){
         else S spec-not-ready "start" "review has open items"; fi
         return
       fi
+      # a test plan that failed the drift gate: implement runs only its qa repair pass
+      if [ "$qf" = drift ]; then T implement "" "repair the test plan"; return; fi
       case "$bs" in
         "") case "$phase" in
               CHANGE_REVIEW|HANDOFF) S built "ship" "already past BUILD" ;;
@@ -179,6 +182,7 @@ route_feature(){
         *) S unknown-state "" "BUILD_STATE '$bs' not recognised" ;;
       esac ;;
     ship)
+      if [ "$qf" = drift ]; then S drift "build" "the test plan has drifted; build repairs it"; return; fi
       if [ "$bs" = done ] || { [ -z "$bs" ] && { [ "$phase" = CHANGE_REVIEW ] || [ "$phase" = HANDOFF ]; }; }; then
         case "$phase" in
           BUILD|CHANGE_REVIEW|HANDOFF) T handoff "" "built; change review, then devops" ;;

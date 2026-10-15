@@ -331,6 +331,18 @@ proj; nojq="$work/nojq"; mkdir -p "$nojq"
 for c in bash awk tr sed cat cut dirname grep head; do ln -sf "$(command -v "$c")" "$nojq/$c"; done
 out="$(cd "$P" && PATH="$nojq" CLAUDE_PROJECT_DIR="$P" "$nojq/bash" "$ROUTER" start 2>&1)"
 if printf '%s' "$out" | grep -qF '"stop":"unknown-state"'; then pass=$((pass+1)); echo "ok   no-jq"; else fail=$((fail+1)); echo "FAIL no-jq got[$out]"; fi
+# ---- drift repair: QA_FAIL: drift sends build to implement, stops ship ----
+for bs in unset started needs-iteration done; do
+  proj; { printf 'PHASE: BUILD\nQA_FAIL: drift\n'; [ "$bs" = unset ] || printf 'BUILD_STATE: %s\n' "$bs"; } | feature f FINALIZED
+  check "build-drift-repair-$bs" '"step":"implement","args":"","why":"repair the test plan"' build
+done
+proj; feature f FINALIZED <<'EOF'
+PHASE: HANDOFF
+BUILD_STATE: done
+QA_FAIL: drift
+EOF
+check ship-drift '"stop":"drift","next":"/build-fleet:build"' ship
+
 rc=0; bash "$ROUTER" bogus >/dev/null 2>&1 || rc=$?
 if [ "$rc" = 1 ]; then pass=$((pass+1)); echo "ok   bad-usage"; else fail=$((fail+1)); echo "FAIL bad-usage rc=$rc"; fi
 
