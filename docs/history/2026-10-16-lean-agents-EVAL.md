@@ -22,8 +22,13 @@ D1–D3, 4 majors (row numbering ×2, column mapping, what counts as an empty ro
 minors. After: 18 surviving (3 blockers, 9 majors, 6 minors); beyond D1–D3, 5 majors
 (row numbering ×3, column mapping, what counts as an empty row) and 5 minors.
 
-**Result: no regression.** Every planted defect was raised after the cut by the same
-roles at the same severity. After run: plugin at f6c39da, `output_tokens` 11,037,
+**Result: no regression — but read this with its limit.** Every planted defect was
+raised after the cut by the same roles at the same severity. The spec-review workflow,
+however, dispatches only the read-only `reviewer` agent (with the lens text from
+`workflows/review.js`) and the `scribe`; it never loads the architect, qa or coder bodies,
+and the reviewer body changed by one sentence. So this run checks the reviewer path, not
+the bodies that were cut. The cut bodies are exercised by the live runs below and the
+change-review probe. After run: plugin at f6c39da, `output_tokens` 11,037,
 `scribe_apply: applied`. One run per side: this rules out a gross loss of judgement,
 not a small one.
 
@@ -47,3 +52,17 @@ Agent bodies: 10,377 words before, 8,702 after (−16%). Descriptions: 8 agents 
 61–116 words to 35–40; 7 skills from 33–99 to 25–33. Caps: coder, devops and reviewer at
 800; qa 1,433, architect 1,359, product-owner 1,275, classifier 1,492, scribe 1,571.
 Most of what remained is rules, which the inventory keeps.
+
+## Change-review probe (plugin cbd434e, after the final-review fixes)
+
+The final review found that the planted-defect run never loads the cut agents, and that
+qa and product-owner had lost the finding-id position rule the change-review gate parses.
+After restoring it, a second change cycle was run on `add-a-divide-a-b-function-to` with
+an undocumented `ndigits` parameter planted in `calc.divide` (no spec, no test):
+
+- product-owner, qa and architect each raised it as a `[blocker]` with a correctly placed
+  id (`(product-owner-cc2-1)`, `(qa-cc2-1)`, `(architect-cc2-1)`);
+- on this delta cycle no reviewer raised a new `[major]` (new findings were blockers and
+  minors only), and the architect re-raised its cycle-1 minor by its original id;
+- `scripts/change-review-gate.sh` parsed every block: `open_blockers` 3, `unparsed` [],
+  `reasons` ["open-blockers"].
