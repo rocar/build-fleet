@@ -11,10 +11,11 @@ ok() { pass=$((pass+1)); printf 'ok   %s\n' "$1"; }
 no() { fail=$((fail+1)); printf 'FAIL %s — %s\n' "$1" "$2"; }
 
 # Agents whose bodies and descriptions are not cut yet; each lean task removes its name.
-PENDING="classifier scribe skill:adr skill:review-rubric skill:sdd-diagnosis-template skill:sdd-protocol skill:sdd-spec-template skill:skill-routing skill:test-plan"
+PENDING="scribe skill:adr skill:review-rubric skill:sdd-diagnosis-template skill:sdd-protocol skill:sdd-spec-template skill:skill-routing skill:test-plan"
 
 # Body caps: name:cap:reason. Absent ⇒ 800.
 CAPS="
+classifier:1492:tier criteria, the risk table and both verdict shapes decide routing
 product-owner:1275:product-tier backlog grammar and intent rules that next-feature and plan-review parse
 architect:1359:mirrored rubric, verified rule and lens (about 300 words) plus the product-tier stack and brownfield rules
 qa:1433:mirrored rubric, verified rule and lens (about 300 words) plus the counterfactual snapshot procedure
