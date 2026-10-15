@@ -56,9 +56,9 @@ build-fleet: validate-acceptance-count refused — ${file_path} names ${count} d
 
 Criterion count is the review surface: each one is a thing three reviewers can find
 under-specified, and features with 56–99 criteria did not converge. Do NOT renumber or
-merge criteria to fit. SPLIT the feature: add a backlog row for the behaviours (and
-their criteria) that move out, record the split in DECISIONS.md, then cut them from
-this section.
+merge criteria to fit. SPLIT the feature: name the sibling backlog rows for the
+behaviours (and their criteria) that move out in your report, not in the spec, then
+cut them from this section.
 Raising AC_MAX in ${progress} is a deliberate, auditable decision — never edit it just
 to land this write.
 MSG

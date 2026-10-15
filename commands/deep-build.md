@@ -9,7 +9,7 @@ user-invocable: false
 
 You are the **orchestrator**. The runtime rulebook is the `sdd-protocol` skill. BUILD for multi-file / multi-package features runs as a Claude Code [dynamic workflow](https://code.claude.com/docs/en/workflows). This command validates preconditions, sets up the workflow handoff, and dispatches `workflows/deep-build.js`.
 
-The workflow itself: architect plans an N-way file partition, N coders fan out in parallel (each owning a disjoint file set, all writing against the pre-existing failing tests qa authored), then architect + qa run an adversarial review of the merged diff against `acceptance.md`. The scribe aggregates results into `IMPL_NOTES.md` and updates PROGRESS.md.
+The workflow itself: architect plans an N-way file partition, N coders fan out in parallel (each owning a disjoint file set, all writing against the pre-existing failing tests qa authored), then architect + qa run an adversarial review of the merged diff against the spec's acceptance criteria. The scribe aggregates results into `IMPL_NOTES.md` and updates PROGRESS.md.
 
 ## When to use this vs. standard BUILD
 

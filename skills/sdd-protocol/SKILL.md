@@ -73,24 +73,21 @@ describing what a lite command runs, not what a person types.
   PRODUCT                # one line: the product slug, if a product tier exists.
   _product/              # the product tier (see references/product-tier.md).
   <feature>/
-    spec.md              # product-owner. STATUS line + spec body. Source of truth.
-    acceptance.md        # product-owner. Testable acceptance criteria.
+    spec.md              # product-owner. STATUS line + spec body, ending with `## Acceptance Criteria`. Source of truth.
     DECISIONS.md         # architect. Append-only ADR log.
-    TEST_PLAN.md         # qa. Test design mapped to acceptance criteria.
-    IMPL_NOTES.md        # coder. Implementation notes and deviations.
-    REVIEW.md            # reviewers. Append-only review log (see format below).
+    IMPL_NOTES.md        # created on first write: coder gaps/deviations/todos, qa snapshot SHAs, scribe appendix.
+    REVIEW.md            # reviewers; created by the first review. Append-only, findings only (see format below).
     REVIEW-archive.md    # scripts/review-rotate.sh (append-only). Cycles older than the previous one, rotated out of REVIEW.md at dispatch.
     PROGRESS.md          # orchestrator. Phase + cycle state (schema below).
-    SKILL_MANIFEST.md    # orchestrator (from classifier). OPTIONAL. Per-role domain skills to load at BUILD.
     ESCALATION.md        # exists only when a gate has exhausted its cycles.
     EVENTS.jsonl         # build-fleet scripts only. Append-only event log (gate decisions, quote checks). Agents never write it.
   <bug>/                 # bug lane: diagnosis.md replaces spec.md (see references/bug-lane.md).
 ```
 
-Write boundaries: `product-owner` writes `spec.md` + `acceptance.md`; `architect`
-and `qa` are reviewers — during review they write **only inside `.sdd/<active>/`**
-(ADRs, REVIEW.md, TEST_PLAN.md) and never source; `coder` writes source +
-`IMPL_NOTES.md`, only while `PHASE` is `BUILD` (bug lane: only after `CONFIRMED`);
+Write boundaries: `product-owner` writes `spec.md`, acceptance criteria included;
+`architect` and `qa` are reviewers — during review they write **only inside
+`.sdd/<active>/`** (ADRs, REVIEW.md) and never source; `qa` writes tests at BUILD;
+`coder` writes source + `IMPL_NOTES.md`, only while `PHASE` is `BUILD` (bug lane: only after `CONFIRMED`);
 `devops` writes CI/CD, IaC, and release artifacts, only after CHANGE_REVIEW
 approval; the `scribe` (workflow-internal) applies workflow envelopes — the single
 canonical writer of workflow-driven state mutations.
@@ -132,16 +129,17 @@ parallel clones is human merge discipline, not the lock's job.
 ## PROGRESS.md schema
 
 Exact field names; hooks and commands parse these lines. Scaffolded PROGRESS
-files are stamped `SDD_SCHEMA: 1` — readers parse named fields and ignore
-unknown lines, so the stamp is inert at runtime; it exists so a future schema
-change is detectable on disk and can be CHANGELOG'd with a migration note (see
-the Compatibility convention in `CHANGELOG.md`; finish or park in-flight items
-before a major upgrade).
+files are stamped. A forward feature is `SDD_SCHEMA: 2` (the four-file layout above);
+`lite-next.sh` and the source-write gate refuse any other value for an active forward
+feature (`unsupported-schema` — park it and start it again), and `drift-gate.sh --all`
+reports it unchecked. The bug lane and the product tier stay `SDD_SCHEMA: 1`. Readers
+parse named fields and ignore unknown lines (see the Compatibility convention in
+`CHANGELOG.md`; finish or park in-flight items before a major upgrade).
 
 Forward feature:
 
 ```
-SDD_SCHEMA: 1
+SDD_SCHEMA: 2
 FEATURE: <slug>
 PHASE: SPEC | REVIEW | FINALIZE | BUILD | CHANGE_REVIEW | HANDOFF | ESCALATED | PARKED
 CYCLE: <int>          # spec-review cycles consumed (one increment per /build-fleet:review run)
@@ -159,10 +157,13 @@ VERIFY_BLOCKERS_SOLO: true | false      # optional — verified shape: one 3-ver
 BUILD_CYCLE_BUDGET: <int>   # optional — deep-build escalation budget (1..3, clamped). Default 3. A --cycle-budget flag overrides per-run.
 CYCLE_TOTAL: <int>          # cumulative spec-review cycles, scribe-written, NEVER reset (not by resolve-escalation, not by park)
 CYCLE_TOTAL_MAX: <int>      # /build-fleet:review refuses to dispatch when CYCLE_TOTAL_MAX is not 0 and CYCLE_TOTAL >= CYCLE_TOTAL_MAX (default 6; 0 disables)
-SPEC_MAX_KB: <int>          # optional — cap-spec-size hook: spec.md + acceptance.md byte budget (absent = no cap)
-AC_MAX: <int>               # optional — validate-acceptance-count hook: distinct AC-<n> ids (absent = no cap)
+SPEC_MAX_LINES: <int>       # optional — cap-spec-size hook: spec.md line budget (150 standard, 400 large; absent = no cap)
+AC_MAX: <int>               # optional — validate-acceptance-count hook: distinct AC-<n> ids in the spec's acceptance section (absent = no cap)
 LAST_REVIEW_OUTPUT_TOKENS: <int>   # scribe-written; /build-fleet:review refuses cost-runaway above 3× the header ceiling
-DRIFT_GATE: on | off        # drift gate (scripts/drift-gate.sh): on ⇒ every AC-n must map to a named test. new-feature writes on; absent/empty/off ⇒ unchecked
+DRIFT_GATE: on | off        # drift gate (scripts/drift-gate.sh): absent/empty/on ⇒ every AC-n needs a `<slug>/AC-n` test marker; off ⇒ unchecked (a feature with no tests)
+TEST_ROOTS: <csv>           # optional — drift gate test roots, project-relative; absent ⇒ whichever of tests, test, spec exist
+CODER_SKILLS: <csv>         # optional — domain skills coder loads at BUILD (skill-routing; written by new-feature)
+QA_SKILLS: <csv>            # optional — domain skills qa loads at BUILD
 QA_FAIL: drift              # the drift gate failed and the test plan still needs repair; /build-fleet:implement's repair mode clears it
 UPDATED: <iso8601>
 ```
@@ -209,8 +210,10 @@ of a concern is a *new* approving entry in a later cycle, not an edit.
 - [major] (<role>-c<M>-2) <concern>
   disposition: fix | adr ADR-<K>
 - [minor] (<role>-c<N>-3) <concern>
-status: concerns-raised | approved
 ```
+
+A block is its heading plus its finding lines; a role with no findings writes the
+heading alone.
 
 Finding ids are stable across cycles (`<role>-c<cycle>-<n>`; a re-raised finding
 keeps its id). A `  refuted-by:` continuation line closes a blocker or a major —
@@ -268,7 +271,7 @@ The REVIEW loop's per-cycle ritual is `/build-fleet:review` → `/build-fleet:re
 **SPEC.** `/build-fleet:new-feature <slug>` scaffolds `.sdd/<slug>/`, runs the
 classifier subagent to set `TIER`, `RISK` + `BUILD_MODE` in PROGRESS.md and to seed
 `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET` from tier and risk (`commands/new-feature.md` step 7), and delegates to
-product-owner to draft `spec.md` (STATUS=DRAFT) + `acceptance.md` — a minimal
+product-owner to draft `spec.md` (STATUS=DRAFT), acceptance criteria included — a minimal
 skeleton from the classifier's `skeleton_spec_hint` for `TIER=trivial`, the full
 spec otherwise. With a product tier present, the feature inherits the binding stack
 and its backlog intent (see `references/product-tier.md`).
@@ -301,8 +304,8 @@ phases:
    otherwise be dropped or demoted by the delta rules. The run then rotates the old
    log to REVIEW-archive.md, dispositions every surviving major and stamps
    `CYCLE_TOTAL`.
-2. **Cross-examination** — refute or affirm peers' concerns, citing spec.md,
-   acceptance.md or DECISIONS.md (an ADR is a substantive refutation).
+2. **Cross-examination** — refute or affirm peers' concerns, citing spec.md or
+   DECISIONS.md (an ADR is a substantive refutation).
 3. **Survival vote** — pure script; a concern survives unless refuted by a
    different-role reviewer with substantive, cited reasoning.
 4. **Disposition** — when majors survive, one architect leg classifies each as `adr`
@@ -335,7 +338,7 @@ idempotent; the BUILD orchestration is `/build-fleet:implement`'s). Permitted on
 `scripts/finalize-gate.sh` passes: every roster role has a current-cycle block; zero
 UNREFUTED `[blocker]` lines; zero `[major]` lines dispositioned `fix` (or
 undispositioned); every `disposition: adr ADR-N` cites an ADR present in the feature
-DECISIONS.md. `status:` lines are not evaluated. The rule is the rubric's, computed
+DECISIONS.md. Nothing else in a block is evaluated. The rule is the rubric's, computed
 deterministically, and is the same rule the workflow reports as `finalize_ready`.
 `not-approved` is **no longer emitted** as a refusal reason since v0.9 — the old
 "every block `status: approved`" requirement is gone; the reason is kept in the
@@ -346,22 +349,27 @@ before.
 **BUILD.** Sequential, tests-first. `/build-fleet:implement` (run after the finalize
 gate passes) dispatches qa first, then coder:
 
-1. **qa drafts TEST_PLAN.md + writes failing tests** per the `test-plan` skill —
-   each test must initially FAIL (no source exists yet) — then signals
+1. **qa writes failing tests, marked with their criteria** — each test carries a
+   `<slug>/AC-<n>` comment (on or above it) for every criterion it covers, every
+   criterion has at least one, and each test must initially FAIL (no source exists
+   yet) — then signals
    `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/`.
 2. **coder implements to spec.** Coder refuses to begin until qa's failing tests
    exist and all fail, then iterates until every qa test passes, recording `gap:` /
-   `deviation:` / `todo:` markers in `IMPL_NOTES.md`.
+   `deviation:` / `todo:` markers in `IMPL_NOTES.md` (created on first write).
 
-**Drift gate.** `scripts/drift-gate.sh` proves every acceptance criterion maps to a
-named test in TEST_PLAN.md's coverage matrix. `/build-fleet:implement` runs it after
+A criterion that cannot be tested is a spec defect: product-owner fixes the spec.
+
+**Drift gate.** `scripts/drift-gate.sh` proves every acceptance criterion in the spec
+is named by a `<slug>/AC-<n>` marker in a test file under the test roots, and that no
+marker names a criterion the spec lacks. `/build-fleet:implement` runs it after
 qa's suite is verified (before coder) and again before `BUILD_STATE: done`; each failure
 gets one qa repair pass, then sets `QA_FAIL: drift` and stops. `/build-fleet:handoff`
 runs it before the change-cycle budget; a failure sets `QA_FAIL: drift` and refuses.
 With `QA_FAIL: drift` set, `/build-fleet:build` routes to implement's repair mode.
 
-Both roles first load any skills routed to them in `SKILL_MANIFEST.md` (advisory,
-never gating — see the `skill-routing` skill).
+Both roles first load any skills routed to them in PROGRESS.md's `CODER_SKILLS` /
+`QA_SKILLS` (advisory, never gating — see the `skill-routing` skill).
 
 **BUILD variants.** `PROGRESS.md`'s `BUILD_MODE` field selects the execution mode
 (set by the classifier; manual override via PROGRESS.md edit or invoking
@@ -382,10 +390,10 @@ never gating — see the `skill-routing` skill).
 
 **CHANGE_REVIEW.** `/build-fleet:handoff` sets PHASE=CHANGE_REVIEW, increments
 `CHANGE_CYCLE`, and runs architect (design adherence + ADR compliance) +
-product-owner (meets `acceptance.md`) + qa (coverage gaps) against the diff. qa also
+product-owner (meets the acceptance criteria) + qa (coverage gaps) against the diff. qa also
 runs the **counterfactual** — each test must FAIL if coder's source change were
 reverted (a test that passes regardless is decorative). The counterfactual is
-**snapshot-first**: record a `git stash create` SHA in IMPL_NOTES.md before any
+**snapshot-first**: record a `git stash create` SHA in IMPL_NOTES.md (create it if absent) before any
 revert, operate against that ref, verify the restore against it before evaluating
 any verdict, and never use a bare `git checkout` of the changed files (full
 procedure in `agents/qa.md`).
@@ -447,10 +455,12 @@ Registered in `hooks/hooks.json`; scripts (each with a committed test harness) i
 7. Orphaned `.workflow-in-flight` markers are reaped on Stop — released (empty)
    markers immediately, abandoned ones after a staleness threshold.
    *(reap-stale-workflow-markers, Stop.)*
-8. spec.md / acceptance.md cannot grow past `SPEC_MAX_KB` while the field is present;
-   over budget the answer is a split. *(cap-spec-size, PreToolUse Write|Edit.)*
-9. acceptance.md cannot name more than `AC_MAX` distinct criteria while the field is
-   present. *(validate-acceptance-count, PostToolUse.)*
+8. spec.md cannot grow past `SPEC_MAX_LINES` lines while the field is present; over
+   budget the answer is a split. *(cap-spec-size, PreToolUse Write|Edit.)*
+9. spec.md's acceptance section cannot name more than `AC_MAX` distinct criteria while
+   the field is present. *(validate-acceptance-count, PostToolUse.)*
+10. Source writes are refused for an active forward feature whose `SDD_SCHEMA` is not
+   2. *(block-source-before-finalized, PreToolUse.)*
 
 **Fail-closed semantics.** The gates anchor at `CLAUDE_PROJECT_DIR` (a drifted cwd
 cannot silently disable them), reject any `..` path segment before prefix-matching,

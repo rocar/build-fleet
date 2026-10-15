@@ -39,17 +39,18 @@ this orchestration owns its own preconditions.
    (`{"code":2,"reason":"escalation-present"}`) —
    `/build-fleet:status resolve` is the sanctioned unblock path.
 
-4. **Re-run guard (the orchestration is NOT idempotent).** If
-   `.sdd/<slug>/IMPL_NOTES.md` already records BUILD activity, or a qa-authored
-   failing suite for this feature is already in place under `tests/`, a re-run
-   would re-dispatch qa over an existing suite. Refuse:
+4. **Re-run guard (the orchestration is NOT idempotent).** If PROGRESS.md carries
+   `BUILD_STATE` (any value), or any test file already carries a `<slug>/AC-` marker
+   (`grep -rl -- '<slug>/AC-' <test roots>` finds one — a qa run that wrote tests and
+   failed before step c), a re-run would re-dispatch qa over an existing suite. Refuse:
    `BUILD_FLEET_BUILD_REFUSE: {"feature":"<slug>","code":2,"reason":"build-already-started"}`
    and tell the user how to proceed instead: dispatch coder manually for an
    iteration, run `/build-fleet:deep-build` (which requires the existing failing
    suite and is resumable), or `/build-fleet:handoff` if BUILD completed.
 
    **Repair mode.** If PROGRESS.md carries `QA_FAIL: drift`, an earlier run stopped on
-   the drift gate. The guard admits this run whatever the BUILD_STATE, and the run is a
+   the drift gate. The guard admits this run whatever the BUILD_STATE and whatever
+   markers exist, and the run is a
    repair: skip step a (qa's authoring pass) and go straight to the repair pass.
    - `BUILD_STATE` absent and `PHASE` `BUILD` → the repair pass of step b2 (the suite
      must be red). On a pass, continue to step c and coder as a normal build.
@@ -62,14 +63,17 @@ this orchestration owns its own preconditions.
 a. **Dispatch qa first.** Use the Task tool to invoke `build-fleet:qa` with this
    prompt:
 
-   > PHASE=BUILD for feature `<slug>`. STATUS=FINALIZED. Draft `.sdd/<slug>/TEST_PLAN.md`
-   > per the `test-plan` skill, then implement the failing test suite under `tests/`.
+   > PHASE=BUILD for feature `<slug>`. STATUS=FINALIZED. Write the failing test suite
+   > under the test roots, from the acceptance criteria in `.sdd/<slug>/spec.md`. Mark
+   > each test with a `<slug>/AC-<n>` comment (on or above it) for every criterion it
+   > covers; every criterion needs at least one marker.
    > Every test must initially FAIL. When the full failing suite is in place, emit
    > exactly: `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/`. Do NOT signal coder
    > or write any source — only tests.
-   > If `.sdd/<slug>/SKILL_MANIFEST.md` exists, first load and apply the skills it
-   > lists under the `qa` role (per the `skill-routing` skill); an unavailable
-   > skill is a no-op — note it in TEST_PLAN.md and proceed.
+   > If PROGRESS.md has `QA_SKILLS`, first load and apply those skills (per the
+   > `skill-routing` skill); an unavailable skill is a no-op — record
+   > `skill-unavailable: <name>` in `.sdd/<slug>/IMPL_NOTES.md` (create it if absent)
+   > and proceed.
 
 b. **Wait for QA's signal and verify.** When qa's Task call returns, parse its
    output for the `BUILD_FLEET_QA_TESTS_READY: <N>` line.
@@ -110,10 +114,10 @@ b2. **Drift gate (before coder).** Run
    its stderr and stop. `"pass":false` → the **repair pass**, once. Use the Task tool
    to invoke `build-fleet:qa` with:
 
-   > PHASE=BUILD for feature `<slug>`. The drift gate failed: `<the gate line>`. Fix
-   > `.sdd/<slug>/TEST_PLAN.md`, or add or rename tests under `tests/`, so every
-   > acceptance criterion maps to a named test, per the `test-plan` skill's matrix
-   > grammar. Write no source. Every test must still FAIL. End with exactly:
+   > PHASE=BUILD for feature `<slug>`. The drift gate failed: `<the gate line>`. Add or
+   > fix `<slug>/AC-<n>` markers, or tests, under the test roots so every acceptance
+   > criterion in the spec is marked and no marker names a criterion the spec lacks.
+   > Write no source. Every test must still FAIL. End with exactly:
    > `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/` giving the new count.
 
    Verify the suite against that count by step b's rules (a failure there emits step
@@ -209,12 +213,11 @@ d. **Dispatch coder.** Use the Task tool to invoke `build-fleet:coder` with this
    > `<count>` failing tests under `tests/`. Per `agents/coder.md`, refuse-to-begin
    > if tests are absent or already passing. Implement source until every QA test
    > passes. Record `gap:` / `deviation:` / `todo:` markers in
-   > `.sdd/<slug>/IMPL_NOTES.md`. Self-review against acceptance.md before
-   > declaring BUILD complete.
-   > If `.sdd/<slug>/SKILL_MANIFEST.md` exists, first load and apply the skills it
-   > lists under the `coder` role (per the `skill-routing` skill); an unavailable
-   > skill is a no-op — record `skill-unavailable: <name>` in IMPL_NOTES.md and
-   > proceed with normal craft.
+   > `.sdd/<slug>/IMPL_NOTES.md` (create it on first write). Self-review against the
+   > spec's acceptance criteria before declaring BUILD complete.
+   > If PROGRESS.md has `CODER_SKILLS`, first load and apply those skills (per the
+   > `skill-routing` skill); an unavailable skill is a no-op — record
+   > `skill-unavailable: <name>` in IMPL_NOTES.md and proceed with normal craft.
 
 e. **Wait for coder's Task call to return, then branch.**
 
@@ -237,7 +240,7 @@ e. **Wait for coder's Task call to return, then branch.**
    ```
 
    then set `BUILD_STATE: done` in PROGRESS.md, then tell the user: BUILD complete (qa drafted the failing suite, coder drove them
-   green); review `IMPL_NOTES.md` for `gap:` / `deviation:` / `todo:` markers; the
+   green); review `IMPL_NOTES.md`, if it exists, for `gap:` / `deviation:` / `todo:` markers; the
    next command is `/build-fleet:handoff` (which runs CHANGE_REVIEW including QA's
    counterfactual gate).
 
@@ -257,8 +260,8 @@ e2. **Drift gate (after coder).** Before `BUILD_STATE: done`, run the gate as in
    the repair pass, once, with this brief:
 
    > PHASE=BUILD for feature `<slug>`; the source is built. The drift gate failed:
-   > `<the gate line>`. Restore or rename tests under `tests/`, or fix
-   > `.sdd/<slug>/TEST_PLAN.md`, so every acceptance criterion maps to a named test.
+   > `<the gate line>`. Restore tests, or add or fix `<slug>/AC-<n>` markers, under the
+   > test roots so every acceptance criterion in the spec is marked.
    > Write no source. The suite must stay green. End with exactly:
    > `BUILD_FLEET_QA_TESTS_READY: <count> tests in tests/`.
 

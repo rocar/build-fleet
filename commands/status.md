@@ -301,7 +301,7 @@ without a recorded choice:
 - **Never resolve without an explicit decision argument** — that text is the
   audit record of *why* the deadlock broke.
 - **REVIEW.md is append-only.** Archive; never rewrite history.
-- **Never touch spec.md, acceptance.md, diagnosis.md, or DECISIONS.md** — the
+- **Never touch spec.md, diagnosis.md, or DECISIONS.md** — the
   decision may *call for* edits there, but those belong to their owners.
 
 ## Ratify

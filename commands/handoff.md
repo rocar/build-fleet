@@ -38,7 +38,7 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 4. **Pre-flight: tests must exist and pass.**
    - If no tests exist (no `tests/` dir, no test files, no `test`
      command), refuse: BUILD is not complete until qa has authored tests
-     per `acceptance.md`.
+     for the spec's acceptance criteria.
    - Run the project's test command (npm test / pytest / make test, per
      `stop-tests.sh`'s detection). If tests fail, refuse with the failing
      output. The `stop-tests` hook would catch this at session-end anyway;
@@ -87,11 +87,11 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    - The active feature slug and the current CHANGE_CYCLE number.
    - A pointer to the diff (the orchestrator runs `git diff` against the
      base if a git repo; otherwise describe the changed files).
-   - A pointer to `spec.md`, `acceptance.md`, `DECISIONS.md`, `IMPL_NOTES.md`,
-     `TEST_PLAN.md`.
+   - A pointer to `spec.md` (its acceptance criteria included), `DECISIONS.md` and
+     `IMPL_NOTES.md` if it exists. The tests' `<slug>/AC-<n>` markers map criteria to tests.
    - The reviewer-specific lens:
      - architect: design adherence + ADR compliance.
-     - product-owner: meets `acceptance.md`?
+     - product-owner: meets the spec's acceptance criteria?
      - qa: coverage gaps before handoff.
    - The REVIEW.md entry format and severity rubric reminder. **CHANGE_REVIEW
      blocks are headed `## Change-Cycle <CHANGE_CYCLE> — <role> — <iso8601>`**
@@ -157,7 +157,7 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    - Carries the passing `BUILD_FLEET_CHANGE_REVIEW_GATE:` line verbatim (from
      step 8, or from step 2 / step 5 when those skipped here). devops refuses
      without it.
-   - Pointers to spec.md, acceptance.md, DECISIONS.md, IMPL_NOTES.md.
+   - Pointers to spec.md, DECISIONS.md, and IMPL_NOTES.md if it exists.
    - Asks for CI/CD updates, IaC if applicable, and release notes.
    - Reminds devops to refuse if PHASE isn't HANDOFF — defense in depth.
    - Reminds devops to end with its completion signal — `BUILD_FLEET_DEVOPS_OK`

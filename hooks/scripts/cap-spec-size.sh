@@ -107,8 +107,8 @@ build-fleet: cap-spec-size refused — ${rel} would become ${projected} lines, o
   over by   : $(( projected - cap )) lines
 
 A spec that cannot fit its budget is a feature that should be SPLIT, not compressed:
-add a backlog row for the behaviours that move out, record the split in DECISIONS.md,
-and cut them from ${base}. Move rationale to DECISIONS.md rather than the spec. Raising
+name the sibling backlog rows for the behaviours that move out in your report (not in
+the spec, which is at its budget), and cut them from ${base}. Move rationale to DECISIONS.md rather than the spec. Raising
 SPEC_MAX_LINES in ${progress} is a deliberate, auditable decision — never edit it just
 to land this write.
 MSG

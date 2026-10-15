@@ -57,7 +57,7 @@ On a clean lock it:
 2. scaffolds `.sdd/<slug>/` with **`diagnosis.md`** (`STATUS: REPORTED`, the symptom
    verbatim under `## Symptom + reproduction steps`) and a bug-lane `PROGRESS.md`
    (`SDD_SCHEMA: 1`, `LANE: bug`, `PHASE: REPORT`, `SEV: pending`, `CYCLE: 0`,
-   `FIX_CYCLE: 0`) — and **no** `spec.md`/`acceptance.md`;
+   `FIX_CYCLE: 0`) — and **no** `spec.md`;
 3. runs the **triage classifier** — the `classifier` agent in **bug mode** (see
    `agents/classifier.md` § Bug-mode) — for `{severity, cause_known}`;
 4. **routes on `cause_known`:** `true` → the cause is obvious from the report; emit
@@ -119,7 +119,7 @@ Two commands carry a bug from a reproduction to a confirmed (or refuted) root ca
 **`diagnose.js` — an inverted `review.js`.** Reviewer roles `[architect, coder]` (the
 PO drops out). Each tries to **refute** the recorded hypothesis, citing the
 **reproduction** (the failing test / `diagnosis.md` reproduction steps) — not
-`spec.md`/`acceptance.md`. The substantive-refutation floor is reused verbatim (≥40
+`spec.md`. The substantive-refutation floor is reused verbatim (≥40
 chars + a citation retargeted to the reproduction; self-refutation filtered by role).
 The **inversion**: where a review concern *survives unless refuted*, here the
 **hypothesis is CONFIRMED iff no refutation survives** cross-examination. Verdicts:

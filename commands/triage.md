@@ -44,8 +44,8 @@ empty, refuse — you cannot triage without a symptom. Emit `BUILD_FLEET_REFUSE`
      first with `/build-fleet:status park <reason>` — the sanctioned preemption path — then re-runs
      the triage.)
 
-3. **Scaffold `.sdd/<bug-slug>/`** — exactly two files (the bug lane has **no** `spec.md`,
-   `acceptance.md`, REVIEW.md, or TEST_PLAN.md at entry):
+3. **Scaffold `.sdd/<bug-slug>/`** — exactly two files (the bug lane has **no** `spec.md`
+   and no REVIEW.md at entry):
 
    - `diagnosis.md` per `sdd-diagnosis-template` — first non-blank line `STATUS: REPORTED`,
      then `# Bug: <short title>`, then the four required sections. Put the `$ARGUMENTS`

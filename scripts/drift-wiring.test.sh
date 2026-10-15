@@ -13,7 +13,7 @@ want() {
 }
 
 # ---- flow (§3.3) ----
-want new-feature-field     commands/new-feature.md '   DRIFT_GATE: on'
+want new-feature-schema    commands/new-feature.md '   SDD_SCHEMA: 2'
 want implement-calls-gate  commands/implement.md   'scripts/drift-gate.sh'
 want implement-b2          commands/implement.md   'b2. **Drift gate (before coder).**'
 want implement-e2          commands/implement.md   'e2. **Drift gate (after coder).**'
@@ -32,9 +32,11 @@ want handoff-refusal-case  commands/handoff.md     '- The drift gate fails'
 # ---- docs and qa's prompt (§3.4) ----
 want qa-description   agents/qa.md                  'repairing it after a drift-gate failure'
 want qa-body          agents/qa.md                  'The drift gate (`scripts/drift-gate.sh`)'
-want skill-section    skills/test-plan/SKILL.md     '## The drift gate'
-want skill-name-rule  skills/test-plan/SKILL.md     'as declared in source'
+want protocol-marker  skills/sdd-protocol/SKILL.md  'is named by a `<slug>/AC-<n>` marker in a test file'
+want implement-marker commands/implement.md         'each test with a `<slug>/AC-<n>` comment (on or above it)'
+want template-section skills/sdd-spec-template/SKILL.md 'qa marks each test with `<slug>/AC-<n>`'
 want protocol-gate    skills/sdd-protocol/SKILL.md  'DRIFT_GATE: on | off'
+want protocol-roots   skills/sdd-protocol/SKILL.md  'TEST_ROOTS: <csv>'
 want protocol-qafail  skills/sdd-protocol/SKILL.md  'QA_FAIL: drift'
 want protocol-build   skills/sdd-protocol/SKILL.md  '**Drift gate.**'
 want contract-line    docs/v0.2/CONTRACT.md         'BUILD_FLEET_DRIFT_GATE: {'

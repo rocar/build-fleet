@@ -71,7 +71,7 @@ For routing-and-scaffolding, use `/build-fleet:new-feature <slug>` after settlin
    - If `confidence=low`: surface the rationale and recommend the user either provide a more detailed description or override the tier manually by editing PROGRESS.md after scaffolding.
    - **Skill routing preview.** If `skill_manifest` is non-null, show
      `feature_type` and the per-role skill names (coder / qa) it would write to
-     `.sdd/<slug>/SKILL_MANIFEST.md` at `/build-fleet:new-feature` time. Note these
+     PROGRESS.md as `CODER_SKILLS` / `QA_SKILLS` at `/build-fleet:new-feature` time. Note these
      are **generic, advisory** names per the `skill-routing` skill — a name only
      takes effect at BUILD if a skill of that name is available, else it's a no-op.
      If `skill_manifest` is `null`, state that no domain routing applies.

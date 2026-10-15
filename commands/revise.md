@@ -12,7 +12,7 @@ the current cycle's `[blocker]` lines and every `[major]` whose disposition is `
 product-owner to close them **in the spec, under the feature's size budget**. It is
 the per-cycle ritual's second half: `revise` → `review` → (`finalize` | `revise` …).
 
-It never edits `.sdd/` itself; the product-owner writes `spec.md` / `acceptance.md`.
+It never edits `.sdd/` itself; the product-owner writes `spec.md`.
 
 ## What you do
 
@@ -47,26 +47,26 @@ It never edits `.sdd/` itself; the product-owner writes `spec.md` / `acceptance.
    and tell the user no blocker or `fix` major is open; run `/build-fleet:finalize`
    (the gate still checks that every `adr` disposition cites an existing ADR).
 
-4. **Read the size budget.** From PROGRESS.md: `SPEC_MAX_KB` and `AC_MAX` (either may be
+4. **Read the size budget.** From PROGRESS.md: `SPEC_MAX_LINES` and `AC_MAX` (either may be
    absent — then say "no cap" for that one).
 
 5. **Dispatch the product-owner.** Use the Task tool to spawn `build-fleet:product-owner`
    with this prompt (fill every placeholder):
 
-   > Revise `.sdd/<slug>/spec.md` and `.sdd/<slug>/acceptance.md` to close EXACTLY these
+   > Revise `.sdd/<slug>/spec.md` (acceptance criteria included) to close EXACTLY these
    > open review items from cycle <CYCLE> — nothing else:
    >
    > <the extracted lines, verbatim, one per line, with their ids>
    >
    > Rules:
-   > - Close each item in the spec/acceptance text, or push back in `## Self-review notes`
+   > - Close each item in the spec text, or push back in `## Self-review notes`
    >   with reasoning a human can audit. Record, per id, what you did.
    > - Items dispositioned `adr` are CLOSED by their ADR — do not touch the text they
    >   concern and do not add prose "also addressing" them.
-   > - Size budget: spec.md ≤ <SPEC_MAX_KB> KB, acceptance.md ≤ <AC_MAX> distinct criteria
-   >   (hooks refuse writes over budget). If closing these items cannot fit, do NOT compress
-   >   rationale: name in `## Self-review notes` which behaviours and criteria move to a
-   >   sibling backlog row (a split), and cut them here.
+   > - Size budget: spec.md ≤ <SPEC_MAX_LINES> lines, ≤ <AC_MAX> distinct criteria in its
+   >   acceptance section (hooks refuse writes over budget). If closing these items cannot
+   >   fit, do NOT compress rationale: name in your report which behaviours and criteria
+   >   move to a sibling backlog row (a split), and cut them here.
    > - Keep `STATUS: DRAFT`. Do not renumber existing `AC-<n>` ids.
    > - The next review is a delta review: reviewers verify closure by id.
 
@@ -79,7 +79,7 @@ It never edits `.sdd/` itself; the product-owner writes `spec.md` / `acceptance.
 
 ## Hard rules
 
-- Never edit `spec.md`, `acceptance.md`, `REVIEW.md`, `DECISIONS.md` or PROGRESS.md
+- Never edit `spec.md`, `REVIEW.md`, `DECISIONS.md` or PROGRESS.md
   yourself — the PO revises; the review workflow records.
 - Never hand the PO an `adr`-dispositioned major or a refuted item. Re-opening closed
   items is how specs bloat.
