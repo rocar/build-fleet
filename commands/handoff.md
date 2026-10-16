@@ -106,7 +106,7 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
      re-raised finding keeps its id. Every `[major]` carries a continuation line
      `  disposition: fix` (the default — coder must close it) or
      `  disposition: adr ADR-N` (architect only, after appending ADR-N to
-     DECISIONS.md). `status:` is informational; the gate ignores it.
+     DECISIONS.md).
    - **When `CHANGE_CYCLE >= 2`, the delta rule**, with a pointer to the previous
      cycle's `## Change-Cycle <CHANGE_CYCLE-1>` blocks: verify closure of your own
      prior blockers and `fix` majors against the new diff and re-raise by original
@@ -128,7 +128,7 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    Relay its `BUILD_FLEET_CHANGE_REVIEW_GATE:` line verbatim. The rule is the
    rubric's: every roster role has a current-cycle block; zero unrefuted
    `[blocker]`s; every `[major]` closed by `disposition: adr ADR-N` (ADR present) or
-   demoted as a new major on a delta cycle. `status:` lines are never evaluated.
+   demoted as a new major on a delta cycle.
    - `"pass":true` → CHANGE_REVIEW passes. Continue to step 9.
    - `"pass":false` with `missing-<role>` or `unparsed-findings` in `reasons` → a
      reviewer's block is absent, or holds a finding bullet the grammar cannot read

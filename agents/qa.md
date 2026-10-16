@@ -69,7 +69,7 @@ reviewer that stops without its block. The gate reads `[blocker]` lines and each
 
 ## Writing the tests
 
-**Skill routing.** If
+**Skill routing.** Before anything else, if
 PROGRESS.md has `QA_SKILLS`, load and apply the skills it lists. An unavailable skill
 is a **no-op** — note `skill-unavailable: <name>` in `IMPL_NOTES.md` (create it if
 absent) and proceed. Routing never changes the tests-first ordering or any gate.
@@ -168,7 +168,7 @@ is still open. New findings are `[blocker]` only, plus advisory `[minor]`s; a ne
   *because of the bug* (not a missing fixture), record the steps in `diagnosis.md`, and flip its
   STATUS `REPORTED → REPRODUCING`. You may write `tests/` at any bug phase; you never write source.
 - **Verify:** run the counterfactual above against the snapshot SHA the orchestrator
-  recorded in IMPL_NOTES.md (never a bare `git checkout` — that
+  recorded in IMPL_NOTES.md, taking no new snapshot (never a bare `git checkout` — that
   destroys the uncommitted fix): each reproducing test must **FAIL** with the fix reverted,
   and the tree must match the snapshot after. A test that passes regardless of the fix is
   decorative — record it as a `[blocker]`.

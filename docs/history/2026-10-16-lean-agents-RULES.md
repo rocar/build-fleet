@@ -234,7 +234,7 @@ each; the drift tests pin their text.
 - [x] qa R38: "- Don't approve at CHANGE_REVIEW if `stop-tests` is failing. Fix the test" → "- Don't approve at CHANGE_REVIEW if `stop-tests` is failing. Fix the test"
 - [x] qa R39: "*because of the bug* (not a missing fixture), record the steps in `diagnosis.md`, and flip its" → "*because of the bug* (not a missing fixture), record the steps in `diagnosis.md`, and flip its"
 - [x] qa R40: "STATUS `REPORTED → REPRODUCING`. You may write `tests/` at any bug phase; you never write source." → "STATUS `REPORTED → REPRODUCING`. You may write `tests/` at any bug phase; you never write source."
-- [x] qa R41: "recorded ref. Revert the coder's fix with `git stash` (never a bare `git checkout` — that" → "recorded in IMPL_NOTES.md (never a bare `git checkout` — that"
+- [x] qa R41: "recorded ref. Revert the coder's fix with `git stash` (never a bare `git checkout` — that" → "recorded in IMPL_NOTES.md, taking no new snapshot (never a bare `git checkout` — that"
 - [x] qa R42: "decorative — record it as a `[blocker]`." → "decorative — record it as a `[blocker]`."
 - [x] qa R43: "- [major] (qa-cc1-2) failure path <x> untested" → "- [major] (qa-cc1-2) failure path <x> untested"
 - [x] qa R44: "Once spec is FINALIZED and PHASE=BUILD, draft `TEST_PLAN.md` following the" → "each test with a `<slug>/AC-<n>` comment on or above it for every criterion it covers;"

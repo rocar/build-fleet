@@ -51,6 +51,17 @@ check "leading-zero-008-no-crash" "$p" "$(payload Write $S "$(lines 9)")" 2
 p=$(new_proj bad 150L)
 check "garbage-refuses" "$p" "$(payload Write $S "x")" 2
 has_err "garbage-refuses-message" "$(stderr_of "$p" "$(payload Write $S x)")" "SPEC_MAX_LINES is not an integer ('150L')"
+# B3: an Edit that only terminates the last line adds no line
+p=$(new_proj eol 3); printf 'a\nb\nc' > "$p/.sdd/feat/spec.md"
+check "edit-terminating-last-line-allowed" "$p" "$(payload Edit $S c $'c\n')" 0
+# B4: an over-budget spec may be cut by an Edit that still lands over budget; never grown
+p=$(new_proj cut 2); printf 'a\nb\nc\nd\ne\n' > "$p/.sdd/feat/spec.md"
+check "edit-shrinking-over-budget-allowed" "$p" "$(payload Edit $S $'d\ne\n' '')" 0
+check "edit-growing-over-budget-refuses" "$p" "$(payload Edit $S $'e\n' $'e\nf\n')" 2
+check "write-shrinking-over-budget-allowed" "$p" "$(payload Write $S $'a\nb\nc\n')" 0
+# the replacement is literal: "&" never stands for the matched text (bash 5.2 patsub_replacement)
+p=$(new_proj amp 8)
+check "edit-ampersand-literal" "$p" "$(payload Edit $S $'l1\nl2\n' '&&')" 0
 p=$(new_proj o 1)
 check "acceptance-md-not-capped" "$p" "$(payload Write .sdd/feat/acceptance.md "$(lines 500)")" 0
 check "other-file-ignored" "$p" "$(payload Write .sdd/feat/DECISIONS.md "$(lines 500)")" 0

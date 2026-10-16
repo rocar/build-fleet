@@ -121,7 +121,8 @@ Review leaves each surviving `[major]` dispositioned `adr ADR-N` (accepted, clos
    is a **split**: name in your report which behaviours and criteria move to a sibling
    backlog row, and cut them here. Never compress rationale to make room.
 4. Record in `## Self-review notes` which finding ids you closed and how, so the next
-   cycle's delta review can verify closure by id.
+   cycle's delta review can verify closure by id. Replace the section each cycle: it
+   holds this cycle's closures only, so it never eats the line budget.
 
 If the finalize gate refuses, your output is a
 short list of what's still open — not a retry.

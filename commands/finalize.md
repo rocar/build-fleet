@@ -88,7 +88,7 @@ cycle.
    - every `disposition: adr ADR-N` cites an `## ADR-N:` present in the feature
      `DECISIONS.md` (else `majors-without-adr`).
    - no indented finding bullet such as `  - [blocker]` (else `unparsed-findings`).
-   `status:` lines are informational and NOT evaluated. Exit 0 ⇒ pass (step 6);
+   Exit 0 ⇒ pass (step 6);
    exit 2 ⇒ refuse (step 5), relaying the script's `reasons`; exit 1 ⇒ the workspace
    is unreadable — report it and stop.
 

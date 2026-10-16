@@ -54,8 +54,10 @@ required_sections=(
   "## Acceptance Criteria"
 )
 missing=()
+# A heading counts only at the start of its own line ("### Acceptance Criteria" is not
+# the "## Acceptance Criteria" section the criteria reader and the drift gate use).
 for s in "${required_sections[@]}"; do
-  if ! grep -Fq "$s" "$file_path"; then
+  if ! awk -v h="$s" '{ sub(/\r$/, "") } index($0, h) == 1 { found = 1; exit } END { exit !found }' "$file_path"; then
     missing+=("$s")
   fi
 done

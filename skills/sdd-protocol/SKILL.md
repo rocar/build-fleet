@@ -222,7 +222,7 @@ the survival vote refutes any severity; absent that, a blocker stays open only
 until a later cycle simply does not re-raise it. Every surviving `[major]` carries
 a `disposition:` continuation line written by the review workflow's architect leg
 — `fix` (open: the PO must close it) or `adr ADR-K` (accepted: closed by that
-feature ADR). `status:` is informational since v0.9.
+feature ADR).
 
 In the verified shape (REVIEW_SHAPE: verified) each block's second line is "shape: verified" and blockers and majors carry quote:/absent:, test:, verdict: and verified: lines (format: the review-rubric skill and docs/history/2026-10-14-verified-review.md §3.2). The finalize gate recomputes the vote from the verdict lines and the cycle's quote-check event in .sdd/<slug>/EVENTS.jsonl; refuted-by: is not used.
 
@@ -410,7 +410,7 @@ at `[blocker]` only; a new `[major]` is advisory (demoted).
 Exit (to HANDOFF): `scripts/change-review-gate.sh` passes — every roster role has a
 current-cycle block, zero unrefuted `[blocker]`s, every `[major]` closed by an ADR
 present in DECISIONS.md or demoted, and no finding bullet the gate cannot read (an
-indented one refuses with `unparsed-findings`). `status:` is informational. Fail below the
+indented one refuses with `unparsed-findings`). Fail below the
 budget → back to BUILD with exactly the open items; fail on the exhausting cycle
 (`CHANGE_CYCLE` 3) → ESCALATE with blockers and `fix` majors both listed.
 

@@ -80,7 +80,6 @@ Snapshot (`build-fleet/status-snapshot@1`):
    block tagged with the current `CHANGE_CYCLE`. For each reviewer block,
    print:
    - Reviewer name.
-   - `status:` line value.
    - Count of `[blocker]`, `[major]`, `[minor]` items — and for each `[major]`, its
      `disposition:` (`fix` = open, `adr ADR-N` = accepted; none = open, legacy block).
    - `finalize_ready`: yes iff zero UNREFUTED `[blocker]` lines (a `refuted-by:`
@@ -93,7 +92,6 @@ Snapshot (`build-fleet/status-snapshot@1`):
      with that ADR in DECISIONS.md (an architect ADR closes a peer's id in every
      block) or is a new major on cycle ≥ 2 (advisory, "demoted"). A finding bullet
      the gate cannot read (an indented `- [blocker]` / `- [major]`) makes it `no`.
-     `status:` lines are not evaluated.
    - Verbatim text of every `[blocker]` item (so the user sees what's
      actually open).
 

@@ -49,9 +49,10 @@ esac
 # suite is expected (a) before coder is dispatched — BUILD_STATE absent; implement sets
 # `started` just before coder runs — and (b) while a deep-build workflow runs in the
 # background (BUILD_STATE `started` and a non-empty .workflow-in-flight marker): its
-# coders are mid-flight when the main session's turn ends. A standard build sets
-# `done`/`needs-iteration` before its turn ends, so `started` with no live workflow is
-# an interrupted coder run, and the gate enforces. Never skipped outside BUILD.
+# coders are mid-flight when the main session's turn ends. A standard build sets `done`
+# when green; after BUILD_FLEET_BUILD_INCOMPLETE it stays `started` (coder must iterate),
+# so `started` with no live workflow is a red build, and the gate enforces. Never
+# skipped outside BUILD.
 if [ "$phase" = "BUILD" ]; then
   bstate=$(read_progress_field "$slug" BUILD_STATE)
   if [ -z "$bstate" ]; then

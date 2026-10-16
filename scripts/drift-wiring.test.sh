@@ -39,6 +39,14 @@ wantnot qa-tests-in-tests           agents/qa.md          'tests in tests/'
 wantnot protocol-tests-in-tests     skills/sdd-protocol/SKILL.md 'tests in tests/'
 want    coder-no-empty-notes        agents/coder.md       'If there is nothing to list, write nothing'
 
+# ---- 0.12.1: review blocks are findings only — no prose about a status: line ----
+wantnot status-no-status-value   commands/status.md          '`status:` line value'
+wantnot status-no-status-eval    commands/status.md          '`status:` lines are not evaluated'
+wantnot handoff-no-status-info   commands/handoff.md         '`status:` is informational'
+wantnot handoff-no-status-eval   commands/handoff.md         '`status:` lines are never evaluated'
+wantnot finalize-no-status-info  commands/finalize.md        '`status:` lines are informational'
+wantnot protocol-no-status-info  skills/sdd-protocol/SKILL.md '`status:` is informational'
+
 # ---- flow (§3.3) ----
 want new-feature-schema    commands/new-feature.md '   SDD_SCHEMA: 2'
 want implement-calls-gate  commands/implement.md   'scripts/drift-gate.sh'

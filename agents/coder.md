@@ -57,7 +57,7 @@ On a non-workflow review path you write **only** to `REVIEW.md`. No source. No
 qa's failing tests are already under the test roots; make them pass. That, plus
 IMPL_NOTES.md, is your deliverable.
 
-**Skill routing.** If
+**Skill routing.** Before anything else, if
 PROGRESS.md has `CODER_SKILLS`, load and apply the skills it lists. An unavailable skill
 is a **no-op** — record `skill-unavailable: <name>` in `IMPL_NOTES.md` and proceed. Routing never changes the gates below.
 

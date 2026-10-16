@@ -14,10 +14,12 @@
 # tier defaults. The product tier (.sdd/_product/) is exempt.
 #
 # Lines are what a reader pays. lines(text) = newline count, plus 1 for a non-empty
-# unterminated last line (awk's NR). An Edit's delta is counted in newline characters
-# (new − old) × occurrences, so joining or splitting lines is counted exactly.
-# Handles: leading-zero values (010 → decimal 10, not octal 8); newline-safe
-# replace_all occurrence counting; NotebookEdit refuses closed (cannot project lines).
+# unterminated last line (awk's NR). An Edit is applied to the current text (first
+# occurrence, or every one under replace_all) and the result is counted, so joining,
+# splitting or terminating lines is exact. A write over budget that does not grow the
+# spec is allowed, so an over-budget spec can always be cut down.
+# Handles: leading-zero values (010 → decimal 10, not octal 8); NotebookEdit refuses
+# closed (cannot project lines).
 set -euo pipefail
 trap 'echo "build-fleet: gate script errored unexpectedly — failing closed" >&2; exit 2' ERR
 
@@ -69,30 +71,28 @@ cap=$((10#$cap))                                    # normalize (leading zeros: 
 [ "$cap" -gt 0 ] || exit 0                          # 0 disables the cap
 
 lines_of() { awk 'END { print NR }'; }
-nl_of() { tr -cd '\n' | wc -c | tr -d ' '; }
-current=0
-[ -f "$rel" ] && current=$(lines_of < "$rel")
+# raw <jq-path> — a tool_input string, trailing newlines kept
+raw() { local v; v=$(printf '%s' "$input" | jq -j "$1 // empty"; printf x); printf '%s' "${v%x}"; }
+current=0; content=""
+if [ -f "$rel" ]; then
+  current=$(lines_of < "$rel")
+  content=$(cat "$rel"; printf x); content="${content%x}"   # keep trailing newlines
+fi
 
 case "$tool" in
   Write)
     projected=$(printf '%s' "$input" | jq -j '.tool_input.content // empty' | lines_of)
     ;;
   Edit)
-    old=$(printf '%s' "$input" | jq -j '.tool_input.old_string // empty' | nl_of)
-    new=$(printf '%s' "$input" | jq -j '.tool_input.new_string // empty' | nl_of)
-    n=1
-    if [ "$(printf '%s' "$input" | jq -r '.tool_input.replace_all // false')" = "true" ] && [ -f "$rel" ]; then
-      oldstr=$(printf '%s' "$input" | jq -j '.tool_input.old_string // empty')
-      if [ -n "$oldstr" ]; then
-        content=$(cat "$rel"; printf x); content="${content%x}"   # keep trailing newlines
-        n=0; rest="$content"
-        while [ -n "$rest" ] && [ "${rest#*"$oldstr"}" != "$rest" ]; do
-          rest="${rest#*"$oldstr"}"; n=$((n+1))
-        done
-        [ "$n" -gt 0 ] 2>/dev/null || n=1
-      fi
+    # Apply the edit to the current text and count the result exactly.
+    oldstr=$(raw .tool_input.old_string); newstr=$(raw .tool_input.new_string)
+    if [ -z "$oldstr" ]; then after="$newstr"
+    elif [ "$(printf '%s' "$input" | jq -r '.tool_input.replace_all // false')" = "true" ]; then
+      after="${content//"$oldstr"/"$newstr"}"
+    else
+      after="${content/"$oldstr"/"$newstr"}"
     fi
-    projected=$(( current + (new - old) * n ))
+    projected=$(printf '%s' "$after" | lines_of)
     ;;
   NotebookEdit)
     echo "build-fleet: cap-spec-size refused — ${rel} is a spec file; NotebookEdit cannot be size-projected. Use Write or Edit." >&2
@@ -102,6 +102,7 @@ case "$tool" in
 esac
 
 [ "$projected" -le "$cap" ] && exit 0
+[ "$projected" -le "$current" ] && exit 0            # over budget but not growing: a cut may land
 
 cat >&2 <<MSG
 build-fleet: cap-spec-size refused — ${rel} would become ${projected} lines, over its ${cap}-line budget.
