@@ -52,7 +52,10 @@ this orchestration owns its own preconditions.
    **Repair mode.** If PROGRESS.md carries `QA_FAIL: drift`, an earlier run stopped on
    the drift gate. The guard admits this run whatever the BUILD_STATE and whatever
    markers exist, and the run is a
-   repair: skip step a (qa's authoring pass) and go straight to the repair pass.
+   repair: skip step a (qa's authoring pass). First run the drift gate: if it passes
+   (the markers or test roots were fixed by hand), qa is not dispatched — remove
+   `QA_FAIL` and continue as if the repair pass had passed (below: step b's suite check
+   then step c, or step e2's suite-green branch). If it fails, go to the repair pass.
    - `BUILD_STATE` absent and `PHASE` `BUILD` → the repair pass of step b2 (the suite
      must be red). On a pass, continue to step c and coder as a normal build.
    - Otherwise (`BUILD_STATE` `started`, `needs-iteration` or `done`, or `PHASE`
@@ -72,7 +75,7 @@ a. **Dispatch qa first.** Use the Task tool to invoke `build-fleet:qa` with this
    > this project keeps tests elsewhere (colocated, e.g. `src/`), set
    > `TEST_ROOTS: <dir>[,<dir>…]` in PROGRESS.md before writing them.
    > Every test must initially FAIL. When the full failing suite is in place, emit
-   > exactly: `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/`. Do NOT signal coder
+   > exactly: `BUILD_FLEET_QA_TESTS_READY: <count> failing tests under the test roots`. Do NOT signal coder
    > or write any source — only tests.
    > If PROGRESS.md has `QA_SKILLS`, first load and apply those skills (per the
    > `skill-routing` skill); an unavailable skill is a no-op — record
@@ -110,10 +113,13 @@ b. **Wait for QA's signal and verify.** When qa's Task call returns, parse its
    manually or edit the test suite); a blind re-run of `/build-fleet:implement` will
    refuse via the precondition-4 re-run guard.
 
-b2. **Drift gate (before coder).** Run
+b2. **Drift gate (before coder).** qa has written tests by now, so a plain re-run would
+   be refused `build-already-started`: every stop in steps b2 and e2 sets `QA_FAIL: drift`
+   in PROGRESS.md, so the lite `build` re-enters in repair mode, unless the branch says
+   otherwise. Run
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/drift-gate.sh" "<slug>"` and relay its
    `BUILD_FLEET_DRIFT_GATE:` line. `"pass":true` (an unchecked feature included) →
-   step c. No line at all (exit 1) → emit
+   step c. No line at all (exit 1) → set `QA_FAIL: drift`, emit
    `BUILD_FLEET_QA_VERIFY_FAIL: {"feature":"<slug>","reason":"drift-gate-error"}` with
    its stderr and stop. `"pass":false` → the **repair pass**, once. Use the Task tool
    to invoke `build-fleet:qa` with:
@@ -122,10 +128,10 @@ b2. **Drift gate (before coder).** Run
    > fix `<slug>/AC-<n>` markers, or tests, under the test roots so every acceptance
    > criterion in the spec is marked and no marker names a criterion the spec lacks.
    > Write no source. Every test must still FAIL. End with exactly:
-   > `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/` giving the new count.
+   > `BUILD_FLEET_QA_TESTS_READY: <count> failing tests under the test roots` giving the new count.
 
-   Verify the suite against that count by step b's rules (a failure there emits step
-   b's line and stops), then run the gate again.
+   Verify the suite against that count by step b's rules (a failure there sets
+   `QA_FAIL: drift`, emits step b's line and stops), then run the gate again.
    - Pass → remove `QA_FAIL` from PROGRESS.md if present; step c.
    - Still failing → set `QA_FAIL: drift` in PROGRESS.md, emit
      ```
@@ -243,6 +249,8 @@ e. **Wait for coder's Task call to return, then branch.**
    BUILD_FLEET_BUILD_COMPLETE: {"feature":"<slug>","tests_passing":<N>,"impl_notes_path":".sdd/<slug>/IMPL_NOTES.md"}
    ```
 
+   (`"impl_notes_path":null` when `IMPL_NOTES.md` does not exist — coder had nothing to note.)
+
    then set `BUILD_STATE: done` in PROGRESS.md, then tell the user: BUILD complete (qa drafted the failing suite, coder drove them
    green); review `IMPL_NOTES.md`, if it exists, for `gap:` / `deviation:` / `todo:` markers; the
    next command is `/build-fleet:handoff` (which runs CHANGE_REVIEW including QA's
@@ -259,7 +267,7 @@ e. **Wait for coder's Task call to return, then branch.**
    PHASE stays BUILD.
 
 e2. **Drift gate (after coder).** Before `BUILD_STATE: done`, run the gate as in step
-   b2 (no line → step b2's `drift-gate-error` line). `"pass":true` → emit
+   b2 (no line → set `QA_FAIL: drift`, emit step b2's `drift-gate-error` line, stop). `"pass":true` → emit
    `BUILD_FLEET_BUILD_COMPLETE` and set `BUILD_STATE: done` as above. `"pass":false` →
    the repair pass, once, with this brief:
 
@@ -267,11 +275,16 @@ e2. **Drift gate (after coder).** Before `BUILD_STATE: done`, run the gate as in
    > `<the gate line>`. Restore tests, or add or fix `<slug>/AC-<n>` markers, under the
    > test roots so every acceptance criterion in the spec is marked.
    > Write no source. The suite must stay green. End with exactly:
-   > `BUILD_FLEET_QA_TESTS_READY: <count> tests in tests/`.
+   > `BUILD_FLEET_QA_TESTS_READY: <count> passing tests under the test roots`.
 
-   Then run the suite and the gate again:
+   Then run the suite and the gate again. The suite's test count must equal `<count>`;
+   a mismatch → set `QA_FAIL: drift`, emit step b's `count-mismatch` line, stop.
    - Suite green, gate passes → remove `QA_FAIL` if present, emit
-     `BUILD_FLEET_BUILD_COMPLETE`, set `BUILD_STATE: done`.
+     `BUILD_FLEET_BUILD_COMPLETE`, set `BUILD_STATE: done`. When this runs in repair mode
+     at `PHASE` `CHANGE_REVIEW` or `HANDOFF`, also add
+     `DRIFT_REPAIR: <iso8601> tests-only` to PROGRESS.md (computed with
+     `date -u +%Y-%m-%dT%H:%M:%SZ`): the repair changed tests only, so the change
+     review stands and is not re-run.
    - Suite red (a restored test fails: behaviour is missing) → remove `QA_FAIL` if
      present, set `BUILD_STATE: needs-iteration`, emit
      `BUILD_FLEET_BUILD_INCOMPLETE: {"feature":"<slug>","failing_tests":<N>,"reason":"drift-repair"}`

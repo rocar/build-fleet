@@ -100,7 +100,7 @@ Tests must:
 When the full failing suite is in place, end with exactly this line:
 
 ```
-BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/
+BUILD_FLEET_QA_TESTS_READY: <count> failing tests under the test roots
 ```
 
 Do not dispatch coder yourself — the orchestrator does that after verifying your

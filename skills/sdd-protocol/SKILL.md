@@ -354,7 +354,7 @@ gate passes) dispatches qa first, then coder:
    `<slug>/AC-<n>` comment (on or above it) for every criterion it covers, every
    criterion has at least one, and each test must initially FAIL (no source exists
    yet) — then signals
-   `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/`.
+   `BUILD_FLEET_QA_TESTS_READY: <count> failing tests under the test roots`.
 2. **coder implements to spec.** Coder refuses to begin until qa's failing tests
    exist and all fail, then iterates until every qa test passes, recording `gap:` /
    `deviation:` / `todo:` markers in `IMPL_NOTES.md` (created on first write).

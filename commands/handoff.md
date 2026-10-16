@@ -72,7 +72,9 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 
 6. **Bump the change-cycle.** Increment `CHANGE_CYCLE` in PROGRESS.md. Set
    `PHASE: CHANGE_REVIEW`. Refresh `UPDATED:` (computed with
-   `date -u +%Y-%m-%dT%H:%M:%SZ`, never guessed).
+   `date -u +%Y-%m-%dT%H:%M:%SZ`, never guessed). If `REVIEW.md` does not exist yet (a
+   trivial feature has no spec review), create it with the standard append-only header
+   now, so the two parallel reviewers in stage one never both create it.
 
 7. **Run CHANGE_REVIEW in two stages.** The reviewers are `build-fleet:product-owner`,
    `build-fleet:qa` and `build-fleet:architect`. **Stage one:** launch product-owner

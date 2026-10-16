@@ -213,7 +213,7 @@ each; the drift tests pin their text.
 - [x] qa R17: "- Pass after coder's implementation lands." → "- Pass after coder's implementation lands."
 - [x] qa R18: "- Cover failure paths, not just happy paths." → "- Cover failure paths, not just happy paths."
 - [x] qa R19: "- Live where the project convention puts them." → "- Live where the project convention puts them."
-- [x] qa R20: "BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/" → "BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/"
+- [x] qa R20: "BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/" → "BUILD_FLEET_QA_TESTS_READY: <count> failing tests under the test roots"
 - [x] qa R21: "Do not dispatch coder yourself — the orchestrator does that after verifying your" → "Do not dispatch coder yourself — the orchestrator does that after verifying your"
 - [x] qa R22: "spec problem — surface it to the orchestrator; the right move is a spec" → "spec problem — surface it to the orchestrator; the right move is a spec"
 - [x] qa R23: "(file + test name). Missing → `[blocker]`." → "(file + test name). Missing → `[blocker]`."
