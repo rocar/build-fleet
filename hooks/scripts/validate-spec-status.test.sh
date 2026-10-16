@@ -37,6 +37,12 @@ check_err() {
   fi
 }
 
+# --- a heading counts only at its own level: "### Acceptance Criteria" is not the section ---
+p=$(new_proj h3); body DRAFT | sed 's/^## Acceptance Criteria$/### Acceptance Criteria/' > "$p/.sdd/feat/spec.md"
+check_err "h3-acceptance-not-a-section" "$p" ".sdd/feat/spec.md" 2 "Acceptance Criteria"
+p=$(new_proj crlf); body DRAFT | sed 's/$/\r/' > "$p/.sdd/feat/spec.md"
+check "crlf-headings-accepted" "$p" ".sdd/feat/spec.md" 0
+
 # --- all four valid STATUS tokens accepted ---
 p=$(new_proj v1)
 for tok in DRAFT IN_REVIEW FINALIZED BLOCKED; do

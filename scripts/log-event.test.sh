@@ -18,10 +18,13 @@ assert "append-one-line" "[ \$(wc -l < '$work/p/.sdd/feat/EVENTS.jsonl') -eq 1 ]
 assert "append-schema" "jq -e '.v == 1 and .slug == \"feat\" and .kind == \"gate\" and .source == \"script:x\" and (.ts | test(\"Z\$\"))' '$work/p/.sdd/feat/EVENTS.jsonl' >/dev/null"
 run "log_event '' '{\"kind\":\"gate\"}'"
 assert "empty-slug-goes-to-project-log" "[ -f '$work/p/.sdd/_events.jsonl' ]"
+before=$(wc -l < "$work/p/.sdd/feat/EVENTS.jsonl" | tr -d ' ')
 out=$(run "log_event ../x '{}'; echo rc=\$?" 2>&1)
-assert "bad-slug-swallowed" "printf '%s' \"\$out\" | grep -q 'rc=0'"
+assert "bad-slug-swallowed" "printf '%s' \"\$out\" | grep -q 'rc=0' && printf '%s' \"\$out\" | grep -q 'bad slug'"
+assert "bad-slug-writes-nothing" "[ ! -e '$work/p/x/EVENTS.jsonl' ] && [ ! -e '$work/x/EVENTS.jsonl' ]"
 out=$(run "log_event feat 'not json'; echo rc=\$?" 2>&1)
-assert "bad-payload-swallowed" "printf '%s' \"\$out\" | grep -q 'rc=0'"
+assert "bad-payload-swallowed" "printf '%s' \"\$out\" | grep -q 'rc=0' && printf '%s' \"\$out\" | grep -q 'bad event payload'"
+assert "bad-payload-appends-nothing" "[ \$(wc -l < '$work/p/.sdd/feat/EVENTS.jsonl' | tr -d ' ') -eq $before ]"
 chmod a-w "$work/p/.sdd/feat/EVENTS.jsonl"
 out=$(run "log_event feat '{}'; echo rc=\$?" 2>&1)
 assert "unwritable-swallowed" "printf '%s' \"\$out\" | grep -q 'rc=0' && printf '%s' \"\$out\" | grep -q 'event dropped'"

@@ -42,7 +42,7 @@ js() { jq -n --arg s "$1" '$s'; }
 # markers <slug> <root>… — distinct AC ids marked `<slug>/AC-…` under the roots, sorted
 markers() {
   local slug="$1"; shift
-  find "$@" \( -name .git -o -name node_modules -o -name .sdd \) -prune -o -type f ! -name '*.md' \
+  find -H "$@" \( -name .git -o -name node_modules -o -name .sdd \) -prune -o -type f ! -name '*.md' \
       -exec env SLUG="$slug" awk '
     BEGIN { pre = ENVIRON["SLUG"] "/AC-"; L = length(pre) }
     { line = $0; sub(/\r$/, "", line); off = 0
@@ -58,10 +58,13 @@ markers() {
       } }' {} + 2>/dev/null | LC_ALL=C sort -u
 }
 
-# test_roots <workspace-dir> — the test roots, one per line; returns 1 on a bad TEST_ROOTS
+# test_roots <workspace-dir> — the test roots, one per line; returns 1 on a bad TEST_ROOTS.
+# A root is a directory (a symlink to one is followed) or a single test file; entries are
+# comma-separated and trimmed at both ends, so a root may contain spaces.
 test_roots() {
   local tr e oldifs out=""
-  tr=$(field "$1/PROGRESS.md" TEST_ROOTS)
+  tr=$({ grep -m1 "^TEST_ROOTS:" "$1/PROGRESS.md" 2>/dev/null || true; } | sed -E 's/^TEST_ROOTS:[[:space:]]*//' | tr -d '\r')
+  tr=$(printf '%s' "$tr" | sed -E 's/[[:space:]]*,[[:space:]]*/,/g; s/[[:space:]]+$//')
   if [ -n "$tr" ]; then
     case ",$tr," in *,,*) return 1 ;; esac
     oldifs="$IFS"; IFS=','; set -f
@@ -105,7 +108,7 @@ check_one() {
 
   if [ -z "$roots" ]; then missing_root=1
   else
-    while IFS= read -r e; do [ -d "$e" ] || missing_root=1; done <<EOF_R
+    while IFS= read -r e; do [ -d "$e" ] || [ -f "$e" ] || missing_root=1; done <<EOF_R
 $roots
 EOF_R
   fi

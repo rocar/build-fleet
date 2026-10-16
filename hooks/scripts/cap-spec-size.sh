@@ -14,10 +14,12 @@
 # tier defaults. The product tier (.sdd/_product/) is exempt.
 #
 # Lines are what a reader pays. lines(text) = newline count, plus 1 for a non-empty
-# unterminated last line (awk's NR). An Edit's delta is counted in newline characters
-# (new − old) × occurrences, so joining or splitting lines is counted exactly.
-# Handles: leading-zero values (010 → decimal 10, not octal 8); newline-safe
-# replace_all occurrence counting; NotebookEdit refuses closed (cannot project lines).
+# unterminated last line (awk's NR). An Edit is applied to the current text (first
+# occurrence, or every one under replace_all) and the result is counted, so joining,
+# splitting or terminating lines is exact. A write over budget that does not grow the
+# spec is allowed, so an over-budget spec can always be cut down.
+# Handles: leading-zero values (010 → decimal 10, not octal 8); NotebookEdit refuses
+# closed (cannot project lines).
 set -euo pipefail
 trap 'echo "build-fleet: gate script errored unexpectedly — failing closed" >&2; exit 2' ERR
 
@@ -40,7 +42,12 @@ case "$rel" in
   "$phys"/*) rel="${rel#"$phys"/}" ;;
   ./*) rel="${rel#./}" ;;
 esac
-case "$rel" in */../*|../*|*/..|..) exit 0 ;; esac   # traversal is not inside .sdd/
+case "$rel" in
+  */../*|../*|*/..|..)
+    # A traversal path that names .sdd/ could resolve to a spec; it is never measured, so refuse it.
+    case "$rel" in *.sdd/*spec.md) echo "build-fleet: cap-spec-size refused — '${path}' contains '..'; write the spec by its plain path" >&2; exit 2 ;; esac
+    exit 0 ;;
+esac
 case "$rel" in
   .sdd/_product/*) exit 0 ;;
   .sdd/*/spec.md) ;;
@@ -64,7 +71,6 @@ cap=$((10#$cap))                                    # normalize (leading zeros: 
 [ "$cap" -gt 0 ] || exit 0                          # 0 disables the cap
 
 lines_of() { awk 'END { print NR }'; }
-nl_of() { tr -cd '\n' | wc -c | tr -d ' '; }
 current=0
 [ -f "$rel" ] && current=$(lines_of < "$rel")
 
@@ -73,21 +79,20 @@ case "$tool" in
     projected=$(printf '%s' "$input" | jq -j '.tool_input.content // empty' | lines_of)
     ;;
   Edit)
-    old=$(printf '%s' "$input" | jq -j '.tool_input.old_string // empty' | nl_of)
-    new=$(printf '%s' "$input" | jq -j '.tool_input.new_string // empty' | nl_of)
-    n=1
-    if [ "$(printf '%s' "$input" | jq -r '.tool_input.replace_all // false')" = "true" ] && [ -f "$rel" ]; then
-      oldstr=$(printf '%s' "$input" | jq -j '.tool_input.old_string // empty')
-      if [ -n "$oldstr" ]; then
-        content=$(cat "$rel"; printf x); content="${content%x}"   # keep trailing newlines
-        n=0; rest="$content"
-        while [ -n "$rest" ] && [ "${rest#*"$oldstr"}" != "$rest" ]; do
-          rest="${rest#*"$oldstr"}"; n=$((n+1))
-        done
-        [ "$n" -gt 0 ] 2>/dev/null || n=1
-      fi
-    fi
-    projected=$(( current + (new - old) * n ))
+    # Apply the edit to the current text in jq (split/join on a string is literal, and
+    # no shell expansion touches newlines or quotes) and count the result's lines as awk
+    # NR would: newlines, plus one for a non-empty unterminated last line.
+    src="$rel"; [ -f "$src" ] || src=/dev/null
+    projected=$(printf '%s' "$input" | jq -r --rawfile c "$src" '
+      .tool_input as $t | ($t.old_string // "") as $o | ($t.new_string // "") as $n
+      | (if $o == "" then $c + $n   # no anchor: count it as an addition (fails closed)
+         else ($c | split($o)) as $p
+           | if ($p | length) < 2 then $c
+             elif ($t.replace_all // false) == true then $p | join($n)
+             else $p[0] + $n + ($p[1:] | join($o)) end
+         end) as $r
+      | if $r == "" then 0
+        else ($r | split("\n") | length) - (if ($r | endswith("\n")) then 1 else 0 end) end')
     ;;
   NotebookEdit)
     echo "build-fleet: cap-spec-size refused — ${rel} is a spec file; NotebookEdit cannot be size-projected. Use Write or Edit." >&2
@@ -97,6 +102,7 @@ case "$tool" in
 esac
 
 [ "$projected" -le "$cap" ] && exit 0
+[ "$projected" -le "$current" ] && exit 0            # over budget but not growing: a cut may land
 
 cat >&2 <<MSG
 build-fleet: cap-spec-size refused — ${rel} would become ${projected} lines, over its ${cap}-line budget.

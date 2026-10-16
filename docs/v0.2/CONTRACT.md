@@ -44,7 +44,7 @@ verbatim before it.
 Stop reasons: `spec-ready`, `plan-ready`, `built`, `shipped`, `item-in-flight`, `parked`,
 `escalated`, `step-refused`, `no-progress`, `step-cap`, `unknown-state`, `nothing-to-do`,
 `known-cause` (triage closed a bug whose cause was already known; `next` is `start` with the fix),
-`spec-not-ready`, `not-built`, `drift` (the tests' criterion markers failed the drift gate; `next` is `build`, which repairs it), `unsupported-schema` (the active feature was started by an older build-fleet; `next` is `status park <reason>`); and `status`, used only by `lite-next.sh status` when the
+`spec-not-ready`, `not-built`, `drift` (the tests' criterion markers failed the drift gate; `next` is `build`, which repairs it), `unsupported-schema` (the active feature was started by an older build-fleet; `next` is `status park <reason>`), `bad-args` (`build` or `ship` given words it does not take), `product-exists` (`start --product` while a product tier exists); and `status`, used only by `lite-next.sh status` when the
 next move is a step.
 
 The routing table lives in `scripts/lite-next.sh` and is specified in
@@ -68,7 +68,8 @@ BUILD_FLEET_DRIFT_GATE_SUMMARY: {"checked":N,"unchecked":M,"in_progress":K,"fail
 ```
 
 Reasons: `bad-field`, `unsupported-schema`, `no-criteria`, `no-test-roots`, `untested`,
-`unknown-criterion`. `DRIFT_GATE: off` is the only unchecked forward feature. The script's exit status (2 on
+`unknown-criterion`. A forward feature is unchecked when it has `DRIFT_GATE: off`, and, in `--all`, when its
+`SDD_SCHEMA` is not 2 (it is reported unchecked, never failed). The script's exit status (2 on
 any failure) exists for CI; inside the flow, read the line. The steps that run it add:
 
 ```

@@ -18,6 +18,8 @@
 #   The indented run ends at the first line matching "^- [", "^status:", "^## " or EOF.
 #   A "  refuted-by: …" anywhere in that run closes a blocker or a major.
 #   `status:` lines are NOT evaluated (informational since v0.9).
+#   An indented finding bullet ("  - [blocker]" / "  - [major]", nested under another line)
+#   is listed under "unparsed" and refuses with unparsed-findings — never invisible.
 #
 # Verified blocks (second line "shape: verified", REVIEW_SHAPE: verified) are judged
 # by the rules in scripts/lib/verified-review.jq instead: the vote is recomputed from
@@ -29,7 +31,7 @@
 # Usage: finalize-gate.sh <slug> [--roster a,b,c] [--report]
 #   ROSTER defaults to REVIEW_ROLES in PROGRESS.md, else architect,qa,coder.
 # Output (stdout, exactly one line):
-#   gate mode:   BUILD_FLEET_FINALIZE_GATE: {"feature","cycle","pass":bool,"reasons":[…],"open_blockers":[…],"open_majors":[…],"majors_without_adr":[…]}
+#   gate mode:   BUILD_FLEET_FINALIZE_GATE: {"feature","cycle","pass":bool,"reasons":[…],"open_blockers":[…],"open_majors":[…],"majors_without_adr":[…],"unparsed":[…]}
 #   --report:    BUILD_FLEET_FINALIZE_REPORT: {…the same fields…, "cycle_total", "shape", "spec_changed", "open":[{id,severity,text,raised_by,why,…}]}
 # Gate mode logs one gate event (script:finalize-gate) to .sdd/<slug>/EVENTS.jsonl;
 # --report logs nothing, writes nothing, never refuses on spec-changed-since-review,
@@ -73,7 +75,7 @@ roster="$roster_arg"
 [ -n "$roster" ] || roster="architect,qa,coder"
 roles=$(printf '%s' "$roster" | tr ',' '\n' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | grep . || true)
 
-reasons=""; open_blockers=""; open_majors=""; without_adr=""
+reasons=""; open_blockers=""; open_majors=""; without_adr=""; unparsed=""
 vblocks=""; legacy_blocks=0
 add() { eval "$1=\"\${$1}\${$1:+\$'\\n'}\$2\""; }
 
@@ -127,6 +129,9 @@ for role in $roles; do
           ;;
         *) add open_majors "$id" ;;
       esac
+    elif printf '%s' "$line" | grep -qE '^[[:space:]]+-[[:space:]]+\[(blocker|major)\]'; then
+      # an indented finding bullet is a finding the grammar cannot classify — never invisible
+      add unparsed "${role}: $(printf '%s' "$line" | sed -E 's/^[[:space:]]+//')"
     fi
     k=$((k+1))
   done
@@ -162,18 +167,21 @@ if [ -n "$vblocks" ]; then
       [ -n "$pev" ] || pev='{}'
       pfails=$(printf '%s' "$pev" | jq -c '.failures // []') || pfails='[]'
       prev_open=$(printf '%s' "$pblocks" | vjson -c -Rs --argjson fails "$pfails" --argjson adrs "$adrs" "${RULES}"'
-        split("\n## ") | map(vr_parse_block) | add // [] | map(vr_outcome($fails) | . + {why: vr_open($adrs)}) | map(select(.why != null))') \
+        vr_parse_blocks | map(vr_outcome($fails) | . + {why: vr_open($adrs)}) | map(select(.why != null))') \
         || { add reasons "verified-eval-failed"; prev_open='[]'; }
     fi
   fi
   vopen=$(printf '%s' "$vblocks" | vjson -c -Rs --argjson fails "$fails" --argjson adrs "$adrs" --argjson prev "$prev_open" "${RULES}"'
-    split("\n## ") | map(vr_parse_block) | add // [] | . as $fs
+    vr_parse_blocks | . as $fs
     | ($fs | map(.id)) as $listed
     | ($fs | map(vr_outcome($fails) | . + {why: (if .carried != null and vr_open($adrs) != null then "carried" elif .reopened_closure and vr_open($adrs) != null then "reopened-closure" else vr_open($adrs) end)})
            | map(select(.why != null)))
       + [$prev[] | select(.id as $i | $listed | index($i) | not) | . + {why: "carried-open"}]
-    | map({id, severity: .final, text, raised_by: (.id | sub("-c[0-9]+-[0-9]+$"; "")), why,
-           quote, absent, ref, test, disposition, carried} | with_entries(select(.value != null)))') \
+    | map({id, severity: .final, text, raised_by: vr_raiser, why,
+           quote, absent, ref, test, disposition,
+           carried: (.carried // (if (.closure | type) == "object" and (.closure.from_cycle | type) == "number"
+                                  then {from_cycle: .closure.from_cycle, reason: "closure-rejected"} else null end))}
+         | with_entries(select(.value != null)))') \
     || { add reasons "verified-eval-failed"; vopen='[]'; }
   while IFS= read -r row; do
     [ -n "$row" ] || continue
@@ -191,6 +199,7 @@ fi
 [ -z "$open_blockers" ] || add reasons "open-blockers"
 [ -z "$open_majors" ] || add reasons "majors-open"
 [ -z "$without_adr" ] || add reasons "majors-without-adr"
+[ -z "$unparsed" ] || add reasons "unparsed-findings"
 
 tojson() { if [ -z "$1" ]; then printf '[]'; else printf '%s\n' "$1" | jq -R . | jq -sc .; fi; }
 pass=true; [ -z "$reasons" ] || pass=false
@@ -200,14 +209,14 @@ if [ "$report" = true ]; then
   if [ -n "$vblocks" ]; then if [ "$legacy_blocks" -gt 0 ]; then shape=mixed; else shape=verified; fi; fi
   printf 'BUILD_FLEET_FINALIZE_REPORT: %s\n' "$(jq -cn --argjson f "$slug_json" --argjson c "$cycle" --argjson t "$cycle_total" \
     --arg shape "$shape" --argjson pass "$pass" --argjson reasons "$(tojson "$reasons")" \
-    --argjson ob "$(tojson "$open_blockers")" --argjson om "$(tojson "$open_majors")" --argjson wa "$(tojson "$without_adr")" \
+    --argjson ob "$(tojson "$open_blockers")" --argjson om "$(tojson "$open_majors")" --argjson wa "$(tojson "$without_adr")" --argjson up "$(tojson "$unparsed")" \
     --argjson sc "$spec_changed" --argjson open "$vopen" \
     '{feature: $f, cycle: $c, cycle_total: $t, shape: $shape, pass: $pass, reasons: $reasons, open_blockers: $ob,
-      open_majors: $om, majors_without_adr: $wa, spec_changed: $sc, open: $open}')"
+      open_majors: $om, majors_without_adr: $wa, unparsed: $up, spec_changed: $sc, open: $open}')"
   exit 0
 fi
-printf 'BUILD_FLEET_FINALIZE_GATE: {"feature":%s,"cycle":%s,"pass":%s,"reasons":%s,"open_blockers":%s,"open_majors":%s,"majors_without_adr":%s}\n' \
-  "$slug_json" "$cycle" "$pass" "$(tojson "$reasons")" "$(tojson "$open_blockers")" "$(tojson "$open_majors")" "$(tojson "$without_adr")"
+printf 'BUILD_FLEET_FINALIZE_GATE: {"feature":%s,"cycle":%s,"pass":%s,"reasons":%s,"open_blockers":%s,"open_majors":%s,"majors_without_adr":%s,"unparsed":%s}\n' \
+  "$slug_json" "$cycle" "$pass" "$(tojson "$reasons")" "$(tojson "$open_blockers")" "$(tojson "$open_majors")" "$(tojson "$without_adr")" "$(tojson "$unparsed")"
 decision=pass; [ "$pass" = true ] || decision=refuse
 log_event "$slug" "$(jq -cn --arg d "$decision" --argjson c "$cycle" --argjson t "$cycle_total" --argjson r "$(tojson "$reasons")" \
   '{kind: "gate", source: "script:finalize-gate", decision: $d, cycle: $c, cycle_total: $t, reasons: $r}')"

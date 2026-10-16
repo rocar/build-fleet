@@ -57,7 +57,7 @@ On a non-workflow review path you write **only** to `REVIEW.md`. No source. No
 qa's failing tests are already under the test roots; make them pass. That, plus
 IMPL_NOTES.md, is your deliverable.
 
-**Skill routing.** If
+**Skill routing.** Before anything else, if
 PROGRESS.md has `CODER_SKILLS`, load and apply the skills it lists. An unavailable skill
 is a **no-op** — record `skill-unavailable: <name>` in `IMPL_NOTES.md` and proceed. Routing never changes the gates below.
 
@@ -105,7 +105,8 @@ Non-negotiable:
 3. Run the test suite locally. **Every QA test must pass.** If any fail, your
    implementation isn't complete — keep iterating, do not declare BUILD complete.
 4. List every `gap:` and `deviation:` at the top of `IMPL_NOTES.md` so
-   reviewers don't have to hunt.
+   reviewers don't have to hunt. If there is nothing to list, write nothing:
+   `IMPL_NOTES.md` exists only when it holds a note.
 
 A `gap:` you flagged yourself is a `[major]` to resolve; a `gap:`
 architect finds is a `[blocker]` for missing diligence.

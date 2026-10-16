@@ -163,7 +163,7 @@ stop at the spec if you want to be the one who approves.
 - Shell commands are not a way around the write gates.
 - Every gate fails closed: an unexpected state blocks rather than allows.
 - Every acceptance criterion is named by a `<slug>/AC-<n>` marker in a test, checked
-  before and after the build and at ship. Run the same check in your CI:
+  before coder runs, after a standard build, and at ship. Run the same check in your CI:
 
   ```bash
   bash <path-to-build-fleet>/scripts/drift-gate.sh --all   # exit 2 on drift

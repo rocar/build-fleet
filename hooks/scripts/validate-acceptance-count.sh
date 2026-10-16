@@ -28,7 +28,12 @@ input=$(cat)
 file_path=$(extract_file_path "$input")
 [ -n "$file_path" ] || exit 0
 [ "$(basename "$file_path")" = "spec.md" ] || exit 0
-case "$file_path" in */../*|../*|*/..|..) exit 0 ;; esac
+case "$file_path" in
+  */../*|../*|*/..|..)
+    # A traversal path that names .sdd/ could resolve to a spec; it is never counted, so refuse it.
+    case "$file_path" in *.sdd/*) echo "build-fleet: validate-acceptance-count refused — '${file_path}' contains '..'; write the spec by its plain path" >&2; exit 2 ;; esac
+    exit 0 ;;
+esac
 case "$file_path" in *.sdd/*) ;; *) exit 0 ;; esac
 [ -f "$file_path" ] || exit 0
 

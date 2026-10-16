@@ -27,6 +27,29 @@ want    implement-test-roots     commands/implement.md 'TEST_ROOTS'
 want    implement-markers-mode   commands/implement.md 'drift-gate.sh" --markers <slug>'
 wantnot implement-rows-wording   commands/implement.md 'the rows the gate names'
 
+# ---- 0.12.1: repair re-entry, signal wording, notes ----
+want    implement-stops-set-qa-fail commands/implement.md 'every stop in steps b2 and e2 sets `QA_FAIL: drift`'
+want    implement-repair-gate-first commands/implement.md 'First run the drift gate'
+wantnot implement-tests-in-tests    commands/implement.md 'tests in tests/'
+want    implement-e2-count          commands/implement.md 'passing tests under the test roots'
+want    implement-notes-null        commands/implement.md '"impl_notes_path":null'
+want    implement-repair-recorded   commands/implement.md 'DRIFT_REPAIR:'
+want    handoff-review-header       commands/handoff.md   'create it with the standard append-only header'
+wantnot qa-tests-in-tests           agents/qa.md          'tests in tests/'
+wantnot protocol-tests-in-tests     skills/sdd-protocol/SKILL.md 'tests in tests/'
+want    coder-no-empty-notes        agents/coder.md       'If there is nothing to list, write nothing'
+
+# ---- 0.12.1: review blocks are findings only — no prose about a status: line ----
+wantnot status-no-status-value   commands/status.md          '`status:` line value'
+wantnot status-no-status-eval    commands/status.md          '`status:` lines are not evaluated'
+wantnot handoff-no-status-info   commands/handoff.md         '`status:` is informational'
+wantnot handoff-no-status-eval   commands/handoff.md         '`status:` lines are never evaluated'
+wantnot finalize-no-status-info  commands/finalize.md        '`status:` lines are informational'
+wantnot protocol-no-status-info  skills/sdd-protocol/SKILL.md '`status:` is informational'
+
+want    finalize-lists-unparsed   commands/finalize.md  '`unparsed-findings` — a reviewer block holds a finding bullet the gate cannot read'
+want    implement-repair-no-count commands/implement.md 'with no count to compare'
+
 # ---- flow (§3.3) ----
 want new-feature-schema    commands/new-feature.md '   SDD_SCHEMA: 2'
 want implement-calls-gate  commands/implement.md   'scripts/drift-gate.sh'

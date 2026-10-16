@@ -197,6 +197,36 @@ assert "test-roots-dot-slash-sdd" "[ $rc -eq 2 ] && has '\"reasons\":[\"bad-fiel
 proj; printf 'PHASE: BUILD\nTEST_ROOTS: .\n' | feat f; spec f AC-1; printf '{"m":"f/AC-1"}\n' > "$P/.sdd/f/EVENTS.jsonl"; run f
 assert "dot-root-skips-sdd" "[ $rc -eq 2 ] && has '\"untested\":[\"AC-1\"]'"
 
+# --- test roots: spaces, symlinks, files ---
+proj; printf 'PHASE: BUILD\nTEST_ROOTS: my tests\n' | feat f; spec f AC-1
+src "my tests/t.py" <<'T'
+# f/AC-1
+T
+run f
+assert "root-with-space" "[ $rc -eq 0 ] && has '\"pass\":true'"
+proj; printf 'PHASE: BUILD\nTEST_ROOTS:  a , b \n' | feat f; spec f AC-1 AC-2
+src a/t.py <<'T'
+# f/AC-1
+T
+src b/t.py <<'T'
+# f/AC-2
+T
+run f
+assert "roots-trimmed" "[ $rc -eq 0 ] && has '\"pass\":true'"
+proj; printf 'PHASE: BUILD\n' | feat f; spec f AC-1
+src real/t.py <<'T'
+# f/AC-1
+T
+ln -s real "$P/tests"
+run f
+assert "symlinked-root" "[ $rc -eq 0 ] && has '\"pass\":true'"
+proj; printf 'PHASE: BUILD\nTEST_ROOTS: tests/test_f.py\n' | feat f; spec f AC-1
+src tests/test_f.py <<'T'
+# f/AC-1
+T
+run f
+assert "file-root" "[ $rc -eq 0 ] && has '\"pass\":true'"
+
 # --- usage ---
 proj; run ../x
 assert "bad-slug" "[ $rc -eq 1 ]"

@@ -20,4 +20,12 @@ check "write-project-events-refused"   Write ".sdd/_events.jsonl" 2
 check "write-review-allowed"           Write ".sdd/feat/REVIEW.md" 0
 check "write-source-allowed"           Write "src/EVENTS.jsonl.md" 0
 check "events-outside-sdd-allowed"     Write "docs/EVENTS.jsonl" 0
+raw() { # raw <name> <payload> <want_rc> — a payload jq cannot parse
+  local rc=0
+  ( cd "$work" && printf '%s' "$2" | CLAUDE_PROJECT_DIR="$work" bash "$HOOK" >/dev/null 2>&1 ); rc=$?
+  if [ "$rc" -eq "$3" ]; then pass=$((pass+1)); printf 'ok   %-40s rc=%s\n' "$1" "$rc"
+  else fail=$((fail+1)); printf 'FAIL %-40s want=%s got=%s\n' "$1" "$3" "$rc"; fi
+}
+raw "unparseable-names-events-refused" '{"tool_input":{"file_path":".sdd/feat/EVENTS.jsonl"' 2
+raw "unparseable-other-allowed"        '{"tool_input":{"file_path":"src/a.py"' 0
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]

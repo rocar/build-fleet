@@ -11,7 +11,7 @@ last_cycle_block() {
   start=$({ grep -nE "^##[[:space:]]+Cycle[[:space:]]+${cycle}[[:space:]]+(—|–|-)[[:space:]]+${role}[[:space:]]+(—|–|-)" "$review" || true; } | tail -1 | cut -d: -f1)
   [ -n "$start" ] || return 0
   next=$({ tail -n +"$((start+1))" "$review" | grep -n '^## ' || true; } | head -1 | cut -d: -f1)
-  if [ -n "$next" ]; then end=$((start+next-1)); else end=$(wc -l < "$review" | tr -d ' '); fi
+  if [ -n "$next" ]; then end=$((start+next-1)); else end=$(grep -c '' "$review" || true); fi   # grep -c '' counts an unterminated last line; wc -l does not
   sed -n "${start},${end}p" "$review"
 }
 

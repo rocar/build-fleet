@@ -36,6 +36,29 @@ t "kill-on-two-valid-refutes" "$H
 $(up 1 major)
 $(rf 2 minor)
 $(rf 3 minor)" "$OUT" '[{"id":"qa-c1-1","final":"minor","killed":true}]'
+# A hand-wrapped continuation (4+ spaces) joins the line above it: a wrapped verdict still votes.
+t "wrapped-verdict-joins" "$H
+- [major] (qa-c1-1) c
+$(up 1 major)
+  verdict: {\"v\":2,\"vote\":\"refute\",\"severity\":\"minor\",
+    \"reason\":\"$R\",\"quote\":$Q}
+$(rf 3 minor)" "$OUT" '[{"id":"qa-c1-1","final":"minor","killed":true}]'
+t "wrapped-quote-joins" "$H
+- [major] (qa-c1-1) c
+  quote: {\"file\":\"spec.md\",
+     \"text\":\"abc def ghi\"}
+  test: t" '[$fs[] | {q: .quote.text, test}]' '[{"q":"abc def ghi","test":"t"}]'
+# ...but a value that already parsed is never joined: a hand note under it stays a note.
+t "parsed-quote-not-joined" "$H
+- [major] (qa-c1-1) c
+  quote: {\"file\":\"spec.md\",\"text\":\"abc def ghi\"}
+    (hand note)" '[$fs[] | .quote.text]' '["abc def ghi"]'
+# ...and any other line ends the join: a 4-space line after an unknown key joins nothing.
+t "join-reset-by-other-line" "$H
+- [major] (qa-c1-1) c
+  verdict: {\"v\":1,\"vote\":\"refute\",
+  refuted-by: x
+    \"severity\":\"minor\"}" '[$fs[] | .verdicts[0].invalid]' '[true]'
 # A verdict counts only from a numbered verifier (v = 1, 2 or 3): hand-written lines
 # with no v, or a v outside the panel, never vote — they can neither kill nor demote.
 nv() { printf '  verdict: {"vote":"refute","severity":"%s","reason":"%s","quote":%s}' "$1" "$R" "$Q"; }

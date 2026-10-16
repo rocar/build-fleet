@@ -95,6 +95,23 @@ check("render-killed-no-disposition", !lines.some((l) => l.startsWith("  disposi
 [c] = applyVerifiedVote([f], [panels[0], panels[0], null]);
 lines = formatVerifiedFindingLines(c, { "qa-c1-1": { action: "adr", adr_id: 4 } });
 check("render-upheld-major-disposition", lines[lines.length - 1] === "  disposition: adr ADR-4");
+// Closure claims: only a carried finding's own raiser may claim it, once; the claim keeps
+// the finding's anchor, ref, test and from_cycle so a rejected closure carries intact.
+{
+  const K = [{ id: "qa-c1-1", severity: "major", raised_by: "qa", text: "t", quote: { file: "spec.md", text: "abc def ghij" }, ref: "AC-1", test: "tst", carried: { from_cycle: 1, reason: "not-addressed" } }];
+  const cl = { file: "spec.md", text: "Retries are capped at 3" };
+  const rv = [{ role: "qa", payload: { closures: [{ id: "qa-c1-1", closure: cl }, { id: "qa-c1-1", closure: cl }] } },
+              { role: "architect", payload: { closures: [{ id: "qa-c1-1", closure: cl }] } }];
+  const sc = selectClosureClaims(rv, K, 3);
+  check("closure-claims-deduped", sc.closures.length === 1 && eq(sc.duplicate, ["qa-c1-1"]) && eq(sc.ignored, ["qa-c1-1"]));
+  const c0 = sc.closures[0];
+  check("closure-keeps-evidence", c0.anchor.kind === "quote" && c0.anchor.text === "abc def ghij" && c0.ref === "AC-1" && c0.test === "tst" && c0.closure.from_cycle === 1);
+  const c2 = selectClosureClaims([{ role: "qa", payload: { closures: [{ id: "qa-c1-1", closure: cl }] } }], [{ ...K[0], carried: undefined }], 3).closures[0];
+  check("closure-from-cycle-defaults-previous", c2.closure.from_cycle === 2);
+  const ln = formatVerifiedFindingLines({ ...c0, verdicts: [] }, {});
+  check("closure-line-carries-from-cycle", ln.some((l) => l === '  closure: {"file":"spec.md","text":"Retries are capped at 3","from_cycle":1}'));
+  check("delta-demotions-skip-carried", eq(deltaDemotionsToReport(["qa-c2-1", "qa-c3-1"], [{ id: "qa-c2-1" }]), ["qa-c3-1"]));
+}
 console.log("-----\npassed=" + pass + " failed=" + fail);
 process.exit(fail === 0 ? 0 : 1);
 JS

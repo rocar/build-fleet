@@ -52,11 +52,20 @@ field(){
 }
 num(){ case "$1" in ''|*[!0-9]*) printf 0 ;; *) printf '%s' "$1" ;; esac; }
 
-# slugify <text> — first six words as lowercase kebab, at most 40 chars, unique under .sdd/.
+# slug_base <text> — first six words as lowercase kebab, at most 40 chars. Common Latin
+# accents are folded by a fixed byte table (Café → cafe; iconv's TRANSLIT is locale-
+# dependent on glibc); empty when no ASCII letter or digit remains.
+LATIN_FOLD='s/à/a/g;s/À/A/g;s/á/a/g;s/Á/A/g;s/â/a/g;s/Â/A/g;s/ã/a/g;s/Ã/A/g;s/ä/a/g;s/Ä/A/g;s/å/a/g;s/Å/A/g;s/ā/a/g;s/Ā/A/g;s/ă/a/g;s/Ă/A/g;s/ç/c/g;s/Ç/C/g;s/ć/c/g;s/Ć/C/g;s/č/c/g;s/Č/C/g;s/ď/d/g;s/Ď/D/g;s/đ/d/g;s/Đ/D/g;s/ð/d/g;s/Ð/D/g;s/è/e/g;s/È/E/g;s/é/e/g;s/É/E/g;s/ê/e/g;s/Ê/E/g;s/ë/e/g;s/Ë/E/g;s/ē/e/g;s/Ē/E/g;s/ę/e/g;s/Ę/E/g;s/ě/e/g;s/Ě/E/g;s/ğ/g/g;s/Ğ/G/g;s/ì/i/g;s/Ì/I/g;s/í/i/g;s/Í/I/g;s/î/i/g;s/Î/I/g;s/ï/i/g;s/Ï/I/g;s/ī/i/g;s/Ī/I/g;s/ı/i/g;s/İ/I/g;s/ł/l/g;s/Ł/L/g;s/ľ/l/g;s/Ľ/L/g;s/ñ/n/g;s/Ñ/N/g;s/ń/n/g;s/Ń/N/g;s/ň/n/g;s/Ň/N/g;s/ò/o/g;s/Ò/O/g;s/ó/o/g;s/Ó/O/g;s/ô/o/g;s/Ô/O/g;s/õ/o/g;s/Õ/O/g;s/ö/o/g;s/Ö/O/g;s/ø/o/g;s/Ø/O/g;s/ō/o/g;s/Ō/O/g;s/ř/r/g;s/Ř/R/g;s/ś/s/g;s/Ś/S/g;s/š/s/g;s/Š/S/g;s/ş/s/g;s/Ş/S/g;s/ť/t/g;s/Ť/T/g;s/ţ/t/g;s/Ţ/T/g;s/ù/u/g;s/Ù/U/g;s/ú/u/g;s/Ú/U/g;s/û/u/g;s/Û/U/g;s/ü/u/g;s/Ü/U/g;s/ū/u/g;s/Ū/U/g;s/ů/u/g;s/Ů/U/g;s/ý/y/g;s/Ý/Y/g;s/ÿ/y/g;s/Ÿ/Y/g;s/ź/z/g;s/Ź/Z/g;s/ż/z/g;s/Ż/Z/g;s/ž/z/g;s/Ž/Z/g;s/ß/ss/g;s/æ/ae/g;s/Æ/AE/g;s/œ/oe/g;s/Œ/OE/g;s/þ/th/g;s/Þ/TH/g'
+slug_base(){
+  printf '%s' "$1" | LC_ALL=C sed "$LATIN_FOLD" | awk '{ for (i = 1; i <= NF && i <= 6; i++) printf "%s ", $i }' \
+    | LC_ALL=C tr 'A-Z' 'a-z' | LC_ALL=C tr -cs 'a-z0-9' '-' | sed 's/^-*//; s/-*$//' | LC_ALL=C cut -c1-40 | sed 's/-*$//'
+}
+# slugify <text> <fallback> — slug_base, unique under .sdd/. Words in a script with no
+# ASCII form (日本語) take <fallback>; symbols only give an empty slug.
 slugify(){
   local base s i
-  base=$(printf '%s' "$1" | awk '{ for (i = 1; i <= NF && i <= 6; i++) printf "%s ", $i }' \
-    | LC_ALL=C tr 'A-Z' 'a-z' | LC_ALL=C tr -cs 'a-z0-9' '-' | sed 's/^-*//; s/-*$//' | LC_ALL=C cut -c1-40 | sed 's/-*$//')
+  base=$(slug_base "$1")
+  if [ -z "$base" ] && printf '%s' "$1" | LC_ALL=C grep -q '[^ -~]'; then base="$2"; fi
   [ -n "$base" ] || return 0
   s="$base"; i=2
   while [ -e ".sdd/$s" ]; do s="$base-$i"; i=$((i + 1)); done
@@ -87,7 +96,12 @@ route_product(){
   [ -f "$pp" ] || { S nothing-to-do "" "no item in flight and no product backlog"; return; }
   ph=$(field "$pp" PHASE)
   case "$ph" in
-    PLAN) T plan-review "" "the product plan has not been reviewed" ;;
+    PLAN)
+      if [ "$(field "$pp" SIZE)" = small ] && [ "$(num "$(field "$pp" CYCLE)")" = 0 ]; then
+        S plan-ready "status ratify" "small product: ratification skips the plan review"
+      else
+        T plan-review "" "the product plan has not been reviewed"
+      fi ;;
     PLAN_REVIEW)
       local f
       for f in vision.md backlog.md STACK.md DECISIONS.md; do
@@ -96,7 +110,7 @@ route_product(){
         fi
       done
       S plan-ready "status ratify" "the product plan is reviewed and awaits ratification" ;;
-    ESCALATED) S escalated "status resolve <decision>" "the product plan is escalated" ;;
+    ESCALATED) S escalated "status resolve _product <decision>" "the product plan is escalated" ;;
     DEVELOPING)
       if ! grep -q '^<!-- BEGIN build-fleet:product' CLAUDE.md 2>/dev/null; then
         T product-memory "" "the product block in CLAUDE.md is missing"; return
@@ -120,13 +134,18 @@ route_idle(){  # nothing in .sdd/ACTIVE
         --product|--product\ *)
           if [ ! -f .sdd/_product/PROGRESS.md ]; then
             vision="${a#--product}"; vision="${vision# }"
-            slug=$(slugify "$vision")
+            slug=$(slugify "$vision" product)
             [ -n "$slug" ] || { S nothing-to-do "" "--product needs a vision in words"; return; }
             T new-product "$slug $vision" "no product tier yet"; return
-          fi ;;
+          fi
+          S product-exists "status" "a product tier already exists; edit .sdd/_product/vision.md instead"; return ;;
         "") ;;
         *)
-          slug=$(slugify "$a")
+          slug=$(slug_base "$a")
+          if [ -n "$slug" ] && [ "$(field ".sdd/$slug/PROGRESS.md" PHASE)" = PARKED ]; then
+            S parked "" "'$slug' is parked under this name; resuming it is a deliberate edit, or word the idea differently"; return
+          fi
+          slug=$(slugify "$a" feature)
           [ -n "$slug" ] || { S nothing-to-do "" "the idea has no usable words"; return; }
           T new-feature "$slug $a" "nothing in flight; scaffold the idea"; return ;;
       esac
@@ -174,7 +193,8 @@ route_feature(){
       case "$bs" in
         "") case "$phase" in
               CHANGE_REVIEW|HANDOFF) S built "ship" "already past BUILD" ;;
-              SPEC|REVIEW|FINALIZE|BUILD) T implement "" "finalized; the build has not started" ;;
+              SPEC|REVIEW) T finalize "" "the spec is finalized but PHASE is $phase; finalize sets BUILD" ;;
+              FINALIZE|BUILD) T implement "" "finalized; the build has not started" ;;
               *) S unknown-state "" "PHASE '$phase' not recognised" ;;
             esac ;;
         started|needs-iteration) T deep-build "" "build $bs; resume" ;;
@@ -184,6 +204,7 @@ route_feature(){
     ship)
       if [ "$qf" = drift ]; then S drift "build" "the criterion markers have drifted; build repairs it"; return; fi
       if [ "$bs" = done ] || { [ -z "$bs" ] && { [ "$phase" = CHANGE_REVIEW ] || [ "$phase" = HANDOFF ]; }; }; then
+        [ "$st" = FINALIZED ] || { S unknown-state "" "spec STATUS '$st' after a build; ship needs a FINALIZED spec"; return; }
         case "$phase" in
           BUILD|CHANGE_REVIEW|HANDOFF) T handoff "" "built; change review, then devops" ;;
           *) S unknown-state "" "PHASE '$phase' not recognised" ;;
@@ -232,9 +253,16 @@ route_active(){
     S parked "" "'$slug' is parked; resuming it is a deliberate edit"; return
   fi
   want=feature; [ "$c" = fix ] && want=bug
-  if [ "$lane" != "$want" ] || [ -n "$a" ]; then
+  # a new idea or symptom needs the slot: park the item in flight first
+  if [ -n "$a" ] && { [ "$c" = start ] || [ "$c" = fix ]; }; then
     S item-in-flight "status park <reason>" "'$slug' ($lane) is in flight"; return
   fi
+  if [ "$lane" != "$want" ]; then
+    if [ "$lane" = bug ]; then S item-in-flight "fix" "'$slug' (bug) is in flight; fix drives it"
+    else S item-in-flight "status" "'$slug' (feature) is in flight; status names its next command"; fi
+    return
+  fi
+  [ -z "$a" ] || { S bad-args "$c" "$c takes no arguments"; return; }
   if [ "$lane" = bug ]; then route_bug "$slug" "$phase"; return; fi
   if [ "$(field "$p" SDD_SCHEMA)" != 2 ]; then
     S unsupported-schema "status park <reason>" "'$slug' was started by an older build-fleet; park it and start it again"; return

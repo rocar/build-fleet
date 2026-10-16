@@ -12,22 +12,49 @@ def vr_norm:
   | gsub("[*_`]"; "") | gsub("\\s+"; " ") | ltrimstr(" ") | rtrimstr(" ");
 
 # Text of ONE "## Cycle N — role — ts" block → array of findings.
+# A continuation line ("  key: value") may be wrapped by hand: a following line indented
+# 4+ spaces joins it (one space between) while its JSON value does not parse yet, and the
+# joined value is parsed again. A value that parsed, or any other line, ends the join.
+def vr_set_kv($k; $v):
+  if $k == "verdict" then .cur.verdicts += [($v | (try fromjson catch {invalid: true}))]
+  elif ($k == "quote" or $k == "absent" or $k == "closure" or $k == "carried" or $k == "demoted")
+    then .cur[$k] = ($v | (try fromjson catch {invalid: true}))
+  elif ($k == "ref" or $k == "test" or $k == "disposition") then .cur[$k] = $v
+  else . end;
 def vr_parse_block:
   split("\n")
-  | reduce .[] as $l ({out: [], cur: null};
+  | reduce .[] as $l ({out: [], cur: null, kv: null};
       if ($l | test("^- \\[(blocker|major|minor)\\] \\(")) then
         (if .cur != null then .out += [.cur] else . end)
+        | .kv = null
         | .cur = (($l | capture("^- \\[(?<severity>blocker|major|minor)\\] \\((?<id>[^)]+)\\) ?(?<text>.*)$")) + {verdicts: []})
       elif .cur != null and ($l | test("^  [a-z_]+: ")) then
         ($l | capture("^  (?<k>[a-z_]+): (?<v>.*)$")) as $kv
-        | if $kv.k == "verdict" then .cur.verdicts += [($kv.v | (try fromjson catch {invalid: true}))]
-          elif ($kv.k == "quote" or $kv.k == "absent" or $kv.k == "closure" or $kv.k == "carried" or $kv.k == "demoted")
-            then .cur[$kv.k] = ($kv.v | (try fromjson catch {invalid: true}))
-          elif ($kv.k == "ref" or $kv.k == "test" or $kv.k == "disposition") then .cur[$kv.k] = $kv.v
-          else . end
-      elif .cur != null and ($l | test("^[^ ]")) then .out += [.cur] | .cur = null
-      else . end)
+        | .kv = (if ($kv.k == "ref" or $kv.k == "test" or $kv.k == "disposition")
+                   or ($kv.v | (try (fromjson | true) catch false)) then null else $kv end)
+        | vr_set_kv($kv.k; $kv.v)
+      elif .cur != null and .kv != null and ($l | test("^    +[^ ]")) then
+        (.kv.v + " " + ($l | ltrimstr(" ") | sub("^ +"; ""))) as $joined
+        | .kv.v = $joined
+        | (if .kv.k == "verdict" then .cur.verdicts |= .[:-1] else . end)
+        | vr_set_kv(.kv.k; $joined)
+        | (if ($joined | (try (fromjson | true) catch false)) then .kv = null else . end)
+      elif .cur != null and ($l | test("^[^ ]")) then .out += [.cur] | .cur = null | .kv = null
+      else .kv = null end)
   | (if .cur != null then .out + [.cur] else .out end);
+
+# Text of several blocks (split on "\n## ") → their findings, each tagged with its block's role.
+def vr_parse_blocks:
+  split("\n## ")
+  | map(. as $b | ([$b | capture("^(## )?Cycle [0-9]+ (—|–|-) (?<r>[^ ]+)")] | .[0].r // null) as $r
+        | vr_parse_block | map(. + {block_role: $r}))
+  | add // [];
+
+# Who raised a finding: the role prefix of a standard id (<role>-c<N>-<k>), else the role
+# of the block it is written in (a hand-written free-form id).
+def vr_raiser:
+  if (.id | test("^[a-z][a-z-]*-c[0-9]+-[0-9]+$")) then (.id | sub("-c[0-9]+-[0-9]+$"; ""))
+  else (.block_role // .id) end;
 
 def vr_failed($fails; $id; $where; $v):
   any($fails[]; .id == $id and .where == $where and ((.v // null) == $v));
@@ -90,11 +117,13 @@ def vr_open($adrs):
   else null end;
 
 # Findings → the quotes to check. Carried entries are skipped: their evidence was
-# checked in the cycle that raised them, against the spec as it was then.
+# checked in the cycle that raised them, against the spec as it was then. A closure
+# claim's own anchor is skipped for the same reason (only its closure quote is new).
 def vr_quotes:
   [ .[] | select(.carried == null) | . as $f
-    | (if ($f.quote | type) == "object" then {id: $f.id, where: "anchor", file: $f.quote.file, text: $f.quote.text} else empty end),
-      (if ($f.absent | type) == "object" then {id: $f.id, where: "anchor", file: $f.absent.file, section: ($f.absent.section // "")} else empty end),
+    | (($f.closure | type) == "object") as $cl
+    | (if ($cl | not) and ($f.quote | type) == "object" then {id: $f.id, where: "anchor", file: $f.quote.file, text: $f.quote.text} else empty end),
+      (if ($cl | not) and ($f.absent | type) == "object" then {id: $f.id, where: "anchor", file: $f.absent.file, section: ($f.absent.section // "")} else empty end),
       (if ($f.closure | type) == "object" then {id: $f.id, where: "closure", file: $f.closure.file, text: $f.closure.text} else empty end),
       (($f.verdicts // [])[] | select(type == "object" and (.quote | type) == "object")
         | {id: $f.id, where: "verdict", v: .v, file: .quote.file, text: .quote.text}) ];

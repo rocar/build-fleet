@@ -36,6 +36,18 @@ run "$p"
 assert "pass-rc0" "[ $rc -eq 0 ]"
 assert "pass-line" "printf '%s' \"\$out\" | grep -q '\"pass\":true,\"reasons\":\\[\\]'"
 
+# --- an unterminated last line is still read (wc -l would drop it) ---
+p=$(new_proj eof 2); block "$p" 2 architect; block "$p" 2 qa
+printf '## Cycle 2 — coder — 2026-09-03T00:00:00Z\n- [blocker] (coder-c2-1) last line, no newline' >> "$p/.sdd/feat/REVIEW.md"
+run "$p"
+assert "unterminated-last-blocker-refuses" "[ $rc -eq 2 ] && printf '%s' \"\$out\" | grep -q 'open-blockers'"
+
+# --- an indented finding bullet is never invisible ---
+p=$(new_proj ind 2); block "$p" 2 architect; block "$p" 2 qa '- [minor] (qa-c2-1) parent' '  - [blocker] (qa-c2-2) nested'; block "$p" 2 coder
+run "$p"
+assert "indented-blocker-refuses" "[ $rc -eq 2 ] && printf '%s' \"\$out\" | grep -q 'unparsed-findings'"
+assert "indented-blocker-listed" "printf '%s' \"\$out\" | grep -q '\"unparsed\":\\[\"qa: - \\[blocker\\] (qa-c2-2) nested\"\\]'"
+
 # --- refuse: a fix-dispositioned major ---
 p=$(new_proj fix 2); block "$p" 2 architect '- [major] (architect-c2-1) open' '  disposition: fix'; block "$p" 2 qa; block "$p" 2 coder
 run "$p"

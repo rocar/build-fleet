@@ -80,7 +80,6 @@ Snapshot (`build-fleet/status-snapshot@1`):
    block tagged with the current `CHANGE_CYCLE`. For each reviewer block,
    print:
    - Reviewer name.
-   - `status:` line value.
    - Count of `[blocker]`, `[major]`, `[minor]` items — and for each `[major]`, its
      `disposition:` (`fix` = open, `adr ADR-N` = accepted; none = open, legacy block).
    - `finalize_ready`: yes iff zero UNREFUTED `[blocker]` lines (a `refuted-by:`
@@ -93,7 +92,6 @@ Snapshot (`build-fleet/status-snapshot@1`):
      with that ADR in DECISIONS.md (an architect ADR closes a peer's id in every
      block) or is a new major on cycle ≥ 2 (advisory, "demoted"). A finding bullet
      the gate cannot read (an indented `- [blocker]` / `- [major]`) makes it `no`.
-     `status:` lines are not evaluated.
    - Verbatim text of every `[blocker]` item (so the user sees what's
      actually open).
 
@@ -133,7 +131,8 @@ Snapshot (`build-fleet/status-snapshot@1`):
    `PHASE: PLAN_REVIEW` (or the small fast-path holds: `SIZE: small`, `PHASE: PLAN`,
    `CYCLE: 0`), show what you would be ratifying: run **Ratify** steps 1–5 below
    read-only and print the dry run of step 6a there (its `BUILD_FLEET_PLAN_FINALIZE_DRYRUN`
-   line, the open findings, and how to ratify). Change no state.
+   line, the open findings, and how to ratify). Change no state, and
+   print no `BUILD_FLEET_PLAN_FINALIZE_REFUSE` line: report a refusal found there in prose.
 
 6. **Name the next command.** Run:
    ```bash
@@ -218,7 +217,8 @@ An escalation means the bounded cycles were exhausted (or a human halted the wor
 The words after `resolve` — `[<slug>] <decision>`:
 
 - If the first token names an existing `.sdd/<token>/` directory, it selects
-  that feature/bug; otherwise the active item from `.sdd/ACTIVE` is used.
+  that feature/bug, and `_product` selects the product tier (`.sdd/_product/`);
+  otherwise the active item from `.sdd/ACTIVE` is used.
 - Everything else is the **decision** (free text, **required**): what the human
   chose — e.g. "accept architect's position, drop the streaming requirement" or
   "blockers waived for the prototype phase; revisit at v2".
@@ -252,6 +252,10 @@ without a recorded choice:
    | `CHANGE_REVIEW` | `CHANGE_CYCLE` |
    | `DIAGNOSE` (bug lane) | `CYCLE` |
    | `FIX` / `VERIFY` (bug lane) | `FIX_CYCLE` |
+   | `PLAN_REVIEW` (product plan) | `CYCLE` |
+
+   For a `FIX` or `VERIFY` escalation, restore `FIX`, never `VERIFY`: `VERIFY` is not a
+   phase the lite router resumes, and from `FIX` it runs verify once the fix is applied.
 
    If you cannot determine the phase from either source, refuse
    (`{"code":2,"reason":"phase-undeterminable"}`) and ask the human to name it —
@@ -278,6 +282,9 @@ without a recorded choice:
    - Set the exhausted counter from step 4 back to `0` (the human decision
      re-opens the budget).
    - Set `PHASE:` back to the pre-escalation phase from step 4.
+   - For a `DIAGNOSE` resolve, also set `HYPOTHESIS_CYCLE: 0` in `diagnosis.md` (the
+     first line under `## Root-cause hypothesis`), so the next run forms a new
+     hypothesis instead of judging the refuted one again.
    - Refresh `UPDATED:`.
    - **Never touch `CYCLE_TOTAL`** — the cumulative counter survives every reset
      by design; `/build-fleet:review` refuses at `CYCLE_TOTAL_MAX`, and raising
@@ -358,8 +365,10 @@ The dry run (no state change) is bare `/build-fleet:status` (Report step 5c).
      before proceeding.
    - **Already ratified.** If `PHASE=DEVELOPING`, refuse:
      > `BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"product":"<slug>","code":2,"reason":"already-ratified","phase":"DEVELOPING"}`.
-     Tell the user the plan is already ratified; revise the `_product/` files directly
-     and re-run `/build-fleet:start` (plan review) and `/build-fleet:status ratify` if strategy changes.
+     Tell the user the plan is already ratified; revise the `_product/` files directly.
+     If strategy changes and the plan needs review again, set `PHASE: PLAN` in `.sdd/_product/PROGRESS.md`,
+     then run `/build-fleet:start` (it reviews the plan) and `/build-fleet:status ratify`;
+     a small product with no review cycle goes straight to ratification.
    - Any other phase (e.g. `PLAN` for a non-small product) → refuse with
      `{"code":2,"reason":"no-interrogation-cycle","detail":"run /build-fleet:start first (it reviews the plan)"}`.
    - *(Legacy tier, no `PHASE` field.)* The read returns empty,

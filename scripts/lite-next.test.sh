@@ -63,9 +63,9 @@ proj; check start-nothing '"stop":"nothing-to-do"' start
 proj; check start-product-new '"step":"new-product","args":"a-tiny-notes-app A tiny notes app"' start --product A tiny notes app
 proj; check start-product-no-vision '"stop":"nothing-to-do"' start --product
 proj; product PLAN; check start-product-plan '"step":"plan-review"' start
-proj; product PLAN; check start-product-flag-existing '"step":"plan-review"' start --product again
+proj; product PLAN; check start-product-flag-existing '"stop":"product-exists"' start --product again
 proj; product PLAN_REVIEW; check start-plan-ready '"stop":"plan-ready","next":"/build-fleet:status ratify"' start
-proj; product ESCALATED; check start-product-escalated '"stop":"escalated","next":"/build-fleet:status resolve <decision>"' start
+proj; product ESCALATED; check start-product-escalated '"stop":"escalated","next":"/build-fleet:status resolve _product <decision>"' start
 proj; product DEVELOPING; check start-memory-missing '"step":"product-memory"' start
 proj; product DEVELOPING; memory; check start-backlog-next '"step":"new-feature","args":"cli-skeleton"' start
 proj; product DEVELOPING; memory
@@ -369,6 +369,41 @@ EOF
 touch -t 202601010000 "$P/.sdd/f/spec.md"; printf 'x\n' > "$P/.sdd/f/REVIEW.md"; touch -t 202601010100 "$P/.sdd/f/REVIEW.md"
 printf 'AC-1\n' > "$P/.sdd/f/acceptance.md"; touch -t 202601010200 "$P/.sdd/f/acceptance.md"
 report "$OPEN"; check acceptance-md-not-freshness '"step":"revise"' start
+# ---- 0.12.1 ----
+# a finalized spec still at PHASE SPEC/REVIEW: finalize completes it (implement refuses it)
+proj; feature f FINALIZED <<'EOF'
+PHASE: REVIEW
+CYCLE: 1
+EOF
+check build-finalized-at-review '"step":"finalize"' build
+# ship checks the spec is still finalized
+proj; feature f DRAFT <<'EOF'
+PHASE: BUILD
+BUILD_STATE: done
+EOF
+check ship-spec-not-finalized '"stop":"unknown-state"' ship
+# a lane mismatch names the lane's own command; stray args to build/ship are refused
+proj; feature f DRAFT <<'EOF'
+PHASE: SPEC
+EOF
+check fix-while-feature-next '"stop":"item-in-flight","next":"/build-fleet:status"' fix
+check build-stray-args '"stop":"bad-args","next":"/build-fleet:build"' build now please
+proj; bug b <<'EOF'
+PHASE: REPORT
+CYCLE: 0
+EOF
+check build-while-bug-next '"stop":"item-in-flight","next":"/build-fleet:fix"' build
+# the small product fast path ratifies without a plan review
+proj; mkdir -p "$P/.sdd/_product"; printf 'SDD_SCHEMA: 1\nPHASE: PLAN\nSIZE: small\nCYCLE: 0\n' > "$P/.sdd/_product/PROGRESS.md"
+check start-small-product-fast-path '"stop":"plan-ready","next":"/build-fleet:status ratify"' start
+# non-Latin and accented ideas still get a usable slug
+proj; check start-idea-accents '"args":"cafe-umlaut Café Ümlaut"' start 'Café Ümlaut'
+proj; check start-idea-dotted-capital-i '"args":"istanbul-rollout ' start 'İstanbul rollout'
+proj; check start-idea-non-latin '"step":"new-feature","args":"feature ' start '日本語 機能'
+# a parked item of the same name is not silently shadowed by a -2 copy
+proj; mkdir -p "$P/.sdd/add-csv-export"; printf 'SDD_SCHEMA: 2\nPHASE: PARKED\n' > "$P/.sdd/add-csv-export/PROGRESS.md"
+check start-idea-parked-same-name '"stop":"parked"' start add CSV export
+
 rc=0; bash "$ROUTER" bogus >/dev/null 2>&1 || rc=$?
 if [ "$rc" = 1 ]; then pass=$((pass+1)); echo "ok   bad-usage"; else fail=$((fail+1)); echo "FAIL bad-usage rc=$rc"; fi
 

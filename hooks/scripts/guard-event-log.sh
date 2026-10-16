@@ -8,12 +8,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=_lib.sh
 . "${HERE}/_lib.sh"
 input=$(cat)
-if ! command -v jq >/dev/null 2>&1; then
-  # Without jq the path cannot be read; refuse only when the raw payload names an event log.
-  case "$input" in *EVENTS.jsonl*|*_events.jsonl*) echo "build-fleet: the event log is written only by build-fleet scripts (jq missing; refusing)." >&2; exit 2 ;; esac
+# raw_check <why> — the path cannot be read; refuse only when the raw payload names an event log.
+raw_check() {
+  case "$input" in *EVENTS.jsonl*|*_events.jsonl*) echo "build-fleet: the event log is written only by build-fleet scripts ($1; refusing)." >&2; exit 2 ;; esac
   exit 0
-fi
-path=$(extract_file_path "$input" 2>/dev/null) || exit 0
+}
+command -v jq >/dev/null 2>&1 || raw_check "jq missing"
+path=$(extract_file_path "$input" 2>/dev/null) || raw_check "unreadable tool input"
 [ -n "$path" ] || exit 0
 case "$(basename "$path")" in
   EVENTS.jsonl|_events.jsonl)

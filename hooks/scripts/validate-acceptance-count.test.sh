@@ -28,6 +28,8 @@ p=$(new_proj prose 3); printf -- '- AC-1\n- AC-2\n- AC-3\n' | spec "$p"
 check "prose-ids-outside-section-ignored" "$p" "$S" 0
 p=$(new_proj sub 3); printf '### Import\n\n- AC-1\n- AC-2\n\n### Export\n\n- AC-3\n- AC-4\n' | spec "$p"
 check "criteria-subsections" "$p" "$S" 2
+check "traversal-into-sdd-refuses" "$p" ".sdd/feat/../feat/spec.md" 2
+check "traversal-outside-sdd-ignored" "$p" "docs/../other/spec.md" 0
 p=$(new_proj later 3); printf -- '- AC-1\n\n## Self-review notes\n\nAC-5 AC-6 AC-7 AC-8\n' | spec "$p"
 check "later-section-ends-it" "$p" "$S" 0
 p=$(new_proj crlf 3); printf -- '- AC-1\r\n- AC-2\r\n- AC-3\r\n- AC-4\r\n' | spec "$p"

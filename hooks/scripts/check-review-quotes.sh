@@ -5,7 +5,8 @@
 # cycle in the verified shape. Does nothing otherwise (another file, a non-empty
 # write, a debate block, an incomplete run that appended no block).
 #
-# Never changes the write's outcome: always exits 0. Fires inside workflow runs on
+# Never changes the write's outcome: always exits 0. A failing check is relayed on stderr
+# and recorded in EVENTS.jsonl. Fires inside workflow runs on
 # purpose (it does not skip on .workflow-in-flight — the marker write IS the trigger).
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,5 +33,10 @@ last=$({ grep -E '^##[[:space:]]+Cycle[[:space:]]+[0-9]+[[:space:]]' "$review" |
 start=$({ grep -nE '^##[[:space:]]+Cycle[[:space:]]+[0-9]+[[:space:]]' "$review" || true; } | tail -1 | cut -d: -f1)
 [ "$(sed -n "$((start+1))p" "$review" | tr -d '\r')" = "shape: verified" ] || exit 0
 
-bash "${HERE}/../../scripts/quote-check.sh" "$slug" --cycle "$cycle" >/dev/null 2>&1 || true
+# A failing check is relayed on stderr and recorded as an error event (finalize then
+# refuses quote-check-missing); the write's outcome never changes.
+err=$(bash "${HERE}/../../scripts/quote-check.sh" "$slug" --cycle "$cycle" 2>&1 >/dev/null) && exit 0
+detail=$(printf '%s' "$err" | head -1)
+echo "build-fleet: the quote check failed for ${slug} cycle ${cycle}: ${detail:-no detail}" >&2
+log_event "$slug" "$(jq -cn --argjson c "$cycle" --arg d "$detail" '{kind: "error", source: "hook:check-review-quotes", decision: "error", cycle: $c, detail: $d}')"
 exit 0

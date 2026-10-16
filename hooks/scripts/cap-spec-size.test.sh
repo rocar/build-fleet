@@ -51,11 +51,34 @@ check "leading-zero-008-no-crash" "$p" "$(payload Write $S "$(lines 9)")" 2
 p=$(new_proj bad 150L)
 check "garbage-refuses" "$p" "$(payload Write $S "x")" 2
 has_err "garbage-refuses-message" "$(stderr_of "$p" "$(payload Write $S x)")" "SPEC_MAX_LINES is not an integer ('150L')"
+# B3: an Edit that only terminates the last line adds no line
+p=$(new_proj eol 3); printf 'a\nb\nc' > "$p/.sdd/feat/spec.md"
+check "edit-terminating-last-line-allowed" "$p" "$(payload Edit $S c $'c\n')" 0
+# B4: an over-budget spec may be cut by an Edit that still lands over budget; never grown
+p=$(new_proj cut 2); printf 'a\nb\nc\nd\ne\n' > "$p/.sdd/feat/spec.md"
+check "edit-shrinking-over-budget-allowed" "$p" "$(payload Edit $S $'d\ne\n' '')" 0
+check "edit-growing-over-budget-refuses" "$p" "$(payload Edit $S $'e\n' $'e\nf\n')" 2
+check "write-shrinking-over-budget-allowed" "$p" "$(payload Write $S $'a\nb\nc\n')" 0
+# the replacement is literal: "&" never stands for the matched text (bash 5.2 patsub_replacement)
+p=$(new_proj amp 8)
+check "edit-ampersand-literal" "$p" "$(payload Edit $S $'l1\nl2\n' '&&')" 0
+# final review: new_string's trailing newlines count; no phantom line at EOF; exact replace_all
+p=$(new_proj tnl 5); printf 'w\nx\ny\nz\n' > "$p/.sdd/feat/spec.md"
+check "edit-trailing-blank-lines-over-refuses" "$p" "$(payload Edit $S $'z\n' $'z\n\n\n\n')" 2
+p=$(new_proj eofq 4); printf 'a\nb\nc\nd\n' > "$p/.sdd/feat/spec.md"
+check "edit-last-line-at-budget-allowed" "$p" "$(payload Edit $S $'d\n' $'D\n')" 0
+p=$(new_proj rax 5); printf 'Xa\nb\nX\nc\n' > "$p/.sdd/feat/spec.md"
+check "edit-replace-all-exact-match" "$p" "$(payload Edit $S $'X\n' $'X\nY\n' true)" 0
+# an Edit with an empty old_string on an existing spec is counted as an addition (fail closed)
+p=$(new_proj emp 8)
+check "edit-empty-old-counts-whole-file" "$p" "$(payload Edit $S '' $'x\n')" 2
 p=$(new_proj o 1)
 check "acceptance-md-not-capped" "$p" "$(payload Write .sdd/feat/acceptance.md "$(lines 500)")" 0
 check "other-file-ignored" "$p" "$(payload Write .sdd/feat/DECISIONS.md "$(lines 500)")" 0
 check "product-tier-exempt" "$p" "$(payload Write .sdd/_product/spec.md "$(lines 500)")" 0
-check "traversal-ignored" "$p" "$(payload Write .sdd/feat/../feat/spec.md "$(lines 500)")" 0
+check "traversal-into-sdd-refuses" "$p" "$(payload Write .sdd/feat/../feat/spec.md "$(lines 500)")" 2
+check "traversal-other-sdd-file-ignored" "$p" "$(payload Write .sdd/feat/../feat/DECISIONS.md "$(lines 500)")" 0
+check "traversal-outside-sdd-ignored" "$p" "$(payload Write docs/../other/spec.md "$(lines 500)")" 0
 check "notebookedit-on-spec-refuses" "$p" "$(jq -cn --arg p $S '{tool_name:"NotebookEdit",tool_input:{notebook_path:$p}}')" 2
 check "notebookedit-elsewhere-ignored" "$p" "$(jq -cn '{tool_name:"NotebookEdit",tool_input:{notebook_path:"notes/x.ipynb"}}')" 0
 rc=0; ( cd "$p" && printf 'not json' | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" >/dev/null 2>&1 ); rc=$?

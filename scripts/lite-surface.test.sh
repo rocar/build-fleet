@@ -64,6 +64,19 @@ for c in start build ship fix; do
   [ "$words" -le 650 ] && ok "$c body ≤ 650 words ($words)" || no "$c body ≤ 650 words" "$words"
 done
 
+# --- 0.12.1 ---
+has(){ if /usr/bin/grep -qF -- "$3" "$ROOT/$2"; then ok "$1"; else no "$1" "$2 lacks [$3]"; fi; }
+has loop-args-single-quoted     commands/start.md  'as one single-quoted shell word'
+has loop-guard-ignores-updated  commands/start.md  'ignoring their `UPDATED:` line'
+has resolve-product-target      commands/status.md '`_product` selects the product tier'
+has resolve-product-phase-row   commands/status.md '| `PLAN_REVIEW` (product plan) | `CYCLE` |'
+has resolve-verify-restores-fix commands/status.md 'restore `FIX`, never `VERIFY`'
+has resolve-resets-hypothesis   commands/status.md 'set `HYPOTHESIS_CYCLE: 0`'
+has status-5c-no-refuse-lines   commands/status.md 'print no `BUILD_FLEET_PLAN_FINALIZE_REFUSE` line'
+has ratified-plan-reopen        commands/status.md 'set `PHASE: PLAN` in `.sdd/_product/PROGRESS.md`'
+has ratified-small-product      commands/status.md 'a small product with no review cycle goes straight to ratification'
+has handoff-passes-time         commands/handoff.md 'The current UTC time'
+
 # --- final-review fixes ---
 for f in commands/start.md commands/status.md; do
   if /usr/bin/grep -qF 'never appear in your own command list' "$ROOT/$f"; then ok "$f: router next is authoritative"; else no "$f: router next is authoritative" "missing"; fi
