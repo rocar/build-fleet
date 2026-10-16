@@ -367,7 +367,8 @@ The dry run (no state change) is bare `/build-fleet:status` (Report step 5c).
      > `BUILD_FLEET_PLAN_FINALIZE_REFUSE: {"product":"<slug>","code":2,"reason":"already-ratified","phase":"DEVELOPING"}`.
      Tell the user the plan is already ratified; revise the `_product/` files directly.
      If strategy changes and the plan needs review again, set `PHASE: PLAN` in `.sdd/_product/PROGRESS.md`,
-     then run `/build-fleet:start` (it reviews the plan) and `/build-fleet:status ratify`.
+     then run `/build-fleet:start` (it reviews the plan) and `/build-fleet:status ratify`;
+     a small product with no review cycle goes straight to ratification.
    - Any other phase (e.g. `PLAN` for a non-small product) → refuse with
      `{"code":2,"reason":"no-interrogation-cycle","detail":"run /build-fleet:start first (it reviews the plan)"}`.
    - *(Legacy tier, no `PHASE` field.)* The read returns empty,

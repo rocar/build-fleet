@@ -74,6 +74,7 @@ has resolve-verify-restores-fix commands/status.md 'restore `FIX`, never `VERIFY
 has resolve-resets-hypothesis   commands/status.md 'set `HYPOTHESIS_CYCLE: 0`'
 has status-5c-no-refuse-lines   commands/status.md 'print no `BUILD_FLEET_PLAN_FINALIZE_REFUSE` line'
 has ratified-plan-reopen        commands/status.md 'set `PHASE: PLAN` in `.sdd/_product/PROGRESS.md`'
+has ratified-small-product      commands/status.md 'a small product with no review cycle goes straight to ratification'
 has handoff-passes-time         commands/handoff.md 'The current UTC time'
 
 # --- final-review fixes ---

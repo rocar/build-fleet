@@ -69,6 +69,9 @@ p=$(new_proj eofq 4); printf 'a\nb\nc\nd\n' > "$p/.sdd/feat/spec.md"
 check "edit-last-line-at-budget-allowed" "$p" "$(payload Edit $S $'d\n' $'D\n')" 0
 p=$(new_proj rax 5); printf 'Xa\nb\nX\nc\n' > "$p/.sdd/feat/spec.md"
 check "edit-replace-all-exact-match" "$p" "$(payload Edit $S $'X\n' $'X\nY\n' true)" 0
+# an Edit with an empty old_string on an existing spec is counted as an addition (fail closed)
+p=$(new_proj emp 8)
+check "edit-empty-old-counts-whole-file" "$p" "$(payload Edit $S '' $'x\n')" 2
 p=$(new_proj o 1)
 check "acceptance-md-not-capped" "$p" "$(payload Write .sdd/feat/acceptance.md "$(lines 500)")" 0
 check "other-file-ignored" "$p" "$(payload Write .sdd/feat/DECISIONS.md "$(lines 500)")" 0

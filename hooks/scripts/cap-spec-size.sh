@@ -85,7 +85,7 @@ case "$tool" in
     src="$rel"; [ -f "$src" ] || src=/dev/null
     projected=$(printf '%s' "$input" | jq -r --rawfile c "$src" '
       .tool_input as $t | ($t.old_string // "") as $o | ($t.new_string // "") as $n
-      | (if $o == "" then $n
+      | (if $o == "" then $c + $n   # no anchor: count it as an addition (fails closed)
          else ($c | split($o)) as $p
            | if ($p | length) < 2 then $c
              elif ($t.replace_all // false) == true then $p | join($n)
