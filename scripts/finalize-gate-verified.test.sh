@@ -48,7 +48,7 @@ p=$(vr_proj adr 1)
 vr_block "$p" 1 qa '- [major] (qa-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)" '  disposition: adr ADR-1'
 vr_block "$p" 1 architect '- [major] (architect-c1-1) other' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)" '  disposition: adr ADR-7'
 qc "$p" 1; gate "$p"
-assert "adr-closes-missing-adr-refuses" "[ \"\$(field .majors_without_adr)\" = '[\"architect-c1-1\"]' ] && [ \"\$(field .open_majors)\" = '[]' ]"
+assert "adr-closes-missing-adr-refuses" "[ $rc -eq 2 ] && field .reasons | grep -q majors-without-adr && [ \"\$(field .majors_without_adr)\" = '[\"architect-c1-1\"]' ] && [ \"\$(field .open_majors)\" = '[]' ]"
 
 p=$(vr_proj changed 1)
 vr_block "$p" 1 qa '- [major] (qa-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "${KILL[@]}"
@@ -134,4 +134,10 @@ vr_block "$p" 1 qa; vr_block "$p" 1 architect
 vr_block "$p" 1 product-owner '- [blocker] (product-owner-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 blocker)" "$(vr_up 2 blocker)" "$(vr_up 3 blocker)"
 qc "$p" 1; gate "$p"
 assert "flag-role-blocker-counted" "[ $rc -eq 2 ] && field .open_blockers | grep -q product-owner-c1-1"
+# A free-form id (not <role>-c<N>-<k>) is raised by its block's role, so the raiser can close it.
+p=$(vr_proj freeform 1)
+vr_block "$p" 1 qa '- [major] (spec-gap) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)" "$(vr_up 3 major)"
+vr_block "$p" 1 architect
+qc "$p" 1; gate "$p" --report
+assert "freeform-id-raised-by-block-role" "[ \"\$(field '.open[] | select(.id == \"spec-gap\") | .raised_by')\" = '\"qa\"' ]"
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]

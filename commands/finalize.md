@@ -78,7 +78,7 @@ cycle.
    It prints exactly one line:
 
    ```
-   BUILD_FLEET_FINALIZE_GATE: {"feature":"<slug>","cycle":<N>,"pass":true|false,"reasons":[...],"open_blockers":[...],"open_majors":[...],"majors_without_adr":[...]}
+   BUILD_FLEET_FINALIZE_GATE: {"feature":"<slug>","cycle":<N>,"pass":true|false,"reasons":[...],"open_blockers":[...],"open_majors":[...],"majors_without_adr":[...],"unparsed":[...]}
    ```
 
    The rule it enforces, over the LAST block per roster role for the current `CYCLE`:
@@ -87,6 +87,7 @@ cycle.
    - zero `[major]` lines whose disposition is `fix` or absent (else `majors-open`);
    - every `disposition: adr ADR-N` cites an `## ADR-N:` present in the feature
      `DECISIONS.md` (else `majors-without-adr`).
+   - no indented finding bullet such as `  - [blocker]` (else `unparsed-findings`).
    `status:` lines are informational and NOT evaluated. Exit 0 ⇒ pass (step 6);
    exit 2 ⇒ refuse (step 5), relaying the script's `reasons`; exit 1 ⇒ the workspace
    is unreadable — report it and stop.

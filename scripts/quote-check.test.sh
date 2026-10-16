@@ -69,4 +69,12 @@ vr_block "$p" 1 qa '- [major] (qa-c1-1) retry limit' '  quote: {"file":"acceptan
 vr_block "$p" 1 architect
 run "$p" 1
 assert "acceptance-md-not-a-source" "printf '%s' \"\$out\" | grep -q '\"failed\":1'"
+# A --cycle that is not PROGRESS's CYCLE is skipped and records nothing: an event would
+# shadow the real check of the current cycle (first event per cycle_total wins).
+p=$(vr_proj stale 2)
+vr_block "$p" 1 qa '- [major] (qa-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t'
+vr_block "$p" 1 architect
+run "$p" 1
+assert "stale-cycle-skipped" "[ $rc -eq 0 ] && printf '%s' \"\$out\" | grep -q '\"skipped\":\"stale-cycle\"'"
+assert "stale-cycle-no-event" "! grep -q quote-check '$p/.sdd/feat/EVENTS.jsonl' 2>/dev/null"
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]

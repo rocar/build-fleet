@@ -9,6 +9,7 @@
 # Usage: quote-check.sh <slug> --cycle N
 # Output (stdout, one line):
 #   BUILD_FLEET_QUOTE_CHECK: {"slug","cycle","cycle_total","checked","failed","revived":[…],"exempt":bool,"skipped":null|"<reason>"}
+#   (skipped: already-checked | not-verified | stale-cycle — --cycle is not PROGRESS's CYCLE)
 # Event (first per cycle_total wins): kind gate, source script:quote-check,
 #   decision pass|fail, cycle, cycle_total, files (fingerprint), checked, failures,
 #   revived, exempt.
@@ -41,6 +42,11 @@ signal() { # signal <checked> <failed> <revived-json> <exempt> <skipped-json>
     --argjson k "$1" --argjson f "$2" --argjson r "$3" --argjson e "$4" --argjson sk "$5" \
     '{slug: $s, cycle: $c, cycle_total: $t, checked: $k, failed: $f, revived: $r, exempt: $e, skipped: $sk}')"
 }
+
+# A --cycle that is not PROGRESS's CYCLE would record an event under the current
+# cycle_total for another cycle's blocks; skip it, recording nothing.
+cur=$(read_progress_field "$slug" CYCLE)
+if [ -n "$cur" ] && [ "$cur" != "$cycle" ]; then signal 0 0 '[]' false '"stale-cycle"'; exit 0; fi
 
 # First event per cycle_total wins: an incomplete run's marker release must never
 # re-check this cycle against a spec revised since.
