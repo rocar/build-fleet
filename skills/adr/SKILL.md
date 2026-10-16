@@ -1,6 +1,6 @@
 ---
 name: adr
-description: The Architecture Decision Record format for .sdd/<feature>/DECISIONS.md and the product-scope .sdd/_product/DECISIONS.md. Append-only entries, one per design decision that survived review; product ADRs may be PROVISIONAL until ratified. Consult whenever recording, citing, or reviewing ADRs.
+description: The ADR format for a feature's or product's DECISIONS.md: append-only entries, one per decision that survived review; product ADRs stay provisional until ratified. Consult when recording, citing or reviewing an ADR.
 ---
 
 # ADR Format
@@ -82,10 +82,10 @@ explain) do **not** bind features.
 **Promotion rule:** `PROVISIONAL → accepted` happens only when the strategy
 is ratified — at plan-review/plan-finalize (the human un-tags the forward
 entries, re-runs `/build-fleet:plan-review`, and ratifies with
-`/build-fleet:plan-finalize`), or by an explicit human edit promoting the
+`/build-fleet:status ratify`), or by an explicit human edit promoting the
 ADR. The architect records the promotion as an edit of that ADR's `Status:`
 line by the human's instruction (or a new superseding ADR); the
-`/build-fleet:plan-finalize` gate itself **never** promotes a PROVISIONAL
+`/build-fleet:status ratify` gate itself **never** promotes a PROVISIONAL
 ADR. `PROVISIONAL` is meaningless on a feature-scope ADR — feature decisions
 are made inside reviewed cycles and land as `accepted`.
 

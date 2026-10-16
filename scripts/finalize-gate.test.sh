@@ -22,6 +22,8 @@ new_proj() {
 # block <proj> <cycle> <role> <body-lines…>
 block() { local p="$1" c="$2" r="$3"; shift 3; { printf '## Cycle %s — %s — 2026-09-03T00:00:00Z\n' "$c" "$r"; for l in "$@"; do printf '%s\n' "$l"; done; printf 'status: concerns-raised\n\n'; } >> "$p/.sdd/feat/REVIEW.md"; }
 # run <proj> → sets rc + out
+# nblock <proj> <cycle> <role> <body-lines…> — a findings-only block (no status: line)
+nblock() { local p="$1" c="$2" r="$3"; shift 3; { printf '## Cycle %s — %s — 2026-09-03T00:00:00Z\n' "$c" "$r"; for l in "$@"; do printf '%s\n' "$l"; done; printf '\n'; } >> "$p/.sdd/feat/REVIEW.md"; }
 run() { out=$( cd "$1" && CLAUDE_PROJECT_DIR="$1" bash "$GATE" feat 2>/dev/null ); rc=$?; }
 assert() { local name="$1" cond="$2"; if eval "$cond"; then pass=$((pass+1)); printf 'ok   %-44s\n' "$name"; else fail=$((fail+1)); printf 'FAIL %-44s (%s) out=%s\n' "$name" "$cond" "${out:-}"; fi; }
 
@@ -107,5 +109,23 @@ assert "no-progress-exit-1" "[ $rc -eq 1 ]"
 # --- bad input: slug shifted away, first arg looks like a flag → exit 1 ---
 out=$( bash "$GATE" --roster architect,qa 2>/dev/null ); rc=$?
 assert "dash-slug-exit-1" "[ $rc -eq 1 ]"
+
+# --- findings-only blocks (no status: line) evaluate exactly as before ---
+p=$(new_proj nostatus 2)
+nblock "$p" 2 architect '- [major] (architect-c1-2) accepted' '  disposition: adr ADR-4' '- [minor] (architect-c2-1) nit'
+nblock "$p" 2 qa; nblock "$p" 2 coder
+run "$p"
+assert "no-status-line-block-passes" "[ $rc -eq 0 ]"
+p=$(new_proj nostatus-blk 2)
+nblock "$p" 2 architect '- [blocker] (architect-c2-1) broken'
+nblock "$p" 2 qa; nblock "$p" 2 coder
+run "$p"
+assert "no-status-line-open-blocker-refuses" "[ $rc -eq 2 ]"
+p=$(new_proj nostatus-fix 2)
+nblock "$p" 2 architect '- [major] (architect-c2-1) open' '  disposition: fix'
+nblock "$p" 2 qa '- [major] (qa-c2-1) refuted' '  refuted-by: coder — reason: long enough reason here for sure (cites spec.md § A)'
+nblock "$p" 2 coder
+run "$p"
+assert "no-status-line-runs-end-at-next-finding" "[ $rc -eq 2 ] && printf '%s' \"\$out\" | grep -q '\"open_majors\":\\[\"architect-c2-1\"\\]'"
 
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]

@@ -124,8 +124,8 @@ p=$(vr_proj edited-after-check 1)
 vr_block "$p" 1 architect
 vr_block "$p" 1 qa '- [major] (qa-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)" '  disposition: fix'
 qc "$p" 1
-ln=$(grep -n '^status:' "$p/.sdd/feat/REVIEW.md" | tail -1 | cut -d: -f1)
-awk -v n="$ln" -v a="$(vr_rf 4 'Retries are capped at 3 attempts')" -v b="$(vr_rf 5 'Retries are capped at 3 attempts')" 'NR==n{print a; print b} {print}' "$p/.sdd/feat/REVIEW.md" > "$p/r" && mv "$p/r" "$p/.sdd/feat/REVIEW.md"
+ln=$(grep -n '^  disposition: fix' "$p/.sdd/feat/REVIEW.md" | tail -1 | cut -d: -f1)
+awk -v n="$ln" -v a="$(vr_rf 4 'Retries are capped at 3 attempts')" -v b="$(vr_rf 5 'Retries are capped at 3 attempts')" '{print} NR==n{print a; print b}' "$p/.sdd/feat/REVIEW.md" > "$p/r" && mv "$p/r" "$p/.sdd/feat/REVIEW.md"
 gate "$p"
 assert "review-edited-after-check-refuses" "[ $rc -eq 2 ] && field .reasons | grep -q review-changed-since-check"
 

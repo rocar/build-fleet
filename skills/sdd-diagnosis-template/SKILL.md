@@ -1,6 +1,6 @@
 ---
 name: sdd-diagnosis-template
-description: The canonical diagnosis.md structure for the build-fleet troubleshoot-fix bug lane. Defines the required STATUS line (REPORTED|REPRODUCING|DIAGNOSED|CONFIRMED|FIXED), the required section headings, and the contract the validate-diagnosis-status PostToolUse hook enforces. Consult whenever drafting, advancing, or reviewing a diagnosis.md for an active bug.
+description: The diagnosis.md structure for a bug: the STATUS line, the required sections, and what the diagnosis hook enforces. Consult when drafting, advancing or reviewing a diagnosis.
 ---
 
 # SDD Diagnosis Template
@@ -49,7 +49,9 @@ failing test that reproduce it. Filled at REPORT; sharpened at REPRODUCE when th
 
 ## Root-cause hypothesis
 The single best explanation of *why* the symptom occurs. Empty until DIAGNOSE; this is the
-claim the diagnose.js workflow adversarially confirms.
+claim the diagnose.js workflow adversarially confirms. Optionally opens with a
+`HYPOTHESIS_CYCLE: <n>` line (the diagnose cycle it is written for), which the lite
+router uses to tell a fresh hypothesis from a refuted one.
 
 ## Blast radius
 What else this touches — code paths, data, callers — and the regression surface a fix risks.

@@ -17,10 +17,11 @@ fleet runs; this file only covers how to work on the plugin itself.
 .claude-plugin/plugin.json    # manifest (+ marketplace.json)
 agents/                       # 8 role subagents: product-owner, architect, coder,
                               #   qa, devops, classifier, reviewer, scribe
-commands/                     # 23 slash commands (/build-fleet:*)
-skills/                       # 7 skills: sdd-protocol (+references/), adr,
+commands/                     # 24 slash commands: 5 user-facing (start, build,
+                              #   ship, fix, status) + 19 hidden steps
+skills/                       # 6 skills: sdd-protocol (+references/), adr,
                               #   review-rubric, sdd-spec-template,
-                              #   sdd-diagnosis-template, test-plan, skill-routing
+                              #   sdd-diagnosis-template, skill-routing
 hooks/hooks.json              # hook registration (the ONLY registration point)
 hooks/scripts/                # 12 gate scripts + their *.test.sh harnesses
 workflows/                    # 4 dynamic workflows: review.js, deep-build.js,
@@ -29,9 +30,12 @@ scripts/                      # deterministic helpers (next-feature, intent-bloc
                               #   product-memory-splice, status-snapshot, run-tests,
                               #   acquire-active, finalize-gate, change-review-gate,
                               #   review-rotate, adr-index, workflow-determinism-lint,
-                              #   pin-workflow, quote-check, review-carry)
+                              #   pin-workflow, quote-check, review-carry,
+                              #   lite-next — the lite commands' router, drift-gate,
+                              #   agent-surface — the agent/skill surface guard)
                               #   + their *.test.sh
-scripts/lib/                  # shared verified-review rules (jq) and REVIEW.md block helpers
+scripts/lib/                  # shared verified-review rules (jq), REVIEW.md block helpers,
+                              #   and the acceptance-criteria reader (criteria.sh)
 docs/                         # contracts, smoke fixtures, history
 .github/workflows/ci.yml      # CI: test matrix + release-channel check
 ```
@@ -51,9 +55,10 @@ bash scripts/run-tests.sh        # every hook + script suite, then the smoke tes
   real hook stdin contract and asserts exit codes + stderr.
 - The smoke test (`docs/v0.5/smoke/smoke.sh`) walks a planted bug through the
   whole deterministic backbone.
-- Workflows: `node --check workflows/*.js` after any edit (they run in an
-  isolated JS runtime — no `Date`, no filesystem; timestamps come from
-  `args.now`, all state writes go through the scribe).
+- Workflows: `bash scripts/workflow-parse.test.sh` after any edit (plain
+  `node --check` rejects their top-level `return`; the test compiles each as an
+  async body). They run in an isolated JS runtime — no `Date`, no filesystem;
+  timestamps come from `args.now`, all state writes go through the scribe.
 - CI (`.github/workflows/ci.yml`) runs the suite on macOS (bash 3.2) and Linux,
   and pins every pushed `v*` tag to plugin.json's version. Keep every hook
   script bash-3.2 compatible AND GNU-coreutils compatible (probe GNU flags

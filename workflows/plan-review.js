@@ -9,11 +9,11 @@
 // risks, gaps from each role's lens) and never holds a survival vote. Nothing is
 // auto-refuted; nothing auto-escalates. The output is an interrogation report
 // appended to .sdd/_product/REVIEW.md and PHASE := PLAN_REVIEW. A human ratifies
-// at /build-fleet:plan-finalize — the machine never votes a vision into being.
+// at /build-fleet:status ratify — the machine never votes a vision into being.
 //
 // Divergences from review.js:
 //   - reviewers INTERROGATE product artifacts (vision/backlog/STACK/DECISIONS),
-//     not spec.md/acceptance.md.
+//     not spec.md.
 //   - roles are [product-owner, architect, qa] — product lenses, not [architect,qa,coder].
 //     Self-interrogation is fine: the act surfaces risk, it does not vote.
 //   - NO cross-examination phase. NO survival vote. Findings are consolidated by
@@ -98,7 +98,7 @@ function normalizeRoles(raw) {
 }
 
 // v0.9: a finding may propose a SPLIT of an over-scoped feature. Rendered as its own
-// indented line so /build-fleet:plan-finalize can grep it:  "  split-into: a, b, c".
+// indented line so /build-fleet:status ratify can grep it:  "  split-into: a, b, c".
 // Returns null when the finding carries no usable split_into list.
 function renderSplitLine(finding) {
   const list = Array.isArray(finding && finding.split_into)
@@ -285,8 +285,8 @@ return {
   note: !scribeResult.ok
     ? "SCRIBE APPLY FAILED after retry — the interrogation report/PROGRESS did NOT land and the .workflow-in-flight marker may remain. The dispatching command must report failure, not success."
     : counts.blocker > 0
-    ? `${counts.blocker} blocker-severity finding(s) open. /build-fleet:plan-finalize will require 'ratify force' to override.`
-    : "No blocker-severity findings. /build-fleet:plan-finalize ratify will pass.",
+    ? `${counts.blocker} blocker-severity finding(s) open. /build-fleet:status ratify will require 'ratify force' to override.`
+    : "No blocker-severity findings. /build-fleet:status ratify will pass.",
 };
 
 // ================= helpers =================
@@ -344,7 +344,7 @@ Return the structured object you are required to produce:
   - artifact (optional): which file the finding is about.
   - split_into (optional): when a feature is over-scoped, the proposed sibling slugs
     (kebab-case, 2+). The report renders it as its own "split-into:" line, and plain
-    `ratify` refuses while a proposed slug is neither a backlog row nor refused by a
+    "ratify" refuses while a proposed slug is neither a backlog row nor refused by a
     product ADR citing this finding's id.
   If the plan is sound from your lens, return an empty findings array — that is a
   legitimate signal (you found nothing ratification-relevant), not a failure.`;
@@ -409,8 +409,8 @@ function buildEnvelope({ product, cycle, now, reports, allFindings, counts }) {
       `## Plan Cycle ${cycle} — interrogation summary — ${now}`,
       `- findings: ${allFindings.length} (blocker: ${counts.blocker}, major: ${counts.major}, minor: ${counts.minor})`,
       counts.blocker > 0
-        ? `- ratification: BLOCKED by ${counts.blocker} open blocker-severity finding(s) — /build-fleet:plan-finalize requires 'ratify force' to override.`
-        : `- ratification: no blocker-severity findings — /build-fleet:plan-finalize ratify will pass.`,
+        ? `- ratification: BLOCKED by ${counts.blocker} open blocker-severity finding(s) — /build-fleet:status ratify requires 'ratify force' to override.`
+        : `- ratification: no blocker-severity findings — /build-fleet:status ratify will pass.`,
     ].join("\n")
   );
 
@@ -429,7 +429,7 @@ function buildEnvelope({ product, cycle, now, reports, allFindings, counts }) {
       CYCLE: cycle,
       UPDATED: now,
     },
-    next_legal_commands: ["/build-fleet:plan-finalize", "/build-fleet:plan-review"],
+    next_legal_commands: ["/build-fleet:status ratify", "/build-fleet:plan-review"],
     escalation_payload: null, // plan-review never auto-escalates — the human ratifies
   };
 }

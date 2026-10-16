@@ -1,6 +1,6 @@
 ---
 name: sdd-protocol
-description: The canonical spec-driven development protocol for the build-fleet agent software house. Defines the SPEC → REVIEW → FINALIZE → BUILD → CHANGE_REVIEW → HANDOFF state machine, the .sdd/ workspace layout and file ownership, the deterministic phase gates, the bounded review-cycle and human-escalation policy, and the blocker/major/minor severity rubric. This is the single source of truth for how the fleet runs. Consult it whenever orchestrating a feature or bug, transitioning phases, running a review, finalizing a spec, handing off to devops, or deciding whether to escalate — and any time a build-fleet command or role agent needs the workflow rules.
+description: The build-fleet rulebook: phases and gates, the .sdd/ layout and file ownership, review budgets, escalation, the bug lane and the product tier. Consult whenever orchestrating, changing phase, reviewing, finalizing, handing off or escalating.
 ---
 
 # SDD Protocol
@@ -17,6 +17,19 @@ Two deeper references live alongside this file:
 - **For the bug lane** (triage → reproduce → diagnose → fix → verify → ship-fix,
   the `diagnosis.md` artifact, the reproducing-test gate) read
   `references/bug-lane.md`.
+
+## The lite surface
+
+A person types five commands: `/build-fleet:start`, `build`, `ship`, `fix` and
+`status`. Every other command is a **hidden step** (`user-invocable: false`) that the
+lite commands run through the Skill tool, in the order `scripts/lite-next.sh` names
+from `.sdd/` state. The steps below keep their own gates and refusals; the lite
+commands add no state writes except the bug lane's hypothesis (`fix` writes it into
+`diagnosis.md`). `build`, `ship` and `status` are human-only
+(`disable-model-invocation`): running `build` is the human's approval of the spec,
+and `status park | resolve | ratify` carries the human decisions. When this file
+names a hidden step (`/build-fleet:review`, `/build-fleet:implement`, …), it is
+describing what a lite command runs, not what a person types.
 
 ## Operating principles
 
@@ -60,24 +73,21 @@ Two deeper references live alongside this file:
   PRODUCT                # one line: the product slug, if a product tier exists.
   _product/              # the product tier (see references/product-tier.md).
   <feature>/
-    spec.md              # product-owner. STATUS line + spec body. Source of truth.
-    acceptance.md        # product-owner. Testable acceptance criteria.
+    spec.md              # product-owner. STATUS line + spec body, ending with `## Acceptance Criteria`. Source of truth.
     DECISIONS.md         # architect. Append-only ADR log.
-    TEST_PLAN.md         # qa. Test design mapped to acceptance criteria.
-    IMPL_NOTES.md        # coder. Implementation notes and deviations.
-    REVIEW.md            # reviewers. Append-only review log (see format below).
+    IMPL_NOTES.md        # created on first write: coder gaps/deviations/todos, qa snapshot SHAs, scribe appendix.
+    REVIEW.md            # reviewers; created by the first review. Append-only, findings only (see format below).
     REVIEW-archive.md    # scripts/review-rotate.sh (append-only). Cycles older than the previous one, rotated out of REVIEW.md at dispatch.
     PROGRESS.md          # orchestrator. Phase + cycle state (schema below).
-    SKILL_MANIFEST.md    # orchestrator (from classifier). OPTIONAL. Per-role domain skills to load at BUILD.
     ESCALATION.md        # exists only when a gate has exhausted its cycles.
     EVENTS.jsonl         # build-fleet scripts only. Append-only event log (gate decisions, quote checks). Agents never write it.
   <bug>/                 # bug lane: diagnosis.md replaces spec.md (see references/bug-lane.md).
 ```
 
-Write boundaries: `product-owner` writes `spec.md` + `acceptance.md`; `architect`
-and `qa` are reviewers — during review they write **only inside `.sdd/<active>/`**
-(ADRs, REVIEW.md, TEST_PLAN.md) and never source; `coder` writes source +
-`IMPL_NOTES.md`, only while `PHASE` is `BUILD` (bug lane: only after `CONFIRMED`);
+Write boundaries: `product-owner` writes `spec.md`, acceptance criteria included;
+`architect` and `qa` are reviewers — during review they write **only inside
+`.sdd/<active>/`** (ADRs, REVIEW.md) and never source; `qa` writes tests at BUILD;
+`coder` writes source + `IMPL_NOTES.md`, only while `PHASE` is `BUILD` (bug lane: only after `CONFIRMED`);
 `devops` writes CI/CD, IaC, and release artifacts, only after CHANGE_REVIEW
 approval; the `scribe` (workflow-internal) applies workflow envelopes — the single
 canonical writer of workflow-driven state mutations.
@@ -119,23 +129,25 @@ parallel clones is human merge discipline, not the lock's job.
 ## PROGRESS.md schema
 
 Exact field names; hooks and commands parse these lines. Scaffolded PROGRESS
-files are stamped `SDD_SCHEMA: 1` — readers parse named fields and ignore
-unknown lines, so the stamp is inert at runtime; it exists so a future schema
-change is detectable on disk and can be CHANGELOG'd with a migration note (see
-the Compatibility convention in `CHANGELOG.md`; finish or park in-flight items
-before a major upgrade).
+files are stamped. A forward feature is `SDD_SCHEMA: 2` (the four-file layout above);
+`lite-next.sh` and the source-write gate refuse any other value for an active forward
+feature (`unsupported-schema` — park it and start it again), and `drift-gate.sh --all`
+reports it unchecked. The bug lane and the product tier stay `SDD_SCHEMA: 1`. Readers
+parse named fields and ignore unknown lines (see the Compatibility convention in
+`CHANGELOG.md`; finish or park in-flight items before a major upgrade).
 
 Forward feature:
 
 ```
-SDD_SCHEMA: 1
+SDD_SCHEMA: 2
 FEATURE: <slug>
 PHASE: SPEC | REVIEW | FINALIZE | BUILD | CHANGE_REVIEW | HANDOFF | ESCALATED | PARKED
 CYCLE: <int>          # spec-review cycles consumed (one increment per /build-fleet:review run)
 CHANGE_CYCLE: <int>   # change-review cycles consumed (one increment per /build-fleet:handoff pass)
 BUILD_CYCLE: <int>    # deep-build cycles consumed (one increment per deep-build workflow run)
+BUILD_STATE: started | needs-iteration | done   # absent until /build-fleet:implement starts; deep-build's scribe writes needs-iteration|done
 TIER: trivial | standard | large    # set by the classifier at /build-fleet:new-feature. `pending` until it runs.
-BUILD_MODE: standard | deep-build   # selects /build-fleet:build's orchestration. Classifier sets deep-build for tier=large. `pending` until it runs.
+BUILD_MODE: standard | deep-build   # selects /build-fleet:implement's orchestration. Classifier sets deep-build for tier=large. `pending` until it runs.
 RISK: low | elevated                 # set by the classifier at /build-fleet:new-feature (reversibility, blast radius, the never-trivial list). `pending` until it runs. With TIER it selects the seeded review roster and budget.
 REVIEW_ROLES: <csv>         # optional — /build-fleet:review roster (>=2 of architect,qa,coder,product-owner). Seeded by new-feature from TIER + RISK (table in commands/new-feature.md step 7; architect,qa,coder for every standard and large feature); absent ⇒ architect,qa,coder. A --roles flag overrides per-run.
 REVIEW_CYCLE_BUDGET: <int>  # optional — /build-fleet:review escalation budget (1..3, clamped to the ceiling). Seeded with the roster (3 for standard and large; 2 on the trivial row); absent ⇒ 3. A --cycle-budget flag overrides per-run.
@@ -145,9 +157,15 @@ VERIFY_BLOCKERS_SOLO: true | false      # optional — verified shape: one 3-ver
 BUILD_CYCLE_BUDGET: <int>   # optional — deep-build escalation budget (1..3, clamped). Default 3. A --cycle-budget flag overrides per-run.
 CYCLE_TOTAL: <int>          # cumulative spec-review cycles, scribe-written, NEVER reset (not by resolve-escalation, not by park)
 CYCLE_TOTAL_MAX: <int>      # /build-fleet:review refuses to dispatch when CYCLE_TOTAL_MAX is not 0 and CYCLE_TOTAL >= CYCLE_TOTAL_MAX (default 6; 0 disables)
-SPEC_MAX_KB: <int>          # optional — cap-spec-size hook: spec.md + acceptance.md byte budget (absent = no cap)
-AC_MAX: <int>               # optional — validate-acceptance-count hook: distinct AC-<n> ids (absent = no cap)
+SPEC_MAX_LINES: <int>       # optional — cap-spec-size hook: spec.md line budget (150 standard, 400 large; absent = no cap)
+AC_MAX: <int>               # optional — validate-acceptance-count hook: distinct AC-<n> ids in the spec's acceptance section (absent = no cap)
 LAST_REVIEW_OUTPUT_TOKENS: <int>   # scribe-written; /build-fleet:review refuses cost-runaway above 3× the header ceiling
+DRIFT_GATE: on | off        # drift gate (scripts/drift-gate.sh): absent/empty/on ⇒ every AC-n needs a `<slug>/AC-n` test marker; off ⇒ unchecked (a feature with no tests)
+TEST_ROOTS: <csv>           # optional — drift gate test roots, project-relative; absent ⇒ whichever of tests, test, spec exist
+CODER_SKILLS: <csv>         # optional — domain skills coder loads at BUILD (skill-routing; written by new-feature)
+QA_SKILLS: <csv>            # optional — domain skills qa loads at BUILD
+SHIPPED: <iso8601>          # handoff, on devops success (with SHIPPED_CHANGE_CYCLE: <n>, the change cycle that approved)
+QA_FAIL: drift              # the drift gate failed and the criterion markers still need repair; /build-fleet:implement's repair mode clears it
 UPDATED: <iso8601>
 ```
 
@@ -161,10 +179,11 @@ budget is `DIAGNOSE_CYCLE_BUDGET` and the product plan-review roster is `PLAN_RE
 A bug's PROGRESS.md instead carries `LANE: bug` (absence of `LANE` reads as a
 forward feature), `PHASE: REPORT | REPRODUCE | DIAGNOSE | FIX | VERIFY | HANDOFF |
 ESCALATED | PARKED`, `SEV: sev0|sev1|sev2`, `CYCLE` (diagnose-confirmation cycles),
-and `FIX_CYCLE` (verify→fix bounces) — plus the same `SDD_SCHEMA: 1` stamp. The
+and `FIX_CYCLE` (verify→fix bounces), plus `FIX_DONE_CYCLE` (the `FIX_CYCLE` whose fix
+`apply-fix` completed; `verify` is next while it equals `FIX_CYCLE`) — plus the same `SDD_SCHEMA: 1` stamp. The
 product tier's `_product/PROGRESS.md` is stamped too.
 
-`/build-fleet:park` sets `PHASE: PARKED` on either lane and appends a
+`/build-fleet:status park` sets `PHASE: PARKED` on either lane and appends a
 `PARKED: <iso8601> — was PHASE <prev> — <reason>` line; resuming is a deliberate
 human edit.
 
@@ -192,8 +211,10 @@ of a concern is a *new* approving entry in a later cycle, not an edit.
 - [major] (<role>-c<M>-2) <concern>
   disposition: fix | adr ADR-<K>
 - [minor] (<role>-c<N>-3) <concern>
-status: concerns-raised | approved
 ```
+
+A block is its heading plus its finding lines; a role with no findings writes the
+heading alone.
 
 Finding ids are stable across cycles (`<role>-c<cycle>-<n>`; a re-raised finding
 keeps its id). A `  refuted-by:` continuation line closes a blocker or a major —
@@ -251,7 +272,7 @@ The REVIEW loop's per-cycle ritual is `/build-fleet:review` → `/build-fleet:re
 **SPEC.** `/build-fleet:new-feature <slug>` scaffolds `.sdd/<slug>/`, runs the
 classifier subagent to set `TIER`, `RISK` + `BUILD_MODE` in PROGRESS.md and to seed
 `REVIEW_ROLES` / `REVIEW_CYCLE_BUDGET` from tier and risk (`commands/new-feature.md` step 7), and delegates to
-product-owner to draft `spec.md` (STATUS=DRAFT) + `acceptance.md` — a minimal
+product-owner to draft `spec.md` (STATUS=DRAFT), acceptance criteria included — a minimal
 skeleton from the classifier's `skeleton_spec_hint` for `TIER=trivial`, the full
 spec otherwise. With a product tier present, the feature inherits the binding stack
 and its backlog intent (see `references/product-tier.md`).
@@ -284,8 +305,8 @@ phases:
    otherwise be dropped or demoted by the delta rules. The run then rotates the old
    log to REVIEW-archive.md, dispositions every surviving major and stamps
    `CYCLE_TOTAL`.
-2. **Cross-examination** — refute or affirm peers' concerns, citing spec.md,
-   acceptance.md or DECISIONS.md (an ADR is a substantive refutation).
+2. **Cross-examination** — refute or affirm peers' concerns, citing spec.md or
+   DECISIONS.md (an ADR is a substantive refutation).
 3. **Survival vote** — pure script; a concern survives unless refuted by a
    different-role reviewer with substantive, cited reasoning.
 4. **Disposition** — when majors survive, one architect leg classifies each as `adr`
@@ -314,11 +335,11 @@ older blocks go to `REVIEW-archive.md`), (c) computes `next_adr_id`
 (`scripts/adr-index.sh --next`) and a real `now` (`date -u`).
 
 **FINALIZE.** `/build-fleet:finalize` runs the finalize gate — the gate ONLY (it is
-idempotent; the BUILD orchestration is `/build-fleet:build`'s). Permitted only when
+idempotent; the BUILD orchestration is `/build-fleet:implement`'s). Permitted only when
 `scripts/finalize-gate.sh` passes: every roster role has a current-cycle block; zero
 UNREFUTED `[blocker]` lines; zero `[major]` lines dispositioned `fix` (or
 undispositioned); every `disposition: adr ADR-N` cites an ADR present in the feature
-DECISIONS.md. `status:` lines are not evaluated. The rule is the rubric's, computed
+DECISIONS.md. Nothing else in a block is evaluated. The rule is the rubric's, computed
 deterministically, and is the same rule the workflow reports as `finalize_ready`.
 `not-approved` is **no longer emitted** as a refusal reason since v0.9 — the old
 "every block `status: approved`" requirement is gone; the reason is kept in the
@@ -326,26 +347,38 @@ deterministically, and is the same rule the workflow reports as `finalize_ready`
 STATUS=FINALIZED, PHASE=BUILD. The source-write block lifts at this point and not
 before.
 
-**BUILD.** Sequential, tests-first. `/build-fleet:build` (run after the finalize
+**BUILD.** Sequential, tests-first. `/build-fleet:implement` (run after the finalize
 gate passes) dispatches qa first, then coder:
 
-1. **qa drafts TEST_PLAN.md + writes failing tests** per the `test-plan` skill —
-   each test must initially FAIL (no source exists yet) — then signals
+1. **qa writes failing tests, marked with their criteria** — each test carries a
+   `<slug>/AC-<n>` comment (on or above it) for every criterion it covers, every
+   criterion has at least one, and each test must initially FAIL (no source exists
+   yet) — then signals
    `BUILD_FLEET_QA_TESTS_READY: <count> failing tests in tests/`.
 2. **coder implements to spec.** Coder refuses to begin until qa's failing tests
    exist and all fail, then iterates until every qa test passes, recording `gap:` /
-   `deviation:` / `todo:` markers in `IMPL_NOTES.md`.
+   `deviation:` / `todo:` markers in `IMPL_NOTES.md` (created on first write).
 
-Both roles first load any skills routed to them in `SKILL_MANIFEST.md` (advisory,
-never gating — see the `skill-routing` skill).
+A criterion that cannot be tested is a spec defect: product-owner fixes the spec.
+
+**Drift gate.** `scripts/drift-gate.sh` proves every acceptance criterion in the spec
+is named by a `<slug>/AC-<n>` marker in a test file under the test roots, and that no
+marker names a criterion the spec lacks. `/build-fleet:implement` runs it after
+qa's suite is verified (before coder) and again before `BUILD_STATE: done`; each failure
+gets one qa repair pass, then sets `QA_FAIL: drift` and stops. `/build-fleet:handoff`
+runs it before the change-cycle budget; a failure sets `QA_FAIL: drift` and refuses.
+With `QA_FAIL: drift` set, `/build-fleet:build` routes to implement's repair mode.
+
+Both roles first load any skills routed to them in PROGRESS.md's `CODER_SKILLS` /
+`QA_SKILLS` (advisory, never gating — see the `skill-routing` skill).
 
 **BUILD variants.** `PROGRESS.md`'s `BUILD_MODE` field selects the execution mode
 (set by the classifier; manual override via PROGRESS.md edit or invoking
 `/build-fleet:deep-build` directly):
 
 - **`standard`** — the sequential qa-then-coder pattern above, orchestrated by
-  `/build-fleet:build` via the Task tool.
-- **`deep-build`** — for multi-file / multi-package features. `/build-fleet:build`
+  `/build-fleet:implement` via the Task tool.
+- **`deep-build`** — for multi-file / multi-package features. `/build-fleet:implement`
   runs qa first (same as standard), then routes implementation to
   `workflows/deep-build.js`: an architect subagent designs a file partition, N
   coders (default 3, max 8) fan out in parallel against the pre-existing failing
@@ -358,10 +391,10 @@ never gating — see the `skill-routing` skill).
 
 **CHANGE_REVIEW.** `/build-fleet:handoff` sets PHASE=CHANGE_REVIEW, increments
 `CHANGE_CYCLE`, and runs architect (design adherence + ADR compliance) +
-product-owner (meets `acceptance.md`) + qa (coverage gaps) against the diff. qa also
+product-owner (meets the acceptance criteria) + qa (coverage gaps) against the diff. qa also
 runs the **counterfactual** — each test must FAIL if coder's source change were
 reverted (a test that passes regardless is decorative). The counterfactual is
-**snapshot-first**: record a `git stash create` SHA in IMPL_NOTES.md before any
+**snapshot-first**: record a `git stash create` SHA in IMPL_NOTES.md (create it if absent) before any
 revert, operate against that ref, verify the restore against it before evaluating
 any verdict, and never use a bare `git checkout` of the changed files (full
 procedure in `agents/qa.md`).
@@ -423,10 +456,12 @@ Registered in `hooks/hooks.json`; scripts (each with a committed test harness) i
 7. Orphaned `.workflow-in-flight` markers are reaped on Stop — released (empty)
    markers immediately, abandoned ones after a staleness threshold.
    *(reap-stale-workflow-markers, Stop.)*
-8. spec.md / acceptance.md cannot grow past `SPEC_MAX_KB` while the field is present;
-   over budget the answer is a split. *(cap-spec-size, PreToolUse Write|Edit.)*
-9. acceptance.md cannot name more than `AC_MAX` distinct criteria while the field is
-   present. *(validate-acceptance-count, PostToolUse.)*
+8. spec.md cannot grow past `SPEC_MAX_LINES` lines while the field is present; over
+   budget the answer is a split. *(cap-spec-size, PreToolUse Write|Edit.)*
+9. spec.md's acceptance section cannot name more than `AC_MAX` distinct criteria while
+   the field is present. *(validate-acceptance-count, PostToolUse.)*
+10. Source writes are refused for an active forward feature whose `SDD_SCHEMA` is not
+   2. *(block-source-before-finalized, PreToolUse.)*
 
 **Fail-closed semantics.** The gates anchor at `CLAUDE_PROJECT_DIR` (a drifted cwd
 cannot silently disable them), reject any `..` path segment before prefix-matching,
@@ -450,16 +485,16 @@ phase, the cycle count, the unresolved blockers (verbatim from REVIEW.md), and t
 conflicting positions. It sets PHASE=ESCALATED and stops. Escalation is a
 first-class outcome, not a failure — the human decides how to break the deadlock.
 
-Two human-driven commands operate on stuck state:
+Two human-only forms of `status` operate on stuck state:
 
-- **`/build-fleet:resolve-escalation <decision>`** — archives ESCALATION.md into
+- **`/build-fleet:status resolve <decision>`** — archives ESCALATION.md into
   REVIEW.md (append-only), deletes ESCALATION.md, resets the exhausted cycle
   counter (never `CYCLE_TOTAL`), restores the pre-escalation phase, and records the
   human decision. The sanctioned unblock path.
-- **`/build-fleet:park <reason>`** — records the parked state in PROGRESS.md and
+- **`/build-fleet:status park <reason>`** — records the parked state in PROGRESS.md and
   releases the in-flight lock via `acquire-active.sh release` (e.g. so a sev0 bug
   can be triaged mid-feature). Nothing is deleted; resuming is a deliberate human
   act (re-acquire the lock, restore the pre-park PHASE).
 
-Parking is a human act (the command is not model-invocable); the orchestrator's job
+Parking is a human act (`status` is not model-invocable); the orchestrator's job
 when blocked is to surface the conflict and stop.

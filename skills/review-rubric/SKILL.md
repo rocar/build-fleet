@@ -1,6 +1,6 @@
 ---
 name: review-rubric
-description: The shared severity vocabulary every reviewer uses in .sdd/<feature>/REVIEW.md — blocker, major, minor — with exact definitions and gate effects. Consult during /build-fleet:review and /build-fleet:handoff, and whenever assigning a severity to a finding.
+description: The blocker, major and minor severity definitions and their gate effects, shared by every reviewer writing REVIEW.md. Consult whenever assigning or checking a finding's severity.
 ---
 
 # Review Rubric
@@ -31,7 +31,7 @@ literal substring search.
 <!-- verified-rule:start -->
 In a verified review (`REVIEW_SHAPE: verified`), a `[blocker]` or `[major]` carries an anchor and a test,
 or it is recorded as a `[minor]`. The anchor is a quote of 10–500 characters copied verbatim from
-`spec.md`, `acceptance.md`, `DECISIONS.md` or `_product/DECISIONS.md`, or a named absence (the file, an
+`spec.md`, `DECISIONS.md` or `_product/DECISIONS.md`, or a named absence (the file, an
 existing section heading, and what is missing). The test is one sentence naming a test that would fail
 if the finding is real. Quotes are checked word for word after the review: a finding whose anchor quote
 is not found is demoted, and a verifier's vote whose quote is not found does not count.
@@ -45,12 +45,11 @@ is not found is demoted, and a verifier's vote whose quote is not found does not
 - [major] (<role>-c<M>-2) <concern>
   disposition: fix | adr ADR-<K>
 - [minor] (<role>-c<N>-3) <concern>
-status: concerns-raised | approved
 ```
 
-The `status:` line is mandatory (its presence is required by the block shape;
-since v0.9 its value is informational — the finalize gate reads dispositions and
-blockers, see "Delta review and disposition (v0.9)" below). In workflow REVIEW
+A block is its heading plus its finding lines; a role with no findings writes the
+heading alone. The finalize gate reads dispositions and blockers, see "Delta review
+and disposition (v0.9)" below. In workflow REVIEW
 the reviewer subagents return structured concerns payloads which the workflow merges into the
 canonical block shape above; the scribe appends them. On non-workflow paths
 (CHANGE_REVIEW, direct invocation) the `check-review-written` SubagentStop hook
@@ -114,7 +113,7 @@ finding the next reviewer should re-raise by id — same content, elevated to
 - **A `refuted-by:` continuation closes a blocker or a major** — the survival vote
   refutes any severity; a blocker with no such continuation stays open only until a
   later cycle simply does not re-raise it.
-- **`status:` is informational.** The finalize gate reads `[blocker]` lines and
+- **Only findings are read.** The finalize gate reads `[blocker]` lines and
   `disposition:` / `refuted-by:` lines (`scripts/finalize-gate.sh`).
 
 ## Verified review

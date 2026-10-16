@@ -1,12 +1,13 @@
 ---
 description: Run CHANGE_REVIEW on the diff, then hand off to devops
 allowed-tools: Read, Write, Edit, Bash, Task
+user-invocable: false
 ---
 
 <!-- Deliberately model-invocable (audit §3.22 evaluated): handoff is dispatched
      by the orchestrator inside the DEVELOPING loop, and its devops leg only
      advances on an explicit BUILD_FLEET_DEVOPS_OK signal — the human gates live
-     at /build-fleet:finalize and /build-fleet:plan-finalize, not here. -->
+     at /build-fleet:finalize and /build-fleet:status ratify, not here. -->
 
 # /build-fleet:handoff
 
@@ -20,14 +21,14 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 
 2. **Check phase.** Read PROGRESS.md. PHASE must be `BUILD`, `CHANGE_REVIEW`
    or `HANDOFF`. If it's anything else (especially `SPEC` or `REVIEW`), refuse
-   and tell the user to run `/build-fleet:finalize` then `/build-fleet:build`
+   and tell the user to run `/build-fleet:finalize` then `/build-fleet:implement`
    first. **`PHASE: HANDOFF` is a resume**: a previous run passed CHANGE_REVIEW
    and reached devops, and devops refused or failed (step 9 leaves `PHASE:
    HANDOFF` in that case). Run the gate to confirm the current change cycle
    still passes —
    `bash "${CLAUDE_PLUGIN_ROOT}/scripts/change-review-gate.sh" "<slug>"` — and
-   on `"pass":true` skip straight to step 9. On `"pass":false` the workspace was
-   edited by hand since; continue at step 3 as a normal run. If the gate prints
+   on `"pass":true` run the drift gate (step 4) and, if it passes, skip straight to step 9.
+   On `"pass":false` the workspace was edited by hand since; continue at step 3 as a normal run. If the gate prints
    no `BUILD_FLEET_CHANGE_REVIEW_GATE:` line it could not evaluate (exit 1: no
    PROGRESS.md, a non-integer `CHANGE_CYCLE`, jq missing); refuse with its
    stderr. The same holds wherever this command runs the gate.
@@ -35,13 +36,22 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 3. **Check ESCALATION.md.** If it exists, refuse.
 
 4. **Pre-flight: tests must exist and pass.**
-   - If no tests exist (no `tests/` dir, no test files, no `test`
+   - If no tests exist (no test files under the test roots, no `test`
      command), refuse: BUILD is not complete until qa has authored tests
-     per `acceptance.md`.
+     for the spec's acceptance criteria.
    - Run the project's test command (npm test / pytest / make test, per
      `stop-tests.sh`'s detection). If tests fail, refuse with the failing
      output. The `stop-tests` hook would catch this at session-end anyway;
      catching it here gives a clearer error.
+   - Run the drift gate: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/drift-gate.sh" "<slug>"`,
+     and relay its `BUILD_FLEET_DRIFT_GATE:` line. This runs before the change-cycle
+     budget and before `CHANGE_CYCLE` moves, so a failure never spends a review cycle.
+     `"pass":true` (an unchecked feature included) → continue. `"pass":false` → set
+     `QA_FAIL: drift` in PROGRESS.md, emit
+     `BUILD_FLEET_HANDOFF_REFUSE: {"feature":"<slug>","code":2,"reason":"drift","gate":<the gate line's JSON>}`
+     and stop; the lite `build` command repairs the criterion markers. No line at all (exit 1) →
+     emit `BUILD_FLEET_HANDOFF_REFUSE: {"feature":"<slug>","code":2,"reason":"drift-gate-error"}`
+     with its stderr and stop.
 
 5. **Check the change-cycle budget.** Read `CHANGE_CYCLE:` from PROGRESS.md.
    The budget is 3 change-review cycles. If `CHANGE_CYCLE >= 3`, run the gate
@@ -77,11 +87,11 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    - The active feature slug and the current CHANGE_CYCLE number.
    - A pointer to the diff (the orchestrator runs `git diff` against the
      base if a git repo; otherwise describe the changed files).
-   - A pointer to `spec.md`, `acceptance.md`, `DECISIONS.md`, `IMPL_NOTES.md`,
-     `TEST_PLAN.md`.
+   - A pointer to `spec.md` (its acceptance criteria included), `DECISIONS.md` and
+     `IMPL_NOTES.md` if it exists. The tests' `<slug>/AC-<n>` markers map criteria to tests.
    - The reviewer-specific lens:
      - architect: design adherence + ADR compliance.
-     - product-owner: meets `acceptance.md`?
+     - product-owner: meets the spec's acceptance criteria?
      - qa: coverage gaps before handoff.
    - The REVIEW.md entry format and severity rubric reminder. **CHANGE_REVIEW
      blocks are headed `## Change-Cycle <CHANGE_CYCLE> — <role> — <iso8601>`**
@@ -147,7 +157,7 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    - Carries the passing `BUILD_FLEET_CHANGE_REVIEW_GATE:` line verbatim (from
      step 8, or from step 2 / step 5 when those skipped here). devops refuses
      without it.
-   - Pointers to spec.md, acceptance.md, DECISIONS.md, IMPL_NOTES.md.
+   - Pointers to spec.md, DECISIONS.md, and IMPL_NOTES.md if it exists.
    - Asks for CI/CD updates, IaC if applicable, and release notes.
    - Reminds devops to refuse if PHASE isn't HANDOFF — defense in depth.
    - Reminds devops to end with its completion signal — `BUILD_FLEET_DEVOPS_OK`
@@ -169,9 +179,10 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
    `/build-fleet:handoff`. *(Defaulting an unrecognized/missing signal to failure is
    deliberate — the safe default is "not shipped," never a false advance.)*
 
-10. **On devops success.** Edit `spec.md` STATUS line to retain
-    `FINALIZED` (no flip) and append a `## Implementation` section if not
-    already present, noting the CHANGE_CYCLE that approved and the date.
+10. **On devops success.** Leave `spec.md` untouched (it is frozen and at its line
+    budget). Record the ship in PROGRESS.md: `SHIPPED: <iso8601>` and
+    `SHIPPED_CHANGE_CYCLE: <the CHANGE_CYCLE that approved>` (add the lines if absent;
+    an `.sdd/` write, always gate-permitted).
     Tell the user the feature is shipped (or in the project's equivalent
     of shipped — opened PR, queued release, etc.).
 
@@ -259,6 +270,8 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
   (`HANDOFF` is a resume, step 2).
 - ESCALATION.md exists → refuse.
 - No tests, or test command fails → refuse with the failing output.
+- The drift gate fails, or prints no line → `BUILD_FLEET_HANDOFF_REFUSE` with reason
+  `drift` (and `QA_FAIL: drift` set) or `drift-gate-error`.
 - The gate prints no `BUILD_FLEET_CHANGE_REVIEW_GATE:` line (exit 1) → refuse
   with its stderr.
 - `CHANGE_CYCLE` budget exhausted with the gate failing (`open-blockers` or

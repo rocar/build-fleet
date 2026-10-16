@@ -2,20 +2,21 @@
 description: Fan out parallel coders over a planned file partition
 argument-hint: "[max_partitions] [--cycle-budget <1-3>]"
 allowed-tools: Read, Write, Edit, Workflow, Bash(date:*)
+user-invocable: false
 ---
 
 # /build-fleet:deep-build
 
 You are the **orchestrator**. The runtime rulebook is the `sdd-protocol` skill. BUILD for multi-file / multi-package features runs as a Claude Code [dynamic workflow](https://code.claude.com/docs/en/workflows). This command validates preconditions, sets up the workflow handoff, and dispatches `workflows/deep-build.js`.
 
-The workflow itself: architect plans an N-way file partition, N coders fan out in parallel (each owning a disjoint file set, all writing against the pre-existing failing tests qa authored), then architect + qa run an adversarial review of the merged diff against `acceptance.md`. The scribe aggregates results into `IMPL_NOTES.md` and updates PROGRESS.md.
+The workflow itself: architect plans an N-way file partition, N coders fan out in parallel (each owning a disjoint file set, all writing against the pre-existing failing tests qa authored), then architect + qa run an adversarial review of the merged diff against the spec's acceptance criteria. The scribe aggregates results into `IMPL_NOTES.md` and updates PROGRESS.md.
 
 ## When to use this vs. standard BUILD
 
-- **`/build-fleet:build`** runs standard BUILD (qa first, then a single coder). Best for single-file or tightly coupled features where partitioning has no benefit.
+- **`/build-fleet:implement`** runs standard BUILD (qa first, then a single coder). Best for single-file or tightly coupled features where partitioning has no benefit.
 - **`/build-fleet:deep-build`** runs the fan-out workflow. Best for multi-package monorepos or features spanning many independent files where parallel coders give real time wins.
 
-The classifier sets `BUILD_MODE: deep-build` in `PROGRESS.md` for features it routes here, and `/build-fleet:build` dispatches this workflow automatically. This command is the manual / iteration entry point.
+The classifier sets `BUILD_MODE: deep-build` in `PROGRESS.md` for features it routes here, and `/build-fleet:implement` dispatches this workflow automatically. This command is the manual / iteration entry point.
 
 ## Workflow runtime requirement
 
@@ -36,13 +37,13 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
 
 3. **Check phase.** Read `.sdd/<slug>/PROGRESS.md`. PHASE must be `BUILD`. STATUS in `spec.md` must be `FINALIZED`. If either fails, refuse and name the actual state (`{"command":"deep-build","code":2,"reason":"not-finalized","status":"<STATUS>","phase":"<PHASE>"}`).
 
-4. **Check tests-first prerequisite.** List files under `tests/`. If empty or absent, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"no-failing-tests","detail":"run /build-fleet:build first so qa drafts the suite (tests-first ordering)"}`.
+4. **Check tests-first prerequisite.** List files under the test roots (`TEST_ROOTS` in PROGRESS.md, else whichever of `tests/`, `test/`, `spec/` exist). If none exist, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"no-failing-tests","detail":"run /build-fleet:implement first so qa drafts the suite (tests-first ordering)"}`.
 
-5. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"deep-build","code":2,"reason":"escalation-present"}`) — `/build-fleet:resolve-escalation` is the unblock path.
+5. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"deep-build","code":2,"reason":"escalation-present"}`) — `/build-fleet:status resolve` is the unblock path.
 
 6. **Resolve the cycle budget, then check it.** The BUILD escalation budget is configurable (default 3). Resolve it — **a per-run flag wins over the durable default**: `--cycle-budget <n>` in `$ARGUMENTS` → else `BUILD_CYCLE_BUDGET:` in `.sdd/<slug>/PROGRESS.md` → else `3`. Call the resolved integer `effective_budget` (treat unset as `3`); clamp it to `1..3` (the workflow re-clamps anything above the ceiling). The **workflow is the authoritative validator** — pass the resolved value through (step 11) and let `deep-build.js` reject a malformed budget via its `invalid-args` path; do **not** persist `BUILD_CYCLE_BUDGET` (a flag override is per-run).
 
-   Read `BUILD_CYCLE:` from `.sdd/<slug>/PROGRESS.md`. If the field is absent (a feature scaffolded before BUILD_CYCLE existed), add `BUILD_CYCLE: 0` to PROGRESS.md first — the workflow's scribe replaces fields **in place**, so the field must exist before dispatch (an `.sdd/` write; always gate-permitted). The workflow escalates **on** the cycle that exhausts `effective_budget`: blocker-severity concerns surviving the adversarial review at `BUILD_CYCLE == effective_budget` make that run write ESCALATION.md and set `PHASE: ESCALATED`. If `BUILD_CYCLE >= effective_budget` AND the last run left surviving blockers, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"build-cycle-budget-exhausted","build_cycle":<n>,"cycle_budget":<effective_budget>}` — resolve the surviving blockers or accept the escalation.
+   Read `BUILD_CYCLE:` from `.sdd/<slug>/PROGRESS.md`. If the field is absent (a feature scaffolded before BUILD_CYCLE existed), add `BUILD_CYCLE: 0` to PROGRESS.md first — the workflow's scribe replaces fields **in place**, so the field must exist before dispatch (an `.sdd/` write; always gate-permitted). Likewise, set `BUILD_STATE: started` on every dispatch (add the line if absent, overwrite `needs-iteration` if present) — the scribe writes `needs-iteration` or `done` back into it, and the stop-tests hook reads `started` plus the live workflow marker as "coders are mid-flight". The workflow escalates **on** the cycle that exhausts `effective_budget`: blocker-severity concerns surviving the adversarial review at `BUILD_CYCLE == effective_budget` make that run write ESCALATION.md and set `PHASE: ESCALATED`. If `BUILD_CYCLE >= effective_budget` AND the last run left surviving blockers, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"build-cycle-budget-exhausted","build_cycle":<n>,"cycle_budget":<effective_budget>}` — resolve the surviving blockers or accept the escalation.
 
 7. **Pick the new cycle number.** New cycle = `BUILD_CYCLE + 1`. Pass it to the workflow as `cycle`; the workflow's scribe writes it back to `BUILD_CYCLE` via the envelope's `state_delta`.
 
@@ -89,7 +90,7 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
 
 ## What this command does NOT do
 
-- Does not draft tests. `/build-fleet:build` already dispatched qa for that. Deep-build assumes the failing test suite exists.
+- Does not draft tests. `/build-fleet:implement` already dispatched qa for that. Deep-build assumes the failing test suite exists.
 - Does not bump PHASE, `BUILD_CYCLE`, or run CHANGE_REVIEW. The workflow's scribe writes `BUILD_CYCLE` (and the rest of the BUILD-completion delta) via the envelope's `state_delta`; this command only normalizes a missing `BUILD_CYCLE: 0` field pre-dispatch. CHANGE_REVIEW is `/build-fleet:handoff`'s job.
 - Does not write source. Only its coder subagents (inside the workflow) write source — each restricted to its partition.
 - Does not release `.workflow-in-flight` on success. Scribe does that as the final phase (only when the marker still contains this run's id; it empties the marker and the reaper deletes the empty file).

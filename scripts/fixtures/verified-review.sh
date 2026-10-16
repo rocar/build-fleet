@@ -9,9 +9,8 @@ vr_proj() {
   local p="$work/$1"
   mkdir -p "$p/.sdd/feat"
   printf 'feat\n' > "$p/.sdd/ACTIVE"
-  printf 'FEATURE: feat\nPHASE: REVIEW\nCYCLE: %s\nCYCLE_TOTAL: %s\nREVIEW_ROLES: qa,architect\nREVIEW_SHAPE: verified\n' "$2" "${3:-$2}" > "$p/.sdd/feat/PROGRESS.md"
-  printf 'STATUS: DRAFT\n# Upload\n## Behavior\nWhen offline, the client retries failed uploads.\n## Constraints\n*Retries* are capped at 3 attempts.\n' > "$p/.sdd/feat/spec.md"
-  printf '# Acceptance\n- AC-1: an upload against a failing server stops after 3 attempts\n' > "$p/.sdd/feat/acceptance.md"
+  printf 'SDD_SCHEMA: 2\nFEATURE: feat\nPHASE: REVIEW\nCYCLE: %s\nCYCLE_TOTAL: %s\nREVIEW_ROLES: qa,architect\nREVIEW_SHAPE: verified\n' "$2" "${3:-$2}" > "$p/.sdd/feat/PROGRESS.md"
+  printf 'STATUS: DRAFT\n# Upload\n## Behavior\nWhen offline, the client retries failed uploads.\n## Constraints\n*Retries* are capped at 3 attempts.\n## Acceptance Criteria\n- **AC-1**: an upload against a failing server stops after 3 attempts\n' > "$p/.sdd/feat/spec.md"
   printf '# Architecture Decisions — feat\n\n## ADR-1: keep retries client-side\n\n- **Status:** accepted\n' > "$p/.sdd/feat/DECISIONS.md"
   printf '# Review Log — feat\n\n' > "$p/.sdd/feat/REVIEW.md"
   printf '%s' "$p"
@@ -21,7 +20,7 @@ vr_block() {
   local p="$1" c="$2" r="$3"; shift 3
   { printf '## Cycle %s — %s — 2026-10-20T00:00:00Z\nshape: verified\n' "$c" "$r"
     for l in "$@"; do printf '%s\n' "$l"; done
-    printf 'status: concerns-raised\n\n'; } >> "$p/.sdd/feat/REVIEW.md"
+    printf '\n'; } >> "$p/.sdd/feat/REVIEW.md"
 }
 vr_up()  { printf '  verdict: {"v":%s,"vote":"uphold","severity":"%s"}' "$1" "$2"; }
 # vr_rf <v> <quote-text> → a refutation with evidence quoting <quote-text> from spec.md

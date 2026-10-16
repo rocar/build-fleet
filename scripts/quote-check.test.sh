@@ -19,7 +19,7 @@ run "$p" 1
 assert "pass-rc0" "[ $rc -eq 0 ]"
 assert "pass-signal" "printf '%s' \"\$out\" | grep -q '\"checked\":3,\"failed\":0,\"revived\":\\[\\],\"exempt\":false'"
 assert "pass-event" "[ \"\$(ev '$p' '[.decision, .cycle, .cycle_total, .exempt]')\" = '[\"pass\",1,1,false]' ]"
-assert "event-fingerprint" "[ \"\$(ev '$p' '.files | keys')\" = '[\"DECISIONS.md\",\"acceptance.md\",\"spec.md\"]' ]"
+assert "event-fingerprint" "[ \"\$(ev '$p' '.files | keys')\" = '[\"DECISIONS.md\",\"spec.md\"]' ]"
 run "$p" 1
 assert "first-event-wins" "printf '%s' \"\$out\" | grep -q '\"skipped\":\"already-checked\"' && [ \$(grep -c quote-check '$p/.sdd/feat/EVENTS.jsonl') -eq 1 ]"
 
@@ -57,4 +57,16 @@ assert "off-roster-block-checked" "printf '%s' \"\$out\" | grep -q '\"checked\":
 
 run "$p" x;  assert "bad-cycle-exit1" "[ $rc -eq 1 ]"
 out=$( cd "$p" && bash "$QC" ../x --cycle 1 2>/dev/null ); rc=$?; assert "bad-slug-exit1" "[ $rc -eq 1 ]"
+# four-file layout: criteria are quoted from spec.md; acceptance.md is not a source
+p=$(vr_proj ac-section 1)
+vr_block "$p" 1 qa '- [major] (qa-c1-1) retry limit' "$(vr_q 'an upload against a failing server stops after 3 attempts')" '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)"
+vr_block "$p" 1 architect
+run "$p" 1
+assert "spec-acceptance-section-quotable" "printf '%s' \"\$out\" | grep -q '\"failed\":0'"
+p=$(vr_proj ac-file 1)
+printf '# Acceptance\n- AC-1: only in the stray file\n' > "$p/.sdd/feat/acceptance.md"
+vr_block "$p" 1 qa '- [major] (qa-c1-1) retry limit' '  quote: {"file":"acceptance.md","text":"only in the stray file"}' '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)"
+vr_block "$p" 1 architect
+run "$p" 1
+assert "acceptance-md-not-a-source" "printf '%s' \"\$out\" | grep -q '\"failed\":1'"
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]

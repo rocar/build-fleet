@@ -1,6 +1,6 @@
 ---
 name: sdd-spec-template
-description: The canonical spec.md structure for the build-fleet SDD workflow. Defines the required STATUS line, the required section order, what each section must contain, and the contract that the validate-spec-status PostToolUse hook enforces. Consult whenever drafting, revising, or reviewing a spec.md for an active feature.
+description: The spec.md structure: the STATUS line, the required sections in order, what each must contain, and what the spec hook enforces. Consult when drafting, revising or reviewing a spec.
 ---
 
 # SDD Spec Template
@@ -65,9 +65,12 @@ Known unknowns, failure modes, blast radius, things-we-don't-yet-know-how-
 to-do. Naming a risk here is not a failure; hiding one is.
 
 ## Acceptance Criteria
-Either inline OR a pointer to `acceptance.md` (preferred — keep criteria
-in their own file so qa can iterate independently). If pointer-style:
-just `See [acceptance.md](./acceptance.md)`.
+The spec's last section; frozen with it at FINALIZED. One observable criterion
+per item, each with a stable id:
+- **AC-1**: <observable behaviour, testable as written>
+- **AC-2**: <…>
+Never renumber an existing id. qa marks each test with `<slug>/AC-<n>` for the
+criteria it covers; a criterion that cannot be tested is a spec defect.
 ```
 
 ## What the validator checks

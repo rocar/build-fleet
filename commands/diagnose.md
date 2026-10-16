@@ -2,6 +2,7 @@
 description: Adversarially confirm the bug's root-cause hypothesis
 argument-hint: "[--cycle-budget <1-3>]"
 allowed-tools: Read, Write, Edit, Workflow, Bash(date:*)
+user-invocable: false
 ---
 
 # /build-fleet:diagnose
@@ -36,8 +37,8 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
 
 4. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists → refuse
    (`{"command":"diagnose","code":2,"reason":"escalation-present"}`); tell the user to read it
-   and either resolve it with `/build-fleet:resolve-escalation <decision>` (revising the
-   hypothesis) or abandon the bug with `/build-fleet:park <reason>`.
+   and either resolve it with `/build-fleet:status resolve <decision>` (revising the
+   hypothesis) or abandon the bug with `/build-fleet:status park <reason>`.
 
 5. **Gate on a recorded hypothesis.** Read `.sdd/<slug>/diagnosis.md`. The
    `## Root-cause hypothesis`, `## Blast radius`, and `## Fix strategy` sections must each be
@@ -57,7 +58,7 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
    ```
    BUILD_FLEET_DIAGNOSE_SEV0_SKIP: {"slug":"<slug>","reason":"sev0 hotfix — adversarial confirmation deferred to post-ship"}
    ```
-   and tell the user to run **`/build-fleet:fix`** directly — it takes the bug from
+   and tell the user to run **`/build-fleet:apply-fix`** directly — it takes the bug from
    `PHASE: DIAGNOSE` / STATUS `DIAGNOSED`, flips `diagnosis.md` → `CONFIRMED` via the fast-path, and
    records the post-hoc obligation (`BUILD_FLEET_POSTHOC_DIAGNOSIS_DUE`). The reproducing-test gate
    still holds. **Stop here** (no workflow). `sev1`/`sev2` continue to step 7. *(An operator who
@@ -117,7 +118,7 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
 
 14. **Report and exit.** The workflow runs in the background (`/workflows` shows progress;
     `/build-fleet:status` shows the verdict on completion). Next legal command by verdict:
-    - `confirmed` → **`/build-fleet:fix`** — the FIX gate reads the confirmed verdict, flips
+    - `confirmed` → **`/build-fleet:apply-fix`** — the FIX gate reads the confirmed verdict, flips
       `diagnosis.md` → `CONFIRMED` + `PHASE` → `FIX`, then implements the fix.
     - `refuted` → revise `diagnosis.md`'s hypothesis, then re-run `/build-fleet:diagnose`.
     - `escalate` → human action on the `ESCALATION.md` the workflow's scribe writes.
@@ -129,20 +130,20 @@ then tell the user the bug lane's DIAGNOSE phase requires Claude Code v2.1.154+ 
     `scribe_apply: "failed"`, the scribe could not write state even after a retry: REVIEW.md/
     PROGRESS.md did **not** land and the marker may remain (release it if its content matches
     your run id). Whoever reads that result must report the run as failed with its
-    `scribe_error` — never treat the verdict as applied or advance to `/build-fleet:fix`.
+    `scribe_error` — never treat the verdict as applied or advance to `/build-fleet:apply-fix`.
 
 ## The CONFIRMED flip is the FIX gate's job (not this command)
 
 The `diagnose.js` workflow is **async-launched**: this command dispatches it and returns; the
 scribe records the verdict (`REVIEW.md` + `PROGRESS.md` CYCLE) on completion. The
-`diagnosis.md` STATUS → `CONFIRMED` + `PHASE` → `FIX` flip is applied by **`/build-fleet:fix`**
+`diagnosis.md` STATUS → `CONFIRMED` + `PHASE` → `FIX` flip is applied by **`/build-fleet:apply-fix`**
 when it reads a `confirmed` verdict — exactly as `/build-fleet:finalize` (not `/build-fleet:review`)
 flips a spec to `FINALIZED` after the async review. This keeps the deterministic STATUS flip in a
 synchronous gate command rather than inside the fire-and-forget workflow.
 
 ## What this command does NOT do
 
-- Does not flip `diagnosis.md` to `CONFIRMED` — that is `/build-fleet:fix`'s gate (above).
+- Does not flip `diagnosis.md` to `CONFIRMED` — that is `/build-fleet:apply-fix`'s gate (above).
 - Does not append to `REVIEW.md` or write `ESCALATION.md` — the workflow's scribe does, via the envelope.
 - Does not release `.workflow-in-flight` on success — the scribe does, as the final phase.
 - Does not persist `DIAGNOSE_CYCLE_BUDGET`. Set the durable default out-of-band in `.sdd/<slug>/PROGRESS.md` (the scribe preserves unknown fields); a `--cycle-budget` flag overrides it for this run only.

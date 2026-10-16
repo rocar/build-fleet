@@ -49,7 +49,7 @@ safe.
 `/build-fleet:new-feature`). It refuses while `.sdd/ACTIVE` is non-empty — **a bug
 and a forward feature share the single `.sdd/ACTIVE` lock** (one item in flight, the
 simplest correct rule; there is no second `ACTIVE_BUG` lane, so a sev0 cannot preempt
-a mid-flight feature — the human parks the feature first with `/build-fleet:park`).
+a mid-flight feature — the human parks the feature first with `/build-fleet:status park`).
 On a clean lock it:
 
 1. derives a kebab-case `bug-<…>` slug and acquires the in-flight lock
@@ -57,7 +57,7 @@ On a clean lock it:
 2. scaffolds `.sdd/<slug>/` with **`diagnosis.md`** (`STATUS: REPORTED`, the symptom
    verbatim under `## Symptom + reproduction steps`) and a bug-lane `PROGRESS.md`
    (`SDD_SCHEMA: 1`, `LANE: bug`, `PHASE: REPORT`, `SEV: pending`, `CYCLE: 0`,
-   `FIX_CYCLE: 0`) — and **no** `spec.md`/`acceptance.md`;
+   `FIX_CYCLE: 0`) — and **no** `spec.md`;
 3. runs the **triage classifier** — the `classifier` agent in **bug mode** (see
    `agents/classifier.md` § Bug-mode) — for `{severity, cause_known}`;
 4. **routes on `cause_known`:** `true` → the cause is obvious from the report; emit
@@ -97,6 +97,11 @@ forward behavior as a regression).
 
 ## REPRODUCE + DIAGNOSE (the confirmation workflow)
 
+The hypothesis carries `HYPOTHESIS_CYCLE: <n>` as the first line under
+`## Root-cause hypothesis`: the diagnose cycle it is written for (`CYCLE + 1`). The lite
+router runs `diagnose` only while `HYPOTHESIS_CYCLE > CYCLE`; a refuted hypothesis
+(`CYCLE` has caught up) is rewritten first.
+
 Two commands carry a bug from a reproduction to a confirmed (or refuted) root cause:
 
 - **`/build-fleet:reproduce` (REPORT→REPRODUCE).** Delegates to **qa** to author ≥1
@@ -114,7 +119,7 @@ Two commands carry a bug from a reproduction to a confirmed (or refuted) root ca
 **`diagnose.js` — an inverted `review.js`.** Reviewer roles `[architect, coder]` (the
 PO drops out). Each tries to **refute** the recorded hypothesis, citing the
 **reproduction** (the failing test / `diagnosis.md` reproduction steps) — not
-`spec.md`/`acceptance.md`. The substantive-refutation floor is reused verbatim (≥40
+`spec.md`. The substantive-refutation floor is reused verbatim (≥40
 chars + a citation retargeted to the reproduction; self-refutation filtered by role).
 The **inversion**: where a review concern *survives unless refuted*, here the
 **hypothesis is CONFIRMED iff no refutation survives** cross-examination. Verdicts:
@@ -127,11 +132,11 @@ re-run). Cross-examination rounds within one run do not bump `CYCLE` (one
 envelope shape matches `review.js`'s, and a surviving refutation is recorded as a
 `blocker`.
 
-**Gate-split: the CONFIRMED flip is `/build-fleet:fix`'s job, not
+**Gate-split: the CONFIRMED flip is `/build-fleet:apply-fix`'s job, not
 `/build-fleet:diagnose`.** `diagnose.js` is async-launched (fire-and-forget, like
 `review.js`); the scribe records the verdict (`REVIEW.md` + `PROGRESS.md` CYCLE) on
 completion. On `confirmed` the workflow advances `PHASE` → `FIX` (the scribe writes
-PROGRESS PHASE); the **`/build-fleet:fix`** gate then flips the `diagnosis.md` STATUS
+PROGRESS PHASE); the **`/build-fleet:apply-fix`** gate then flips the `diagnosis.md` STATUS
 → `CONFIRMED` *content* — the write the scribe must not do — exactly as
 `/build-fleet:finalize` (not `/build-fleet:review`) flips a spec to `FINALIZED` after
 the async review. Keeping the deterministic STATUS write in a synchronous gate keeps
@@ -141,14 +146,14 @@ it out of the fire-and-forget workflow.
 
 Three gate commands carry a confirmed bug to a shipped fix, completing the lane:
 
-- **`/build-fleet:fix` (the FIX gate — the bug-lane `/build-fleet:finalize`).** On a
+- **`/build-fleet:apply-fix` (the FIX gate — the bug-lane `/build-fleet:finalize`).** On a
   `confirmed` bug (`PHASE: FIX`, set by `diagnose.js`) it flips `diagnosis.md` STATUS
   → `CONFIRMED` (the content write that unlocks source — `block-source`'s second
   unlock + `require-reproducing-test` now both pass, since the REPRODUCE test
   exists), then delegates to **coder** to implement the recorded fix strategy and
   turn the reproducing test GREEN without breaking the suite. Emits
   `BUILD_FLEET_FIX_DONE`.
-  - **sev0 hotfix fast-path.** `SEV: sev0` may run `/build-fleet:fix` directly from
+  - **sev0 hotfix fast-path.** `SEV: sev0` may run `/build-fleet:apply-fix` directly from
     `PHASE: DIAGNOSE` / STATUS `DIAGNOSED`, skipping the `diagnose.js`
     confirmation — but it records a **post-hoc obligation**
     (`BUILD_FLEET_POSTHOC_DIAGNOSIS_DUE` + a `diagnosis.md` note) and **never**
@@ -185,5 +190,5 @@ Three gate commands carry a confirmed bug to a shipped fix, completing the lane:
 
 `/build-fleet:status` is bug-lane-aware (`LANE: bug` → prints phase / `SEV` /
 `diagnosis.md` STATUS / `CYCLE` / `FIX_CYCLE`). An escalated bug is unblocked with
-`/build-fleet:resolve-escalation <decision>` or abandoned with
-`/build-fleet:park <reason>`.
+`/build-fleet:status resolve <decision>` or abandoned with
+`/build-fleet:status park <reason>`.

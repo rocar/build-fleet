@@ -5,14 +5,92 @@ All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https:
 ## Compatibility
 
 build-fleet's machine surface is versioned: scaffolded `.sdd/` state files carry an
-`SDD_SCHEMA: 1` stamp, the status snapshot declares `build-fleet/status-snapshot@1`, and the
+`SDD_SCHEMA` stamp (2 for features since 0.12.0, 1 for bugs and the product tier), the status snapshot declares `build-fleet/status-snapshot@1`, and the
 `BUILD_FLEET_*` signal-line grammar is at version 1. Any release that changes the `.sdd/` schema
 or the signal grammar adds a **Compatibility** line to its entry below, describing the change and
 any migration; additive changes keep the version, breaking changes bump it. **Finish or park
-(`/build-fleet:park`) in-flight items before a major upgrade** — mid-flight `.sdd/` state is not
+(`/build-fleet:status park <reason>`) in-flight items before a major upgrade** — mid-flight `.sdd/` state is not
 migrated automatically. build-fleet assumes a single driver per working tree: one orchestrator
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
+
+## [0.12.0] — 2026-10-16
+
+### Added
+- **Five user commands** — `/build-fleet:start [idea | --product "<vision>"]`, `build`, `ship`,
+  `fix <symptom>`, `status`. Each drives the existing steps in order and ends with one
+  `BUILD_FLEET_LITE_DONE: {"stop":…,"next":…}` line; running it again resumes.
+- `scripts/lite-next.sh` — the router: reads `.sdd/` and prints one `BUILD_FLEET_LITE_NEXT:` line
+  (the next hidden step, or a stop). Fails closed on any state it does not recognise.
+- State markers the router reads: `BUILD_STATE` (`started | needs-iteration | done`, written by
+  `implement` and by the deep-build workflow's scribe), `FIX_DONE_CYCLE` (written by `apply-fix`),
+  and `HYPOTHESIS_CYCLE` (the first line of a bug's hypothesis).
+- `scripts/workflow-parse.test.sh` — every workflow must compile as an async body (replaces the
+  `node --check` advice, which rejects top-level `return`).
+- **Drift gate** — `scripts/drift-gate.sh` proves every acceptance criterion in a feature's spec
+  is named by a `<slug>/AC-<n>` marker comment in a test file under the test roots (`TEST_ROOTS`,
+  else whichever of `tests`, `test`, `spec` exist), and that no marker names a criterion the spec
+  lacks. On by default (`DRIFT_GATE: off` opts a feature with no tests out). It runs before and
+  after coder and at `handoff`; a failure gets one qa repair pass, then `QA_FAIL: drift` and
+  `build` repairs it. `drift-gate.sh --all` runs it in CI over every built feature. The feature
+  build (coder, deep-build, handoff) looks for tests under the same roots.
+
+### Changed
+- **Four files per feature.** A feature is `spec.md` (ending with its `## Acceptance Criteria`),
+  `PROGRESS.md`, `DECISIONS.md` and `REVIEW.md`; `IMPL_NOTES.md` exists only once something is
+  written to it. The test plan is the tests' own `<slug>/AC-<n>` markers. Skill routing is two
+  PROGRESS fields, `CODER_SKILLS` and `QA_SKILLS`. Review blocks are findings only: a role heading
+  plus its finding lines. Across the plugin's shipped files the change is 431 lines added and 575
+  deleted (net −144).
+- **The spec's budget is in lines:** `SPEC_MAX_LINES` (150 standard, 400 large) replaces
+  `SPEC_MAX_KB`; `AC_MAX` counts the spec's acceptance section.
+- `stop-tests` skips its green-suite check before coder is dispatched (`BUILD_STATE` absent) and
+  while a deep-build workflow is running, instead of reading TEST_PLAN/IMPL_NOTES content.
+- **Lean agents** — every agent and skill description is one line of at most 40 words that says
+  when to use it and when not to; agent bodies describe the role, not the workflow, at about 800
+  words (a few have a named cap). No rule was cut: `docs/history/2026-10-16-lean-agents-RULES.md`
+  quotes each one before and after. `scripts/agent-surface.test.sh` guards description length,
+  body caps, the inventory, and pins every agent's `tools:` list.
+- **Every other command is a hidden step** (`user-invocable: false`): it cannot be typed, and the
+  lite commands run it. Ask Claude in plain words to run one directly.
+- **`build`, `ship` and `status` are human-only** (`disable-model-invocation`): running `build` is
+  the approval of the spec, and Claude cannot run these three. The hidden steps behind them are
+  still model-invocable, and `fix` (model-invocable) runs a bug through to devops.
+- `status` takes the human decisions: `status park <reason>`, `status resolve [<slug>] <decision>`,
+  `status ratify [force]`; bare `status` names the next command and shows a plan awaiting
+  ratification. It no longer pins the haiku model.
+- `new-product` takes `<slug> [vision…]`.
+- README's first screen is install plus a 60-second walkthrough; the architecture, hidden-step
+  reference and history moved to `docs/reference.md`. `docs/v0.2/CONTRACT.md` opens with the lite
+  surface.
+- Agent bodies edited for the renames: qa, classifier, coder (description), architect,
+  product-owner.
+
+### Renamed
+- Step `build` → `implement`; step `fix` → `apply-fix` (the names now belong to the lite commands).
+
+### Removed
+- `park`, `resolve-escalation`, `plan-finalize` — their behavior moved into `status`, unchanged.
+- `acceptance.md`, `TEST_PLAN.md` and `SKILL_MANIFEST.md` from a feature's layout; the `test-plan`
+  skill (skills 7 → 6); `SPEC_MAX_KB`; the review block's `status:` line and the `status` field of
+  the reviewer payloads.
+
+### Fixed
+- The review gates (`finalize-gate`, `change-review-gate`, the `check-review-written` hook) missed every
+  `## Cycle N — <role> —` heading when run in a C locale: the `[—–-]` bracket matched one byte of the
+  three-byte em dash. Headings now match in every locale.
+- `workflows/plan-review.js` did not parse (backticks inside a template literal, since 0.9.0), so
+  the product-plan review could not load.
+
+### Breaking
+- Headless callers that typed a hidden step (`claude -p "/build-fleet:review"`) must drive the
+  lite commands instead. Signal lines from the hidden steps are unchanged.
+- **Compatibility:** forward features are `SDD_SCHEMA: 2`. **Breaking:** a forward feature started
+  before 0.12.0 is refused (`unsupported-schema`) by the lite router and the source-write gate —
+  park it (`/build-fleet:status park <reason>`) and start it again; nothing is migrated.
+  `drift-gate.sh --all` reports such features unchecked. The bug lane and the product tier are
+  unchanged (schema 1). Signal grammar adds `BUILD_FLEET_LITE_NEXT` and `BUILD_FLEET_LITE_DONE`; the
+  `BUILD_FLEET_DRIFT_GATE` line drops `missing`, `unparsed` and `gaps_open`.
 
 ## [0.11.0] — 2026-10-14
 

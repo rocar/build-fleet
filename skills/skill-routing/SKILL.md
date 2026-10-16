@@ -1,6 +1,6 @@
 ---
 name: skill-routing
-description: The build-fleet convention for routing domain-appropriate skills to role agents based on the product stack and feature type. Defines the SKILL_MANIFEST schema, the stack→skill mapping table, the classifier's emission rules, and the advisory load-if-available semantics. Consult it when the classifier emits a skill manifest, when new-feature persists it, and when coder/qa honor it during BUILD.
+description: How domain skills reach role agents: the classifier's skill_manifest, the CODER_SKILLS / QA_SKILLS fields, the stack-to-skill table and load-if-available semantics. Consult when emitting, persisting or honouring skill routing.
 ---
 
 # Skill Routing
@@ -16,23 +16,25 @@ never a gate.
 This mirrors Kiro's inclusion-mode idea: a declarative rule ("for this kind of
 work, include this skill") kept separate from the skill's content.
 
-## Where the manifest lives and who touches it
+## Where the routing lives and who touches it
 
 ```
 classifier (new-feature)  ── emits ──►  skill_manifest (JSON, in its verdict)
         │
-orchestrator (new-feature) ── persists ─►  .sdd/<feature>/SKILL_MANIFEST.md
+orchestrator (new-feature) ── persists ─►  PROGRESS.md: CODER_SKILLS / QA_SKILLS
         │
 coder / qa (BUILD)        ── read + apply ─►  the per-role skills listed there
 ```
 
 - **Classifier** derives the manifest (see "How the classifier derives it"). It
   writes no state — it only emits the `skill_manifest` field in its JSON verdict.
-- **`/build-fleet:new-feature`** persists a non-empty manifest to
-  `.sdd/<feature>/SKILL_MANIFEST.md`. An empty/null manifest writes no file
-  (absence = no routing; BUILD then runs exactly as a manifest-less feature).
-- **coder / qa** read `.sdd/<feature>/SKILL_MANIFEST.md` at BUILD and load+apply
-  the skills listed under their role. **Loading mechanism, precisely:** the agent
+- **`/build-fleet:new-feature`** persists each role's non-empty `skills` list as one
+  PROGRESS.md line, `CODER_SKILLS: <a>, <b>` / `QA_SKILLS: <a>, <b>`. An empty list
+  writes no line (absence = no routing; BUILD then runs exactly as an unrouted
+  feature). The rest of the manifest (`feature_type`, `derived_from`, `rationale`,
+  `tools_recommended`) is not stored; the `BUILD_FLEET_SKILL_MANIFEST:` signal line
+  records it.
+- **coder / qa** read their field at BUILD and load+apply the skills it lists. **Loading mechanism, precisely:** the agent
   invokes each listed skill by name via the **Skill tool** in its own reasoning
   (not frontmatter `skills:`). No workflow-side preload exists — the runtime's
   `agent()` call has no `skills` option — so a workflow-dispatched role loads only
@@ -41,13 +43,12 @@ coder / qa (BUILD)        ── read + apply ─►  the per-role skills listed
   path is what makes routing work in every execution mode — including agent-team
   mode, which ignores per-agent frontmatter skills.
 
-## SKILL_MANIFEST.md format
+## The classifier's `skill_manifest` (verdict field)
 
-A markdown file with one fenced JSON block. Schema:
+One JSON object in the classifier's verdict. Schema:
 
 ```json
 {
-  "feature": "<slug>",
   "feature_type": "frontend-ui | backend-api | data | cli | infra | mobile | docs | mixed | unknown",
   "derived_from": "<one-line: the stack signal + feature cue that drove this>",
   "roles": {
@@ -69,8 +70,8 @@ Rules:
   `AgentDefinition.tools` from it, but nothing wires that today.) Record it so the
   signal exists for a future increment; do not rely on it binding.
 - `advisory: true` always. Routing never blocks BUILD.
-- **The classifier never includes a top-level `feature` field** —
-  `/build-fleet:new-feature` stamps the slug when it persists the manifest.
+- **The classifier never includes a `feature` field** — `/build-fleet:new-feature`
+  adds the slug to its `BUILD_FLEET_SKILL_MANIFEST:` signal line.
 
 ## How the classifier derives it
 
@@ -142,17 +143,17 @@ present (an actual backend, not a local persistence layer), and say so in
 ## How coder / qa apply it (advisory, non-blocking)
 
 At BUILD, before implementing/testing:
-1. Read `.sdd/<feature>/SKILL_MANIFEST.md` if it exists. If absent → proceed
-   normally (no routing).
-2. For your role's `skills`, load and apply each **if it is available** in this
+1. Read your field in `.sdd/<feature>/PROGRESS.md` (`CODER_SKILLS` / `QA_SKILLS`). If
+   absent → proceed normally (no routing).
+2. For each skill it lists, load and apply each **if it is available** in this
    environment. Applying a skill = invoke it by name with the **Skill tool** so
    its guidance is in context. (No workflow-side preload exists — the runtime's
    `agent()` has no `skills` option — so a workflow-dispatched role loads only what
    its own agent body and the dispatch prompt name; the manifest stays advisory,
    loaded by the role at BUILD via its own instructions, on every path.)
 3. If a listed skill is **not available**, do not fail and do not block — proceed
-   with your normal craft and record one line in `IMPL_NOTES.md` (coder) /
-   `TEST_PLAN.md` (qa): `skill-unavailable: <name> (manifest-recommended)`. This
+   with your normal craft and record one line in `IMPL_NOTES.md` (create it if
+   absent): `skill-unavailable: <name> (routing-recommended)`. This
    leaves a trail so the operator can install it later.
 4. `tools_recommended` is informational on **every** path — note it, do not block
    on it; nothing binds tools.

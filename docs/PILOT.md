@@ -41,22 +41,21 @@ so scaffolding is safe against a production codebase.
 
 ## 3. First run — describe the feature inline
 
-The simplest entry point. Everything after the slug is the feature description:
+The simplest entry point. Everything after the command is the feature description;
+its first words become the feature's slug:
 
 ```
-/build-fleet:new-feature price-rounding "Order totals must round half-up to 2dp at
-    the line level before tax, not at the invoice level. Applies to the checkout
-    and invoice PDF paths. Out of scope: currency conversion."
+/build-fleet:start Price rounding: order totals must round half-up to 2dp at the
+    line level before tax, not at the invoice level. Applies to the checkout and
+    invoice PDF paths. Out of scope: currency conversion.
 
-/build-fleet:review      # adversarial review workflow — roster seeded by tier + risk
-/build-fleet:finalize    # the gate: flips spec.md to FINALIZED, unlocks source
-/build-fleet:build       # qa writes the failing suite first, then coder implements
-/build-fleet:handoff     # change-review against acceptance.md, then ship
+/build-fleet:build       # your approval: finalizes the spec, then qa writes the failing suite and coder implements
+/build-fleet:ship        # change review against the acceptance criteria, fixes, then devops
 ```
 
+`start` drafts the spec and runs the adversarial review until it is clean, then stops.
 `/build-fleet:status` prints where you are at any point. If the description is too
-thin, `new-feature` asks in a short structured loop rather than guessing from the
-slug.
+thin, `start` asks in a short structured loop rather than guessing.
 
 ## 4. Alternative — you already have a large, detailed spec document
 
@@ -65,45 +64,46 @@ Don't paste a long document into the command argument. Instead:
 1. **Commit the document into the repo** (e.g. `docs/specs/<name>.md`) so it is part
    of the traceability chain.
 2. **Reference it in the conversation** — tell Claude to read it, and discuss it.
-3. **Run `/build-fleet:new-feature <slug>` with *no* inline argument.**
+3. **Run `/build-fleet:start <short title> — spec in docs/specs/<name>.md`.**
 
-> ⚠️ **The gotcha:** an inline argument is treated as *authoritative* and **overrides
-> conversation context**. Passing `/new-feature x "see the spec doc"` makes that
-> seven-word string the spec. Leave the argument empty so the discussed document
-> resolves, or make the argument a real pointer that names the file path.
+> ⚠️ **The gotcha:** the idea you pass is treated as *authoritative* and **overrides
+> conversation context**. Passing `/build-fleet:start x, see the spec doc` makes that
+> string the spec. Make the argument a real pointer that names the file path.
 
 **Your document does not become `spec.md`.** The product-owner *translates* it into
 the eight sections the `validate-spec-status` hook enforces — Overview, Goals,
 Non-goals, Behavior, Interfaces / Contracts, Constraints, Risks, Acceptance
-Criteria — plus a separate `acceptance.md` of testable criteria. That translation is
+Criteria, the testable criteria the tests are marked with. That translation is
 where prose requirements become verifiable ones, and it is the step worth watching.
 
-**Review the translation before you finalize.** After `/new-feature` and before
-`/build-fleet:review`, have the spec's author read `.sdd/<slug>/spec.md` and
-`acceptance.md` next to the original document. Correct anything dropped or misread
-there — it is far cheaper than at any later gate.
+**Review the translation before you build.** When `start` stops with the spec ready,
+and before `/build-fleet:build`, have the spec's author read `.sdd/<slug>/spec.md`
+next to the original document. Correct anything dropped or misread
+there (then run `start` again so review sees it) — it is far cheaper than at any
+later gate.
 
 **If the document spans phases or reads like a PRD, it is a backlog, not a feature.**
-Use the product tier instead: `/build-fleet:new-product <slug>` (on an existing
-codebase the architect *infers* your real stack as the binding baseline) →
-`/build-fleet:plan-review` → `/build-fleet:plan-finalize ratify` (a human gate that
-never auto-passes) → then run each backlog row through the feature loop above.
+Use the product tier instead: `/build-fleet:start --product "<vision>"` (on an
+existing codebase the architect *infers* your real stack as the binding baseline;
+the plan is reviewed automatically) → `/build-fleet:status ratify` (a human gate that
+never auto-passes) → then `/build-fleet:start` with no idea takes each backlog row
+through the feature loop above.
 
 ## 5. How the outcome gets verified against the spec
 
 | Step | What guarantees it |
 |---|---|
-| High-level spec → testable criteria | PO writes `acceptance.md` separately from the narrative spec |
+| High-level spec → testable criteria | PO writes a testable `## Acceptance Criteria` section, ids `AC-<n>` |
 | Review is evidence-based | Reviewers must cite `{file, locator}`; an uncited refutation is discarded |
 | No premature code | `block-source-before-finalized` rejects every non-`.sdd/` write until FINALIZED; `guard-bash-writes` closes the shell escape hatch |
 | Tests precede implementation | `/build` sequences qa → coder; coder refuses to start until the failing suite exists |
-| Every criterion is covered | At CHANGE_REVIEW each acceptance criterion must name the test exercising it — a gap is a `[blocker]` |
+| Every criterion is covered | Each test carries `<slug>/AC-<n>` markers; the drift gate fails a criterion with none, and at CHANGE_REVIEW a gap is a `[blocker]` |
 | Tests actually pin behavior | **Counterfactual gate:** revert the change and every test must go red |
 | Nothing ships red | `/handoff` refuses on missing or failing tests |
 
 Hooks block with a non-zero exit and actionable feedback — agents cannot talk past a
-gate. The full record (`spec.md` → `acceptance.md` → `TEST_PLAN.md` →
-`IMPL_NOTES.md` → `REVIEW.md` → `DECISIONS.md`) stays in `.sdd/<slug>/`, committed.
+gate. The full record (`spec.md` → `REVIEW.md` → `DECISIONS.md` →
+`IMPL_NOTES.md`) stays in `.sdd/<slug>/`, committed.
 
 ## 6. Things to know before the pilot
 
@@ -117,12 +117,12 @@ gate. The full record (`spec.md` → `acceptance.md` → `TEST_PLAN.md` →
 - **Escalation is designed behavior, not failure.** Review is capped at 3 cycles; if
   blockers survive, the workflow writes `ESCALATION.md`, sets `PHASE: ESCALATED`,
   and refuses further review until a human runs
-  `/build-fleet:resolve-escalation <decision>` — which is archived append-only.
+  `/build-fleet:status resolve <decision>` — which is archived append-only.
 - **Decide what "ship" means up front.** At `/handoff` the devops role wires CI and
   writes release notes. For a pilot, state in-session that shipping means *open a PR
   only*.
 - **One item in flight, one session per working tree.** `.sdd/ACTIVE` is a lock;
-  `/build-fleet:park <reason>` is the sanctioned way to preempt it.
+  `/build-fleet:status park <reason>` is the sanctioned way to preempt it.
 - **Scope the first feature deliberately.** Standard tier is the sweet spot: real
   enough to need a spec, small enough to finish in one session. Trivial features
   skip `/review` entirely; genuinely large ones fan out to the deep-build workflow

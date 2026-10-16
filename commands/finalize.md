@@ -1,6 +1,7 @@
 ---
 description: Gate: flip the spec to FINALIZED and unlock source
 allowed-tools: Read, Edit, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/finalize-gate.sh":*), Bash(date:*)
+user-invocable: false
 ---
 
 # /build-fleet:finalize
@@ -15,7 +16,7 @@ refuse with an actionable diff.
 **This command is the gate ONLY.** It checks the review record, flips
 `spec.md` to `FINALIZED`, sets `PHASE: BUILD`, and stops. The BUILD
 orchestration (qa-first test drafting, coder dispatch, deep-build routing)
-lives in **`/build-fleet:build`** — run it after this gate passes. The split
+lives in **`/build-fleet:implement`** — run it after this gate passes. The split
 keeps finalize **idempotent**: re-running it on an already-finalized feature
 is a safe no-op.
 
@@ -36,7 +37,7 @@ cycle.
      `PHASE=BUILD`, the gate has already passed — this re-run is a safe no-op.
      Emit:
      `BUILD_FLEET_FINALIZE_PASS: {"feature":"<slug>","status":"FINALIZED","phase":"BUILD","already_finalized":true}`
-     and tell the user the next move is `/build-fleet:build` (or
+     and tell the user the next move is `/build-fleet:implement` (or
      `/build-fleet:handoff` if BUILD already completed). Change nothing.
 
    - **Trivial fast-path.** If `TIER=trivial` AND `PHASE=SPEC` AND `CYCLE=0`:
@@ -62,7 +63,7 @@ cycle.
 
 3. **Check ESCALATION.md.** If `.sdd/<active>/ESCALATION.md` exists, refuse —
    the feature is escalated and only a human can unblock it
-   (`/build-fleet:resolve-escalation` is the sanctioned path).
+   (`/build-fleet:status resolve` is the sanctioned path).
 
 4. **Run the gate script.** The gate is deterministic (v0.9) — never evaluate REVIEW.md
    in prose. Run:
@@ -103,7 +104,7 @@ cycle.
    - `majors-open` — `[major]` items dispositioned `fix` (or carrying no disposition line)
    - `majors-without-adr` — `[major]` items whose `disposition: adr ADR-N` cites an ADR absent from DECISIONS.md
    - `quote-check-missing` — a verified review cycle has no quote-check result (the check runs when the review's scribe finishes; it needs jq and the plugin's hooks enabled) — re-run `/build-fleet:review`
-   - `spec-changed-since-review` — spec.md, acceptance.md or an existing DECISIONS.md entry changed after this cycle was reviewed (the STATUS line and appended ADRs do not count) — re-run `/build-fleet:review` so the change is reviewed
+   - `spec-changed-since-review` — spec.md or an existing DECISIONS.md entry changed after this cycle was reviewed (the STATUS line and appended ADRs do not count) — re-run `/build-fleet:review` so the change is reviewed
    - `review-changed-since-check` — a verified cycle's REVIEW.md blocks were edited after their quotes were checked (verdict lines are trusted only as checked) — re-run `/build-fleet:review`
    - `verified-eval-failed` — the gate could not evaluate the verified blocks (a malformed REVIEW.md or a jq failure); it refuses rather than read that as no open findings — check REVIEW.md, then re-run `/build-fleet:review`
    - `not-approved` — **no longer emitted since v0.9** (status lines are informational); kept in the grammar for older orchestrators
@@ -126,7 +127,7 @@ cycle.
      ```
 
    - Tell the user: the spec is finalized; the next command is
-     **`/build-fleet:build`**, which drives the BUILD sequence (qa drafts the
+     **`/build-fleet:implement`**, which drives the BUILD sequence (qa drafts the
      failing test suite first, then coder implements — or routes to the
      deep-build workflow when `BUILD_MODE=deep-build`).
 
@@ -137,7 +138,7 @@ cycle.
 ## Hard rules
 
 - This command **never** dispatches qa, coder, or any workflow. BUILD
-  orchestration is `/build-fleet:build`'s job.
+  orchestration is `/build-fleet:implement`'s job.
 - This command **never** edits REVIEW.md. Reviewer blocks are append-only
   and owned by reviewers.
 - This command **never** writes ADRs. A `[major]` reaches the gate already

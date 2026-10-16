@@ -87,7 +87,7 @@ commands whose `allowed-tools` include `Workflow` (`/build-fleet:review`,
 | CHANGE_REVIEW | static | `/build-fleet:handoff` → 3× parallel `Task` reviewers + `Task` coder/devops |
 | Bug lane — triage / reproduce / fix / verify / ship-fix | static | commands + `Task` |
 | Bug lane — DIAGNOSE | **dynamic** | `workflows/diagnose.js` |
-| Product — PLAN, PLAN_FINALIZE | static | `/build-fleet:new-product`, `/build-fleet:plan-finalize` + scripts |
+| Product — PLAN, PLAN_FINALIZE | static | `/build-fleet:new-product`, `/build-fleet:status ratify` + scripts |
 | Product — PLAN_REVIEW | **dynamic** | `workflows/plan-review.js` |
 | DEVELOPING — advance | static | `/build-fleet:handoff` steps 12a–d + `scripts/next-feature.sh` |
 | All hard gates | static | `hooks/scripts/*` (PreToolUse / PostToolUse / SubagentStop / Stop) |
@@ -251,8 +251,8 @@ rubric is mirrored in the agent's prompt body) with that role's lens injected.
 Cycle 1 is a full review; **cycle ≥ 2 is a delta review** — verify closure of prior
 `fix` findings and blockers by id, new findings at blocker severity only, enforced
 in code (a post-cycle-1 major is demoted to minor), not only asked for in the
-prompt. Each reviewer reads `spec.md` + `acceptance.md` + prior `REVIEW.md` itself
-and returns a schema-validated `{role, status, concerns:[{id, severity, text}]}` —
+prompt. Each reviewer reads `spec.md` (acceptance criteria included) + prior `REVIEW.md`
+itself and returns a schema-validated `{role, concerns:[{id, severity, text}]}` —
 stable IDs shaped `<role>-c<cycle>-<n>` that persist across re-raises. A `null`
 return (agent error / schema failure) is a **transient fault, not a review
 outcome**: the workflow cleans up the marker and returns `incomplete` without
@@ -265,8 +265,8 @@ verdict.
 **Phase 2 — Cross-examination.** Every concern is merged into one pool; each
 reviewer is handed **only its peers'** concerns and must `refute` or `affirm` each.
 A refutation only counts if it is *substantive*: **≥40 characters** of reasoning
-**and** a structured `{file, locator}` citation against `spec.md`, `acceptance.md`
-or `DECISIONS.md` (e.g. `{acceptance.md, "line 14"}` or `{DECISIONS.md, "ADR-7"}`
+**and** a structured `{file, locator}` citation against `spec.md` or
+`DECISIONS.md` (e.g. `{spec.md, "AC-4"}` or `{DECISIONS.md, "ADR-7"}`
 — citing an ADR by id is itself a substantive refutation). Affirm is the safe
 default and needs no citation. Self-refutation is impossible — the pool excludes
 your own concerns, and the vote filters same-role refutations anyway.
@@ -344,7 +344,7 @@ the run as **failed** (state did not land, marker may remain) — never advance.
 | `clean` | `true` | `PHASE:REVIEW`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` (+approving/refuted entries), `DECISIONS.md` (any `adr` dispositions) | `/build-fleet:finalize` → `/build-fleet:build` |
 | `clean` | `false` | `PHASE:REVIEW`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` (open `fix` major(s)), `DECISIONS.md` (any `adr` dispositions) | `/build-fleet:revise` (hands the PO exactly the open items) → `/build-fleet:review` |
 | `revise` | `false` | `PHASE:REVIEW`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` (surviving blockers) | `/build-fleet:revise` → `/build-fleet:review` |
-| `escalate` | `false` | `PHASE:ESCALATED`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` + `ESCALATION.md` (blockers **and** open majors) | human: `/build-fleet:resolve-escalation` or `/build-fleet:park` |
+| `escalate` | `false` | `PHASE:ESCALATED`, `CYCLE:n`, `CYCLE_TOTAL:+1` | `REVIEW.md` + `ESCALATION.md` (blockers **and** open majors) | human: `/build-fleet:status resolve` or `/build-fleet:status park` |
 | `incomplete` / `invalid-args` | — | **unchanged** | none (marker released) | re-run `/build-fleet:review` (transient fault, bad args, or `disposition-incomplete`) |
 
 Cycle accounting: **one workflow run = one cycle**, against the per-escalation
@@ -353,7 +353,7 @@ disposition rounds do **not** bump that counter (`SKILL.md`, Operating principle
 The cycle that *exhausts* the budget with surviving blockers or open `fix` majors
 **is** the escalation — there is no separate 4th cycle. **v0.9 adds a second,
 cumulative counter**, `CYCLE_TOTAL`: every review cycle this feature has ever run,
-never reset — not by `/build-fleet:resolve-escalation`, not by `/build-fleet:park`.
+never reset — not by `/build-fleet:status resolve`, not by `/build-fleet:status park`.
 `/build-fleet:review` refuses to dispatch, before spending anything, when
 `CYCLE_TOTAL_MAX` is not `0` and `CYCLE_TOTAL ≥ CYCLE_TOTAL_MAX`
 (`cycle-total-exhausted`) — a backstop above the per-escalation budget, aimed at a
@@ -371,14 +371,14 @@ feature that keeps escalating, getting reset, and never converging.
 
 **Phase 2 (cross-examination):**
 
-- The **coder** refutes `qa-c1-2`: *"acceptance.md already enumerates the
-  429/timeout negative path as a required case"* + citation
-  `{acceptance.md, "line 14"}` (≥40 chars ✓, citation ✓, coder ≠ qa ✓).
+- The **coder** refutes `qa-c1-2`: *"the spec's acceptance criteria already
+  enumerate the 429/timeout negative path as a required case"* + citation
+  `{spec.md, "AC-4"}` (≥40 chars ✓, citation ✓, coder ≠ qa ✓).
 - No one substantively refutes `architect-c1-1` (qa affirms it).
 - `coder-c1-3` is a minor — irrelevant to the gate regardless.
 
 **Phase 3 (survival vote):** `qa-c1-2` is killed — rendered as a
-`refuted-by: coder — reason … (cites acceptance.md line 14)` continuation.
+`refuted-by: coder — reason … (cites spec.md AC-4)` continuation.
 `architect-c1-1` survives unrefuted; no major is left standing.
 
 **Phase 4 (disposition):** skipped — zero surviving majors, so the architect leg

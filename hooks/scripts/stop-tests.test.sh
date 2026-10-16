@@ -18,7 +18,7 @@ new_proj() {
   local p="$work/$1" code="$2"
   mkdir -p "$p/.sdd/feat"
   printf 'feat\n' > "$p/.sdd/ACTIVE"
-  printf 'PHASE: BUILD\n' > "$p/.sdd/feat/PROGRESS.md"
+  printf 'PHASE: BUILD\nBUILD_STATE: done\n' > "$p/.sdd/feat/PROGRESS.md"
   printf 'test:\n\t@echo running; exit %s\n' "$code" > "$p/Makefile"
   printf '%s' "$p"
 }
@@ -112,24 +112,44 @@ rc=0
 assert "pytest-branch-prefers-venv" "[ -f '$p/.venv-python-ran' ]"
 assert "pytest-branch-ignores-bare-red-pytest" "[ $rc -eq 0 ]"
 
-# --- v0.9 ride-along: the BUILD tests-first window. Between qa authoring the failing
-# suite (TEST_PLAN.md has content) and coder recording work (IMPL_NOTES.md has none),
-# a RED suite is the expected state — the gate must stand down, and re-engage the
-# moment coder writes. "Has content" = a line that is neither blank nor a heading.
-p=$(new_proj window 1)
-printf '# Test Plan — feat\n\n- AC-1 → test_a\n' > "$p/.sdd/feat/TEST_PLAN.md"
-printf '# Implementation Notes — feat\n' > "$p/.sdd/feat/IMPL_NOTES.md"
+# --- BUILD tests-first window: BUILD_STATE absent ⇒ coder not dispatched ⇒ red is expected ---
+p=$(new_proj window 1); printf 'PHASE: BUILD\n' > "$p/.sdd/feat/PROGRESS.md"
 run "$p"
-assert "tests-first-window-red-allows-stop" "[ $rc -eq 0 ]"
-assert "tests-first-window-no-counter" "[ ! -f '$p/.sdd/feat/.stop-test-retries' ]"
-printf 'deviation: x\n' >> "$p/.sdd/feat/IMPL_NOTES.md"
+assert "window-absent-build-state-allows" "[ $rc -eq 0 ]"
+assert "window-absent-no-counter" "[ ! -f '$p/.sdd/feat/.stop-test-retries' ]"
+
+# --- started + live workflow marker ⇒ a background deep-build is running ---
+p=$(new_proj wf 1); printf 'PHASE: BUILD\nBUILD_STATE: started\n' > "$p/.sdd/feat/PROGRESS.md"
+printf 'deep-build\n' > "$p/.sdd/feat/.workflow-in-flight"
 run "$p"
-assert "coder-wrote-gate-re-engages" "[ $rc -eq 2 ]"
-p=$(new_proj window2 1)   # heading-only TEST_PLAN.md is NOT "authored" → gate stays on
-printf '# Test Plan — feat\n' > "$p/.sdd/feat/TEST_PLAN.md"
-printf '# Implementation Notes — feat\n' > "$p/.sdd/feat/IMPL_NOTES.md"
+assert "window-started-live-workflow-allows" "[ $rc -eq 0 ]"
+
+# --- started + empty (released) marker ⇒ enforced ---
+p=$(new_proj wf0 1); printf 'PHASE: BUILD\nBUILD_STATE: started\n' > "$p/.sdd/feat/PROGRESS.md"
+: > "$p/.sdd/feat/.workflow-in-flight"
 run "$p"
-assert "heading-only-test-plan-not-a-window" "[ $rc -eq 2 ]"
+assert "started-released-marker-enforces" "[ $rc -eq 2 ]"
+
+# --- started, no workflow ⇒ an interrupted coder run: enforced ---
+p=$(new_proj st 1); printf 'PHASE: BUILD\nBUILD_STATE: started\n' > "$p/.sdd/feat/PROGRESS.md"
+run "$p"
+assert "started-no-workflow-enforces" "[ $rc -eq 2 ]"
+
+# --- needs-iteration ⇒ enforced, whatever IMPL_NOTES holds ---
+p=$(new_proj ni 1); printf 'PHASE: BUILD\nBUILD_STATE: needs-iteration\n' > "$p/.sdd/feat/PROGRESS.md"
+run "$p"
+assert "needs-iteration-enforces" "[ $rc -eq 2 ]"
+
+# --- needs-iteration with a live workflow ⇒ still enforced (only `started` is in the window) ---
+p=$(new_proj niwf 1); printf 'PHASE: BUILD\nBUILD_STATE: needs-iteration\n' > "$p/.sdd/feat/PROGRESS.md"
+printf 'deep-build\n' > "$p/.sdd/feat/.workflow-in-flight"
+run "$p"
+assert "needs-iteration-live-workflow-enforces" "[ $rc -eq 2 ]"
+
+# --- CHANGE_REVIEW with BUILD_STATE absent ⇒ enforced (the window is BUILD only) ---
+p=$(new_proj cr 1); printf 'PHASE: CHANGE_REVIEW\n' > "$p/.sdd/feat/PROGRESS.md"
+run "$p"
+assert "window-is-build-only" "[ $rc -eq 2 ]"
 
 echo "-----"
 echo "passed=$pass failed=$fail"

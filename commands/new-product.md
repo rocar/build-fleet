@@ -1,7 +1,8 @@
 ---
 description: Scaffold the product tier: vision, backlog, stack
-argument-hint: "<product-slug>"
+argument-hint: "<product-slug> [vision…]"
 allowed-tools: Read, Write, Edit, Task
+user-invocable: false
 ---
 
 # /build-fleet:new-product
@@ -12,13 +13,14 @@ not author the vision, choose the stack, or write source yourself.
 The runtime rulebook is the `sdd-protocol` skill — its `references/product-tier.md`
 covers the `.sdd/_product/` layout, file ownership, and the inheritance contract.
 This command only scaffolds and drafts: the plan it produces is interrogated by
-`/build-fleet:plan-review` and ratified by `/build-fleet:plan-finalize`; no gate
+`/build-fleet:plan-review` and ratified by `/build-fleet:status ratify`; no gate
 runs here.
 
 ## Arguments
 
-`$ARGUMENTS` — the product slug. Kebab-case, no whitespace. If empty, refuse and
-tell the user a slug is required.
+`$ARGUMENTS` — `<product-slug> [vision…]`. The first whitespace-delimited token is the
+product slug (kebab-case). Everything after it is the user's product vision, free text,
+possibly empty. If `$ARGUMENTS` is empty, refuse and tell the user a slug is required.
 
 ## Refusal cases (check first, in order)
 
@@ -39,8 +41,9 @@ tell the user a slug is required.
 
 ## Establish the product description
 
-Before scaffolding, determine *what the product is*. Look back through the
-conversation for a description the user already gave. **If none exists, STOP and
+Before scaffolding, determine *what the product is*. A vision given after the slug
+is the user's description. Otherwise look back through the conversation for a
+description the user already gave. **If none exists, STOP and
 ask** — do not infer a product from its slug. Ask for: the problem it solves,
 who it's for, the rough feature set, and any stack the user already has in mind.
 Wait for the answer. Carry it verbatim into the delegations below.
@@ -72,7 +75,7 @@ abandoned — bias small.
      chosen size requires (Overview, Goals; plus Non-goals, FAQ, and an
      `OUTCOME:` line for standard/large). Leave bodies empty — PO fills them.
      *(No hook validates `vision.md`'s STATUS — `validate-spec-status` fires
-     only on files named `spec.md`. The `/build-fleet:plan-finalize` gate flips
+     only on files named `spec.md`. The `/build-fleet:status ratify` gate flips
      this STATUS line at ratification.)*
    - `backlog.md` — header:
      ```
@@ -130,7 +133,8 @@ abandoned — bias small.
 2. **Delegate vision + backlog to product-owner.** Spawn `build-fleet:product-owner`
    via the Task tool. Tell it: it owns `.sdd/_product/vision.md` and
    `.sdd/_product/backlog.md`; draft the vision from the description (size-gated
-   sections per above) and a **phased** feature backlog.
+   sections per above) and a **phased** feature backlog. If a vision was given after
+   the slug, include it verbatim as the user's stated vision.
 
    **Phase 1 is a walking skeleton (v0.9):** the smallest VERTICAL slice that produces
    the product's primary artifact end to end — the thing a user would recognise as
@@ -145,7 +149,7 @@ abandoned — bias small.
    later elaborates, **not** acceptance criteria/interfaces/behavior. This intent is
    inherited by `/build-fleet:new-feature` (so the spec realizes the plan's intent
    rather than re-guessing) and is interrogated at PLAN_REVIEW. It must NOT set
-   any STATUS beyond `DRAFT` (only the `/build-fleet:plan-finalize` ratification
+   any STATUS beyond `DRAFT` (only the `/build-fleet:status ratify` ratification
    gate flips a product STATUS). Pass the
    product description verbatim. **Brownfield note:** the backlog is
    *forward-looking* — features that already exist in the codebase are not backlog
@@ -195,7 +199,7 @@ abandoned — bias small.
    context**: subsequent `/build-fleet:new-feature` runs will read `_product/STACK.md`
    and `_product/DECISIONS.md` and hold features to the product stack. Note that
    editing `_product/` files is done directly; when the plan is ready, run
-   `/build-fleet:plan-review` to interrogate it and `/build-fleet:plan-finalize`
+   `/build-fleet:plan-review` to interrogate it and `/build-fleet:status ratify`
    to ratify it (which also seeds the root CLAUDE.md product-memory block).
 
 ## Gates to honor
@@ -205,7 +209,7 @@ abandoned — bias small.
   active feature). The only blocker is the mid-review refusal in case 2 above —
   honor it rather than fighting the hook.
 - This command enforces **no** product gate. If you find yourself wanting to
-  enforce a product STATUS transition, that is `/build-fleet:plan-finalize`'s
+  enforce a product STATUS transition, that is `/build-fleet:status ratify`'s
   job — stop and surface it.
 
 ## Hard "no"s

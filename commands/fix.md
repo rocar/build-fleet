@@ -1,84 +1,64 @@
 ---
-description: Confirm the diagnosis, then implement the recorded fix
-allowed-tools: Read, Write, Edit, Task, Bash(npm test:*), Bash(pytest:*), Bash(make test:*)
+description: Take a bug from symptom to a verified, shipped fix
+argument-hint: "<symptom>"
+allowed-tools: Read, Write, Edit, Grep, Glob, Skill, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/lite-next.sh":*)
 ---
 
 # /build-fleet:fix
 
-You are the **orchestrator**. This is the bug-lane analog of `/build-fleet:finalize` — a
-**gate**, not a request. The `diagnose.js` workflow advances a confirmed bug to `PHASE: FIX`;
-this command applies the deterministic `diagnosis.md` STATUS → `CONFIRMED` *content* flip (the
-write the scribe must not do, mirroring how `/build-fleet:finalize` flips `spec.md` after
-review), which unlocks source writes (`block-source-before-finalized`'s second unlock +
-`require-reproducing-test`: CONFIRMED **and** the reproducing test from REPRODUCE both hold),
-then drives the coder to turn the reproducing test GREEN.
+This command's name is `fix`. It files the bug, writes a failing reproduction, proposes
+a root cause and has it challenged, applies and verifies the fix, and hands off to
+devops. It stops at devops' OK, at devops' refusal, or on an escalation.
 
-Rulebook: the `sdd-protocol` skill (`references/bug-lane.md`).
+<!-- LITE-LOOP START -->
+## The loop
 
-## What you do
+You are a thin driver. You never choose the next step yourself; the router does.
 
-1. **Resolve the active bug.** Read `.sdd/ACTIVE` (empty → `BUILD_FLEET_REFUSE: {"command":"fix","code":2,"reason":"no-active-item"}`).
-   Read `.sdd/<slug>/PROGRESS.md`; `LANE` must be `bug` (else refuse — use the forward commands).
+1. Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lite-next.sh" <name> $ARGUMENTS`, where `<name>`
+   is this command's name (above). Pass `$ARGUMENTS` on the first pass only; on every later
+   pass run it with `<name>` alone.
+2. Read its one `BUILD_FLEET_LITE_NEXT:` line.
+   - `"stop"` → write two to four lines on what this run did, then print
+     `BUILD_FLEET_LITE_DONE: {"stop":"<stop>","next":"<next>"}` (leave out `next` when the
+     line has none) and end.
+   - `"step":"action:hypothesis"` → carry out the hypothesis action below, then go to 1.
+   - any other `"step"` → invoke the Skill tool with skill `build-fleet:<step>` and the
+     line's `args`. If the step prints `BUILD_FLEET_WORKFLOW_LAUNCHED`, wait for that
+     workflow's completion notification and read its result before you go on.
+3. If the step printed a `BUILD_FLEET_*` line whose tag ends in `_REFUSE`, `_REFUSED`,
+   `_FAIL` or `_INCOMPLETE`, or a workflow result has `verdict` `incomplete` or
+   `invalid-args` or `scribe_apply: "failed"`: relay it verbatim and end with
+   `BUILD_FLEET_LITE_DONE: {"stop":"step-refused","step":"<step>"}`.
+4. If the step printed `BUILD_FLEET_DEVOPS_OK`: end with
+   `BUILD_FLEET_LITE_DONE: {"stop":"shipped"}`. If it printed
+   `BUILD_FLEET_TRIAGE_KNOWN_CAUSE` (triage found the cause already known and closed the
+   bug), end with `BUILD_FLEET_LITE_DONE: {"stop":"known-cause","next":"/build-fleet:start <the fix to make>"}`,
+   naming the fix triage recommends.
+5. Guards. Before each step, note the active item's `PROGRESS.md` and `spec.md` (or
+   `diagnosis.md`). If the router names the same step twice in a row and those files did
+   not change in between, end with `BUILD_FLEET_LITE_DONE: {"stop":"no-progress","step":"<step>"}`.
+   After 12 steps in this run, end with `BUILD_FLEET_LITE_DONE: {"stop":"step-cap"}`;
+   running the command again resumes.
+6. Go to 1.
 
-2. **Check ESCALATION.** If `.sdd/<slug>/ESCALATION.md` exists → refuse
-   (`{"command":"fix","code":2,"reason":"escalation-present"}`) — `/build-fleet:resolve-escalation` is the unblock path.
+Never pass a step's own "next command" hints on to the user. The only next command you
+name is the one in your `BUILD_FLEET_LITE_DONE` line. `build`, `ship` and `status` are
+human-only, so they never appear in your own command list; the router's `next` is still
+correct. Relay it verbatim and never substitute a hidden step for it.
+<!-- LITE-LOOP END -->
 
-3. **The gate — determine the path.** Read `PHASE` + `SEV` from PROGRESS.md and the
-   `diagnosis.md` STATUS:
+## The hypothesis action
 
-   - **Confirmed (normal).** `PHASE == FIX` → the `diagnose.js` workflow CONFIRMED the
-     hypothesis. Proceed.
-   - **sev0 hotfix fast-path.** `PHASE == DIAGNOSE` **and** `SEV == sev0` **and**
-     `diagnosis.md` STATUS == `DIAGNOSED` → sev0 may skip the adversarial confirmation
-     workflow. Proceed via the fast-path (step 4b records the post-hoc obligation). This
-     **never** skips the reproducing-test gate.
-   - **Re-entry after a verify bounce.** `PHASE == FIX` with STATUS already `CONFIRMED` →
-     proceed (re-dispatch the coder).
-   - **Otherwise** (`PHASE == DIAGNOSE` and not sev0, or any other phase) → refuse:
-     `BUILD_FLEET_REFUSE: {"command":"fix","code":2,"reason":"diagnosis-not-confirmed","detail":"run /build-fleet:diagnose first (sev0 may use the fast-path)"}`.
+This is the one write you make yourself.
 
-4. **Pre-flight: the reproducing test must exist.** Confirm ≥1 file under `tests/` (REPRODUCE
-   produced it). If none → refuse: `BUILD_FLEET_REFUSE: {"command":"fix","code":2,"reason":"no-reproducing-test","detail":"run /build-fleet:reproduce first"}`. (The gate would block source anyway; refusing here is clearer.)
-
-5. **Apply the confirm flip.**
-   a. If `diagnosis.md` STATUS ≠ `CONFIRMED`, flip it → `CONFIRMED` (keep all four `##`
-      sections). Ensure PROGRESS `PHASE: FIX`; refresh `UPDATED`. Source writes are now permitted.
-   b. **sev0 fast-path only:** append a note under `## Fix strategy` that adversarial
-      confirmation was skipped and is **owed post-ship**, and emit:
-      ```
-      BUILD_FLEET_POSTHOC_DIAGNOSIS_DUE: {"slug":"<slug>"}
-      ```
-   Emit:
-   ```
-   BUILD_FLEET_FIX_GATE: {"slug":"<slug>","sev":"<sev>","path":"confirmed|sev0-fast-path"}
-   ```
-
-6. **Delegate to coder.** Use the Task tool to invoke `build-fleet:coder`:
-
-   > PHASE=FIX for bug `<slug>`. `diagnosis.md` is CONFIRMED and a failing reproduction test
-   > exists under `tests/`. Read `.sdd/<slug>/diagnosis.md` — implement the recorded **fix
-   > strategy** so the reproducing test(s) turn GREEN **without breaking the existing suite**.
-   > Stay within the stated **blast radius**; do not widen it. Record `gap:`/`deviation:`/`todo:`
-   > markers in `.sdd/<slug>/IMPL_NOTES.md`. When the reproducing test(s) pass and the suite is
-   > green, emit exactly: `BUILD_FLEET_FIX_DONE: <count> tests green`.
-
-7. **Verify and report.** When coder returns, run the project's test command (per
-   `stop-tests.sh` detection). 
-   - All green (reproducing test(s) now pass, suite passes) → emit:
-     ```
-     BUILD_FLEET_FIX_DONE: {"slug":"<slug>","tests_green":<N>}
-     ```
-     Next command: `/build-fleet:verify` (the counterfactual gate).
-   - Still failing → emit `BUILD_FLEET_FIX_INCOMPLETE: {"slug":"<slug>","failing_tests":<N>}`,
-     surface the failures; coder iterates (no auto-loop). PHASE stays `FIX`.
-
-## What this does NOT do
-
-- Does not run the `diagnose.js` workflow (that is `/build-fleet:diagnose`).
-- For `sev1`/`sev2`, does **not** bypass confirmation — it refuses unless `PHASE == FIX`.
-
-## Refusal cases
-
-- No active bug / active item is a forward feature / `ESCALATION.md` present.
-- `PHASE == DIAGNOSE` and not `sev0` → confirm via `/build-fleet:diagnose` first.
-- No reproducing test under `tests/`.
+1. Read `.sdd/<slug>/diagnosis.md`, the reproducing test it names, and, if
+   `.sdd/<slug>/REVIEW.md` exists, the refutations from the latest cycle.
+2. Investigate the code read-only (Read, Grep, Glob).
+3. Edit only the `## Root-cause hypothesis`, `## Blast radius` and `## Fix strategy`
+   sections of `diagnosis.md` (`diagnose` refuses while any is empty). State one
+   falsifiable root cause that explains the reproduction and answers the earlier
+   refutations, what it reaches, and the smallest fix.
+4. Make the step's `args` (`HYPOTHESIS_CYCLE: <n>`) the first line under
+   `## Root-cause hypothesis`, replacing any earlier `HYPOTHESIS_CYCLE:` line.
+5. Write nothing else.

@@ -1,6 +1,7 @@
 ---
 description: Regenerate the product block in the root CLAUDE.md
 allowed-tools: Read, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/product-memory-splice.sh":*)
+user-invocable: false
 ---
 
 # /build-fleet:product-memory
@@ -9,7 +10,7 @@ You are the **orchestrator**. The runtime rulebook is the `sdd-protocol` skill
 (`references/product-tier.md` § Product memory). This command
 (re)generates the `<!-- BEGIN/END build-fleet:product -->` block in the repo-root
 `./CLAUDE.md` from the current `.sdd/_product/` state. It is the standalone twin of
-the best-effort generation `/build-fleet:plan-finalize` runs on ratification — use it
+the best-effort generation `/build-fleet:status ratify` runs on ratification — use it
 to **refresh** memory after editing the plan, or to **recover** a generation that was
 deferred (because a feature's spec was not `FINALIZED` at ratify time).
 

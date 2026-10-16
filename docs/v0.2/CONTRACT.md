@@ -1,6 +1,83 @@
 # CONTRACT.md — v0.2 workflow ↔ command-layer contract
 
-STATUS: M0 OUTPUT (+ Phase 6 empirical corrections appended below)
+STATUS: M0 OUTPUT (+ Phase 6 empirical corrections appended below; the lite surface added in 0.12.0)
+
+## The lite surface (current — read this first)
+
+Since 0.12.0, a person or a headless caller uses five commands. Every other command
+is a hidden step (`user-invocable: false`): the lite commands run it through the Skill
+tool, and it cannot be typed. The sections after this one describe those steps'
+own contract (workflow envelopes, return objects, refusal lines), which still holds.
+
+| Command | Does | Stops at |
+|---|---|---|
+| `/build-fleet:start [idea \| --product "<vision>"]` | Scaffolds a feature (or takes the next backlog feature), asks the clarifying questions, drafts the spec, reviews and revises it until clean or escalated. With `--product`, scaffolds and reviews the product plan. | Spec ready; plan ready for ratification; another item in flight; escalation. |
+| `/build-fleet:build` | Finalizes the spec, then runs the tests-first build (standard or parallel, per the classifier's `BUILD_MODE`). | Build done; escalation; a refusal. |
+| `/build-fleet:ship` | Runs change review, the coder fix loop, and hands off to devops. | Devops' OK or refusal; escalation. |
+| `/build-fleet:fix <symptom>` | Runs the whole bug lane: triage, reproduce, hypothesis, diagnose, apply-fix, verify, ship-fix. | Devops' OK; escalation; a refused diagnosis that needs a human. |
+| `/build-fleet:status [park <reason> \| resolve <decision> \| ratify [force]]` | Bare: reports state and the next command (read-only). With a decision: applies it. | — |
+
+`build`, `ship` and `status` are human-only (`disable-model-invocation: true`): a model
+cannot invoke them, but a headless caller types them as the user, so
+`claude -p "/build-fleet:build"` works. `claude -p "/build-fleet:review"` and every other
+hidden step no longer work; drive the lite commands instead.
+
+### Signal lines
+
+The router, `scripts/lite-next.sh <start|build|ship|fix|status> [args…]`, prints one line:
+
+```
+BUILD_FLEET_LITE_NEXT: {"step":"<hidden command | action:hypothesis>","args":"<s>","why":"<s>"}
+BUILD_FLEET_LITE_NEXT: {"stop":"<reason>","next":"/build-fleet:<cmd …>","why":"<s>"}
+```
+
+Every lite run ends with exactly one line:
+
+```
+BUILD_FLEET_LITE_DONE: {"stop":"<reason>","next":"/build-fleet:<cmd …>"}
+```
+
+`next` is omitted when nothing follows; a `step-refused` or `no-progress` stop also
+carries `"step":"<name>"`, and the refusing step's own `BUILD_FLEET_*` line is relayed
+verbatim before it.
+
+Stop reasons: `spec-ready`, `plan-ready`, `built`, `shipped`, `item-in-flight`, `parked`,
+`escalated`, `step-refused`, `no-progress`, `step-cap`, `unknown-state`, `nothing-to-do`,
+`known-cause` (triage closed a bug whose cause was already known; `next` is `start` with the fix),
+`spec-not-ready`, `not-built`, `drift` (the tests' criterion markers failed the drift gate; `next` is `build`, which repairs it), `unsupported-schema` (the active feature was started by an older build-fleet; `next` is `status park <reason>`); and `status`, used only by `lite-next.sh status` when the
+next move is a step.
+
+The routing table lives in `scripts/lite-next.sh` and is specified in
+`docs/history/2026-10-15-lite.md` §3.3; `scripts/lite-next.test.sh` pins one case per row.
+
+### The drift gate
+
+`scripts/drift-gate.sh <slug>` prints one line; `--all` prints one per feature and a
+summary (it gates only built features: `BUILD_STATE: done`, or no BUILD_STATE at
+`CHANGE_REVIEW`/`HANDOFF`; it skips bugs and `_product`, and reports a forward feature
+whose `SDD_SCHEMA` is not 2 as unchecked with its `schema`). A criterion is covered when a
+regular, non-`.md` file under the test roots (`TEST_ROOTS`, else whichever of `tests`,
+`test`, `spec` exist) carries the marker `<slug>/AC-<n>`:
+
+```
+BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":<bool>,"reasons":[…],"untested":[…],"unknown":[…]}
+BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":true,"unchecked":true}
+BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":true,"unchecked":true,"schema":"<value>"}
+BUILD_FLEET_DRIFT_GATE: {"feature":"<slug>","pass":true,"in_progress":true}
+BUILD_FLEET_DRIFT_GATE_SUMMARY: {"checked":N,"unchecked":M,"in_progress":K,"failed":[…]}
+```
+
+Reasons: `bad-field`, `unsupported-schema`, `no-criteria`, `no-test-roots`, `untested`,
+`unknown-criterion`. `DRIFT_GATE: off` is the only unchecked forward feature. The script's exit status (2 on
+any failure) exists for CI; inside the flow, read the line. The steps that run it add:
+
+```
+BUILD_FLEET_QA_VERIFY_FAIL: {"feature":"<slug>","reason":"drift","gate":{…}}       # implement; also "drift-gate-error"
+BUILD_FLEET_BUILD_INCOMPLETE: {"feature":"<slug>","failing_tests":<N>,"reason":"drift-repair"}
+BUILD_FLEET_HANDOFF_REFUSE: {"feature":"<slug>","code":2,"reason":"drift","gate":{…}}  # also "drift-gate-error"
+```
+
+---
 
 ## Phase 6 FINAL: install validation — GAP CLOSED (2026-05-30)
 
@@ -483,13 +560,11 @@ Open: `BUILD_MODE` lands in M4. Until then, treat absent field as `standard`.
 
 | File | Workflow-mutated? | Writer (v0.2) | Append-only? |
 |---|---|---|---|
-| `spec.md` | No | PO subagent (direct from command, not workflow) | No |
-| `acceptance.md` | No | PO subagent | No |
+| `spec.md` (acceptance criteria included) | No | PO subagent (direct from command, not workflow) | No |
 | `PROGRESS.md` | Yes (via scribe) | scribe (workflow phases), commands (non-workflow phases) | No |
 | `REVIEW.md` | Yes (via scribe) | scribe | **Yes** |
 | `DECISIONS.md` | Maybe (ADR-emitting reviewer phase) | architect subagent (inside workflow, via dedicated `agent("architect-adr",...)` call) | **Yes** |
-| `TEST_PLAN.md` | No (M2 makes this BUILD-phase, qa subagent direct) | qa subagent | No |
-| `IMPL_NOTES.md` | No (BUILD phase, coder direct) | coder subagent | Append semantically |
+| `IMPL_NOTES.md` | No (BUILD phase, coder direct; created on first write) | coder subagent (+ qa snapshot SHAs, scribe appendix) | Append semantically |
 | `ESCALATION.md` | Yes (when survival vote escalates) | scribe (writes once on escalation_payload) | Write-once |
 
 **M3 (deep-build) adds:** `PARTITION_PROGRESS.md` for per-coder progress tracking, scribe-mutated.
@@ -522,7 +597,7 @@ Every workflow's *final phase* produces this envelope and passes it to the scrib
     }
   ],
   "review_entries": [                 // array — verbatim REVIEW.md blocks scribe appends
-    "## Cycle 2 — architect — 2026-05-30T...\n- [blocker] ...\nstatus: concerns-raised"
+    "## Cycle 2 — architect — 2026-05-30T...\n- [blocker] ..."
   ],
   "decisions_appendix": null,         // string | null — v0.9. ADR blocks the scribe appends verbatim to the workspace DECISIONS.md (mirrors impl_notes_appendix)
   "state_delta": {                    // object — fields scribe writes to PROGRESS.md
@@ -549,7 +624,7 @@ values (the scribe handles them uniformly via `workspace_dir`):
   `feature` carries the **product slug** (used for `SCRIBE_OK` + any ESCALATION title).
 - `verdict`: `"interrogated"` — informational only. Plan-review holds **no survival
   vote**, so `surviving_concerns` is always `[]` and the `verdict` never gates anything;
-  the human ratifies at `/build-fleet:plan-finalize`.
+  the human ratifies at `/build-fleet:status ratify`.
 - `escalation_payload`: **always `null`** — plan-review never auto-escalates. A missing
   interrogator payload halts the run *without writing any envelope* (the workflow returns
   `verdict:"incomplete"` and the command surfaces it); only a human writes
@@ -641,9 +716,10 @@ workflow script, parsed by the command layer before dispatch:
 
 ### Caller responsibilities (Hermes-style orchestrator)
 
-1. **Dispatch.** Invoke the command:
+1. **Dispatch.** Invoke a lite command (hidden steps cannot be typed since 0.12.0 —
+   see "The lite surface" above):
    ```bash
-   claude -p '/build-fleet:review' \
+   claude -p '/build-fleet:start' \
      --allowedTools "Workflow,Read,Edit,Write,Bash,Agent" \
      --output-format json
    ```
@@ -677,7 +753,7 @@ Every refusal emits exactly one `BUILD_FLEET_*REFUSE*:` line whose JSON carries:
 | `reason` | kebab-case slug (e.g. `no-active-feature`, `cycle-budget-exhausted`, `workflow-runtime-unavailable`) |
 
 Success paths emit their command-specific signal (`BUILD_FLEET_WORKFLOW_LAUNCHED`,
-`BUILD_FLEET_FINALIZE_PASS`, `BUILD_FLEET_PLAN_FINALIZE_PASS`, `BUILD_FLEET_CHANGE_REVIEW_GATE`,
+`BUILD_FLEET_FINALIZE_PASS`, `BUILD_FLEET_PLAN_FINALIZE_PASS` (from `status ratify`), `BUILD_FLEET_CHANGE_REVIEW_GATE`,
 `BUILD_FLEET_REVIEW_DEFAULTS`, `BUILD_FLEET_QUOTE_CHECK`, `BUILD_FLEET_FINALIZE_REPORT`,
 `BUILD_FLEET_REVIEW_CARRY`, …). The finalize gate refuses with four further reasons in a verified review:
 quote-check-missing, spec-changed-since-review, review-changed-since-check and verified-eval-failed. /build-fleet:review refuses shape-changed-mid-feature

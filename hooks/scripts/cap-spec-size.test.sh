@@ -1,79 +1,63 @@
 #!/usr/bin/env bash
-# Tests for hooks/scripts/cap-spec-size.sh (v0.9 PreToolUse byte cap on spec.md /
-# acceptance.md driven by SPEC_MAX_KB; absent field = no cap).
+# Tests for hooks/scripts/cap-spec-size.sh (PreToolUse line cap on spec.md driven by
+# SPEC_MAX_LINES; absent field = no cap).
 # Run: bash hooks/scripts/cap-spec-size.test.sh   (exit 0 = all pass)
 set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK="$DIR/cap-spec-size.sh"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
-new_proj() { local p="$work/$1"; mkdir -p "$p/.sdd/feat"; printf 'feat\n' > "$p/.sdd/ACTIVE"; printf 'PHASE: SPEC\nSPEC_MAX_KB: %s\n' "$2" > "$p/.sdd/feat/PROGRESS.md"; printf '%s' "$p"; }
+# new_proj <name> <SPEC_MAX_LINES value> — spec.md starts at 8 lines (l1..l8)
+new_proj() { local p="$work/$1"; mkdir -p "$p/.sdd/feat"; printf 'feat\n' > "$p/.sdd/ACTIVE"; printf 'SDD_SCHEMA: 2\nPHASE: SPEC\nSPEC_MAX_LINES: %s\n' "$2" > "$p/.sdd/feat/PROGRESS.md"; printf 'l%s\n' 1 2 3 4 5 6 7 8 > "$p/.sdd/feat/spec.md"; printf '%s' "$p"; }
 # payload <tool> <path> <content|old> [<new>] [replace_all]
 payload() { if [ "$1" = Write ]; then jq -cn --arg p "$2" --arg c "$3" '{tool_name:"Write",tool_input:{file_path:$p,content:$c}}'; else jq -cn --arg p "$2" --arg o "$3" --arg n "${4:-}" --argjson ra "${5:-false}" '{tool_name:"Edit",tool_input:{file_path:$p,old_string:$o,new_string:$n,replace_all:$ra}}'; fi; }
-check() { local name="$1" proj="$2" json="$3" want="$4" rc=0; ( cd "$proj" && printf '%s' "$json" | CLAUDE_PROJECT_DIR="$proj" bash "$HOOK" >/dev/null 2>&1 ); rc=$?; if [ "$rc" -eq "$want" ]; then pass=$((pass+1)); printf 'ok   %-40s rc=%s\n' "$name" "$rc"; else fail=$((fail+1)); printf 'FAIL %-40s want=%s got=%s\n' "$name" "$want" "$rc"; fi; }
-big=$(head -c 1100 /dev/zero | tr '\0' 'x'); small="hello"
+check() { local name="$1" proj="$2" json="$3" want="$4" rc=0; ( cd "$proj" && printf '%s' "$json" | CLAUDE_PROJECT_DIR="$proj" bash "$HOOK" >/dev/null 2>&1 ); rc=$?; if [ "$rc" -eq "$want" ]; then pass=$((pass+1)); printf 'ok   %-44s rc=%s\n' "$name" "$rc"; else fail=$((fail+1)); printf 'FAIL %-44s want=%s got=%s\n' "$name" "$want" "$rc"; fi; }
+stderr_of() { ( cd "$1" && printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>&1 >/dev/null ); }
+has_err() { local name="$1" err="$2" needle="$3"; if printf '%s' "$err" | grep -qF -- "$needle"; then pass=$((pass+1)); printf 'ok   %s\n' "$name"; else fail=$((fail+1)); printf 'FAIL %-44s missing %s in: %s\n' "$name" "$needle" "$err"; fi; }
+lines() { local i=1 out=""; while [ "$i" -le "$1" ]; do out="${out}l$i"$'\n'; i=$((i+1)); done; printf '%s' "$out"; }
+S=.sdd/feat/spec.md
 
-p=$(new_proj w1 1)
-check "write-over-budget-blocks" "$p" "$(payload Write .sdd/feat/spec.md "$big")" 2
-check "write-under-budget-allows" "$p" "$(payload Write .sdd/feat/spec.md "$small")" 0
-check "acceptance-also-capped" "$p" "$(payload Write .sdd/feat/acceptance.md "$big")" 2
-check "absolute-path-form" "$p" "$(payload Write "$p/.sdd/feat/spec.md" "$big")" 2
-printf '%s' "$big" > "$p/.sdd/feat/acceptance.md"
-check "edit-growing-over-blocks" "$p" "$(payload Edit .sdd/feat/acceptance.md x xxxx)" 2
-check "edit-shrinking-allows" "$p" "$(payload Edit .sdd/feat/acceptance.md "$(head -c 200 /dev/zero | tr '\0' x)" "")" 0
-check "edit-replace-all-counts-occurrences" "$p" "$(payload Edit .sdd/feat/acceptance.md x xx true)" 2
-p=$(new_proj g1 1); printf 'PHASE: SPEC\n' > "$p/.sdd/feat/PROGRESS.md"
-check "no-field-grandfathered" "$p" "$(payload Write .sdd/feat/spec.md "$big")" 0
-p=$(new_proj z1 0)
-check "zero-disables" "$p" "$(payload Write .sdd/feat/spec.md "$big")" 0
-p=$(new_proj o1 1)
-check "other-file-ignored" "$p" "$(payload Write .sdd/feat/DECISIONS.md "$big")" 0
-check "product-tier-exempt" "$p" "$(payload Write .sdd/_product/spec.md "$big")" 0
-check "traversal-ignored" "$p" "$(payload Write .sdd/feat/../feat/spec.md "$big")" 0
+p=$(new_proj w 10)
+check "write-under-allows" "$p" "$(payload Write $S "$(lines 10)")" 0
+check "write-over-refuses" "$p" "$(payload Write $S "$(lines 11)")" 2
+err=$(stderr_of "$p" "$(payload Write $S "$(lines 11)")")
+has_err "refusal-names-lines" "$err" "11 lines"
+has_err "refusal-names-budget" "$err" "10-line budget"
+has_err "refusal-names-backlog-row" "$err" "backlog row"
+has_err "refusal-names-decisions" "$err" "DECISIONS.md"
+if printf '%s' "$err" | grep -q "Self-review notes"; then fail=$((fail+1)); echo "FAIL refusal-no-self-review-notes"; else pass=$((pass+1)); echo "ok   refusal-no-self-review-notes"; fi
+check "write-unterminated-last-line-counts" "$p" "$(payload Write $S "$(lines 10)"$'\nx')" 2
+check "absolute-path-form" "$p" "$(payload Write "$p/$S" "$(lines 11)")" 2
+check "edit-add-lines-over" "$p" "$(payload Edit $S $'l8\n' $'l8\na\nb\nc\n')" 2
+check "edit-add-lines-under" "$p" "$(payload Edit $S $'l8\n' $'l8\na\nb\n')" 0
+p=$(new_proj j 10); lines 10 > "$p/$S"
+check "edit-join-lines-allowed" "$p" "$(payload Edit $S $'l1\nl2\n' $'l1 l2\n')" 0
+check "edit-at-budget-same-lines-allowed" "$p" "$(payload Edit $S l1 L1)" 0
+p=$(new_proj ra 10); printf 'X\nX\nl3\nl4\nl5\nl6\nl7\nl8\n' > "$p/$S"
+check "edit-replace-all-two-occurrences" "$p" "$(payload Edit $S $'X\n' $'X\nY\n' true)" 0
+p=$(new_proj ra3 10); printf 'X\nX\nX\nl4\nl5\nl6\nl7\nl8\n' > "$p/$S"
+check "edit-replace-all-three-occurrences" "$p" "$(payload Edit $S $'X\n' $'X\nY\n' true)" 2
+p=$(new_proj g 10); printf 'SDD_SCHEMA: 2\nPHASE: SPEC\n' > "$p/.sdd/feat/PROGRESS.md"
+check "no-field-no-cap" "$p" "$(payload Write $S "$(lines 500)")" 0
+p=$(new_proj kb 10); printf 'SDD_SCHEMA: 2\nSPEC_MAX_KB: 1\n' > "$p/.sdd/feat/PROGRESS.md"
+check "kb-field-ignored" "$p" "$(payload Write $S "$(lines 500)")" 0
+p=$(new_proj z 0)
+check "zero-disables" "$p" "$(payload Write $S "$(lines 500)")" 0
+p=$(new_proj lz 010)
+check "leading-zero-decimal-at" "$p" "$(payload Write $S "$(lines 10)")" 0
+check "leading-zero-decimal-over" "$p" "$(payload Write $S "$(lines 11)")" 2
+p=$(new_proj l8 008)
+check "leading-zero-008-no-crash" "$p" "$(payload Write $S "$(lines 9)")" 2
+p=$(new_proj bad 150L)
+check "garbage-refuses" "$p" "$(payload Write $S "x")" 2
+has_err "garbage-refuses-message" "$(stderr_of "$p" "$(payload Write $S x)")" "SPEC_MAX_LINES is not an integer ('150L')"
+p=$(new_proj o 1)
+check "acceptance-md-not-capped" "$p" "$(payload Write .sdd/feat/acceptance.md "$(lines 500)")" 0
+check "other-file-ignored" "$p" "$(payload Write .sdd/feat/DECISIONS.md "$(lines 500)")" 0
+check "product-tier-exempt" "$p" "$(payload Write .sdd/_product/spec.md "$(lines 500)")" 0
+check "traversal-ignored" "$p" "$(payload Write .sdd/feat/../feat/spec.md "$(lines 500)")" 0
+check "notebookedit-on-spec-refuses" "$p" "$(jq -cn --arg p $S '{tool_name:"NotebookEdit",tool_input:{notebook_path:$p}}')" 2
+check "notebookedit-elsewhere-ignored" "$p" "$(jq -cn '{tool_name:"NotebookEdit",tool_input:{notebook_path:"notes/x.ipynb"}}')" 0
 rc=0; ( cd "$p" && printf 'not json' | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" >/dev/null 2>&1 ); rc=$?
 if [ "$rc" -eq 2 ]; then pass=$((pass+1)); echo "ok   malformed-json-fails-closed"; else fail=$((fail+1)); echo "FAIL malformed-json-fails-closed got=$rc"; fi
-
-# I4: a present-but-not-all-digits SPEC_MAX_KB (e.g. "24KB") must REFUSE (fail
-# closed), not silently disable the cap like the absent-field/leading-zero cases.
-p=$(new_proj bad1 24KB)
-check "malformed-cap-refuses" "$p" "$(payload Write .sdd/feat/spec.md "$small")" 2
-err=$( cd "$p" && printf '%s' "$(payload Write .sdd/feat/spec.md "$small")" | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" 2>&1 >/dev/null )
-if printf '%s' "$err" | grep -qF "SPEC_MAX_KB is not an integer ('24KB')"; then
-  pass=$((pass+1)); echo "ok   malformed-cap-refuses-message"
-else
-  fail=$((fail+1)); printf 'FAIL %-40s got=%s\n' "malformed-cap-refuses-message" "$err"
-fi
-
-# Defect fix tests: leading-zero octal, multiline replace_all, NotebookEdit
-p=$(new_proj l1 010)
-check "leading-zero-cap-decimal-over" "$p" "$(payload Write .sdd/feat/spec.md "$(head -c 10500 /dev/zero | tr '\0' 'x')")" 2
-check "leading-zero-cap-decimal-under" "$p" "$(payload Write .sdd/feat/spec.md "$(head -c 9000 /dev/zero | tr '\0' 'x')")" 0
-p=$(new_proj l2 008)
-check "leading-zero-cap-008-no-crash" "$p" "$(payload Write .sdd/feat/spec.md "$(head -c 9000 /dev/zero | tr '\0' 'x')")" 2
-
-# Multiline replace_all with discriminating arithmetic:
-# File: 1020 bytes = 2×"foo\nbar\n" (16 bytes) + padding (1004 bytes)
-# old_string="foo\nbar" (7 bytes), new_string="foo\nbarXX" (9 bytes), delta=+2
-# Correct count (2 occurrences): 1020 + 2×2 = 1024 ≤ budget 1024 → rc 0
-# Old grep miscounts "foo"/"bar" as 4 lines: 1020 + 2×4 = 1028 > budget → rc 2
-# Test FAILS on pre-fix (rc 2), PASSES on fixed (rc 0).
-p=$(new_proj m1 1)
-{ printf 'foo\nbar\nfoo\nbar\n'; head -c 1004 /dev/zero | tr '\0' p; } > "$p/.sdd/feat/acceptance.md"
-# Verify fixture is exactly 1020 bytes
-fixture_size=$(wc -c < "$p/.sdd/feat/acceptance.md" | tr -d ' ')
-if [ "$fixture_size" -eq 1020 ]; then pass=$((pass+1)); printf 'ok   %-40s bytes=%s\n' "multiline-fixture-is-1020-bytes" "$fixture_size"; else fail=$((fail+1)); printf 'FAIL %-40s want=1020 got=%s\n' "multiline-fixture-is-1020-bytes" "$fixture_size"; fi
-payload_multiline=$(jq -cn --arg p ".sdd/feat/acceptance.md" --arg o $'foo\nbar' --arg n $'foo\nbarXX' --argjson ra true '{tool_name:"Edit",tool_input:{file_path:$p,old_string:$o,new_string:$n,replace_all:$ra}}')
-check "edit-replace-all-multiline-counts-once-per-occurrence" "$p" "$payload_multiline" 0
-
-# NotebookEdit on spec with cap present → rc 2
-p=$(new_proj nb1 1)
-payload_nb=$(jq -cn --arg p ".sdd/feat/spec.md" '{tool_name:"NotebookEdit",tool_input:{notebook_path:$p}}')
-check "notebookedit-on-spec-refuses" "$p" "$payload_nb" 2
-
-# NotebookEdit on non-spec file → rc 0
-p=$(new_proj nb2 1)
-mkdir -p "$p/notes"
-payload_nb_other=$(jq -cn --arg p "notes/x.ipynb" '{tool_name:"NotebookEdit",tool_input:{notebook_path:$p}}')
-check "notebookedit-elsewhere-ignored" "$p" "$payload_nb_other" 0
-
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]

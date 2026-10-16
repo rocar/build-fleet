@@ -486,8 +486,8 @@ function formatVerifiedFindingLines(c, dispositionMap) {
 // section (scripts/lens-drift.test.sh fails the suite if they drift). product-owner
 // exists only here. Between the markers: a pure object literal, nothing else.
 const LENS = {
-  architect: `- **Correctness.** Does the proposal actually do what \`acceptance.md\`
-  demands? Are there contradictions between spec sections, or between spec
+  architect: `- **Correctness.** Does the proposal actually do what the acceptance criteria
+  demand? Are there contradictions between spec sections, or between spec
   and code?
 - **Failure modes.** What happens on partial failure, network loss, retries,
   concurrent callers, malformed input? Silence is a \`[major]\` when the failure
@@ -583,10 +583,9 @@ function concernsSchemaFor(role, shape) {
   const base = {
     type: "object",
     additionalProperties: false,
-    required: ["role", "status", "concerns"],
+    required: ["role", "concerns"],
     properties: {
       role: { type: "string", enum: [role] },
-      status: { type: "string", enum: ["concerns-raised", "approved"] },
       concerns: {
         type: "array",
         items: {
@@ -621,7 +620,7 @@ function concernsSchemaFor(role, shape) {
   };
   item.properties.test = { type: "string" };
   item.properties.ref = { type: "string" };
-  base.required = ["role", "status", "concerns", "closures"];
+  base.required = ["role", "concerns", "closures"];
   base.properties.closures = {
     type: "array",
     items: {
@@ -990,7 +989,6 @@ return {
 function reviewPrompt(role, feature, cycle, lens, shape, carried) {
   const files = `Read these files yourself (you have Read/Grep/Glob and NOTHING that writes):
 - .sdd/${feature}/spec.md
-- .sdd/${feature}/acceptance.md
 - .sdd/${feature}/REVIEW.md      (the PREVIOUS cycle only — older cycles are archived in REVIEW-archive.md; do not read the archive)
 - .sdd/${feature}/DECISIONS.md   (feature ADRs; may not exist on cycle 1)
 Read product ADRs (.sdd/_product/DECISIONS.md) only for the specific ADR ids the spec cites — never the whole file.`;
@@ -1007,7 +1005,7 @@ Do NOT write, edit, or create any file. Return only the structured object.`;
   const verified = shape === "verified";
   const verifiedRules = !verified ? "" : `
 VERIFIED REVIEW. Every [blocker] and [major] must be checkable, or it is recorded as a [minor]:
-- anchor: EITHER {"kind":"quote","file":"spec.md"|"acceptance.md"|"DECISIONS.md"|"_product/DECISIONS.md","text":"<10–500 characters copied VERBATIM from that file: no paraphrase, no ellipsis>"}
+- anchor: EITHER {"kind":"quote","file":"spec.md"|"DECISIONS.md"|"_product/DECISIONS.md","text":"<10–500 characters copied VERBATIM from that file: no paraphrase, no ellipsis>"}
   OR {"kind":"absent","file":"spec.md","section":"<an existing heading of that file>","missing":"<what the spec should say there>"}.
   A [minor] may use {"kind":"none"}.
 - test: one sentence naming a test that would FAIL if the finding is real.
@@ -1052,12 +1050,10 @@ ${rules}
 
 Return the structured object:
 - role: "${role}"
-- status: "concerns-raised" if you hold any blocker/major, else "approved" (informational — the
-  gate reads dispositions, not this line)
 ${verified
-    ? `- concerns: array of { id, severity, text, anchor, test, ref? }. Empty array + "approved" when you have nothing.
+    ? `- concerns: array of { id, severity, text, anchor, test, ref? }. Empty array when you have nothing.
 - closures: array of { id, closure: { file, text } }. Empty array when you claim no closure.`
-    : "- concerns: array of { id, severity, text }. Empty array + \"approved\" when you have nothing."}`;
+    : "- concerns: array of { id, severity, text }. Empty array when you have nothing."}`;
 }
 
 function verifierPrompt(feature, cycle, items) {
@@ -1066,7 +1062,6 @@ You did not raise these findings and you are not told who did. Judge each one ON
 
 Read these files yourself (you have Read/Grep/Glob and NOTHING that writes):
 - .sdd/${feature}/spec.md
-- .sdd/${feature}/acceptance.md
 - .sdd/${feature}/DECISIONS.md   (may not exist)
 - .sdd/_product/DECISIONS.md     (only for an ADR id a finding or the spec cites)
 Do NOT read REVIEW.md or REVIEW-archive.md. Do NOT write, edit, or create any file.
@@ -1082,7 +1077,7 @@ For each item of kind "finding":
 For each item of kind "closure": vote "confirm" when the quoted text of the revised spec really closes the
 finding, else "reject" with a reason.
 
-Every quote is {"file": "spec.md"|"acceptance.md"|"DECISIONS.md"|"_product/DECISIONS.md", "text": "<10–500
+Every quote is {"file": "spec.md"|"DECISIONS.md"|"_product/DECISIONS.md", "text": "<10–500
 characters copied VERBATIM from that file>"}. Quotes are checked word for word after this review; an
 invented quote voids your vote.
 
@@ -1097,7 +1092,7 @@ function crossExamPrompt(role, allConcerns, feature, cycle) {
   const peers = allConcerns.filter((c) => c.raised_by !== role);
   return `You are the ${role} reviewer in CROSS-EXAMINATION, cycle ${cycle}. Active feature: ${feature}.
 
-Read .sdd/${feature}/spec.md, .sdd/${feature}/acceptance.md and .sdd/${feature}/DECISIONS.md
+Read .sdd/${feature}/spec.md and .sdd/${feature}/DECISIONS.md
 yourself if you need to cite them. An ADR that dispositions a peer's concern is a
 substantive refutation — cite it by id. Do NOT write any file.
 
@@ -1107,7 +1102,7 @@ REFUTE it (you believe it is not a real problem) or AFFIRM it (you agree it stan
 A refutation only counts if it is substantive: at least ~40 characters of reasoning AND a
 structured citation pointing at the evidence. On every "refute" entry, set the citation
 field to { file, locator } — e.g. { "file": "spec.md", "locator": "§ Constraints" } or
-{ "file": "acceptance.md", "locator": "line 12" } or
+{ "file": "spec.md", "locator": "AC-3" } or
 { "file": "DECISIONS.md", "locator": "ADR-7" }. A refute without a citation is
 discarded by the script. If you cannot substantively refute, AFFIRM — that is the safe
 default (no citation needed on an affirm).
@@ -1126,7 +1121,7 @@ Return the structured object:
 function dispositionPrompt(feature, cycle, majors, nextAdrId, exhausting) {
   const list = majors.map((c) => ({ id: c.id, raised_by: c.raised_by, text: c.text }));
   return `You are the architect, DISPOSITIONING the surviving [major] findings of review cycle ${cycle}
-for feature ${feature}. Read .sdd/${feature}/spec.md, .sdd/${feature}/acceptance.md and
+for feature ${feature}. Read .sdd/${feature}/spec.md and
 .sdd/${feature}/DECISIONS.md yourself. Do NOT write any file — the scribe records your ADRs.
 
 For EVERY finding below, choose exactly one action:
@@ -1233,7 +1228,6 @@ function buildEnvelope({ feature, cycle, cycleBudget, cycleTotalBefore, now, rev
       const rendered = shape === "verified" ? formatVerifiedFindingLines(c, dispositionMap) : formatFindingLines(c, dispositionMap);
       for (const l of rendered) lines.push(l);
     }
-    lines.push(`status: ${r.payload.status || "concerns-raised"}`);
     return lines.join("\n");
   });
 

@@ -2,6 +2,7 @@
 description: Scaffold a feature workspace and draft its spec
 argument-hint: "<feature-slug> [feature details]"
 allowed-tools: Read, Write, Edit, Task, AskUserQuestion, Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/intent-block.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/acquire-active.sh":*), Bash(bash "${CLAUDE_PLUGIN_ROOT}/scripts/adr-index.sh":*), Bash(date:*)
+user-invocable: false
 ---
 
 # /build-fleet:new-feature
@@ -44,23 +45,23 @@ spec STATUS contract.
      BUILD_FLEET_REFUSE: {"command":"new-feature","code":2,"reason":"active-feature-conflict","active":"<held slug>"}
      ```
      Tell the user the active slug, how to inspect it (`/build-fleet:status`),
-     and that `/build-fleet:park` is the sanctioned preemption path. Stop.
+     and that `/build-fleet:status park` is the sanctioned preemption path. Stop.
 
 2. **Scaffold `.sdd/<slug>/`** with the empty files the protocol expects:
    - `spec.md` — start with the STATUS line `STATUS: DRAFT` and the required
      section headings from the `sdd-spec-template` skill (Overview, Goals,
      Non-goals, Behavior, Interfaces / Contracts, Constraints, Risks,
-     Acceptance Criteria). Leave bodies empty — product-owner fills them.
-   - `acceptance.md` — empty, header `# Acceptance Criteria — <slug>`.
+     Acceptance Criteria). Leave bodies empty — product-owner fills them. The
+     acceptance criteria are the spec's last section; there is no separate file.
    - `DECISIONS.md` — `# Architecture Decisions — <slug>\n\nAppend-only log.`
-   - `TEST_PLAN.md` — empty, header `# Test Plan — <slug>`.
-   - `IMPL_NOTES.md` — empty, header `# Implementation Notes — <slug>`.
-   - `REVIEW.md` — empty, header `# Review Log — <slug>\n\nAppend-only.`
+
+   Nothing else: `REVIEW.md` is created by the first review, `IMPL_NOTES.md` by its
+   first writer.
 
 3. **Initialize `PROGRESS.md`** with the schema from `sdd-protocol` (the classifier fills TIER + BUILD_MODE in step 7; stamp `UPDATED:` with `date -u +%Y-%m-%dT%H:%M:%SZ`):
 
    ```
-   SDD_SCHEMA: 1
+   SDD_SCHEMA: 2
    FEATURE: <slug>
    PHASE: SPEC
    CYCLE: 0
@@ -281,46 +282,44 @@ spec STATUS contract.
      BUILD_FLEET_REVIEW_DEFAULTS: {"feature":"<slug>","tier":"<...>","risk":"<...>","roles":["..."],"cycle_budget":<n>}
      ```
    - `UPDATED:` ← current iso8601 (`date -u +%Y-%m-%dT%H:%M:%SZ`)
-   - **Size budget (v0.9).** Add two lines by tier — `standard`: `SPEC_MAX_KB: 24` and
-     `AC_MAX: 15`; `large`: `SPEC_MAX_KB: 48` and `AC_MAX: 30`; `trivial`: neither.
+   - **Size budget.** Add two lines by tier — `standard`: `SPEC_MAX_LINES: 150` and
+     `AC_MAX: 15`; `large`: `SPEC_MAX_LINES: 400` and `AC_MAX: 30`; `trivial`: neither.
      The `cap-spec-size` (PreToolUse) and `validate-acceptance-count` (PostToolUse)
      hooks enforce them; an absent field is no cap (grandfathering). Over budget the
      rule is SPLIT the feature into backlog rows, never compress — raising a field is
      a deliberate, auditable edit.
 
-7b. **Persist the skill manifest, if any.** The `skill-routing` skill is
-   the convention. If the classifier's `skill_manifest` is **non-null and has at
-   least one non-empty `roles` entry**, write it to `.sdd/<slug>/SKILL_MANIFEST.md`:
-   a one-line header `# Skill Manifest — <slug>` followed by a fenced ```json block
-   containing the manifest object with `"feature":"<slug>"` added. This routes
-   domain-appropriate skills to coder/qa at BUILD (see the `skill-routing` skill
-   for the schema and the load-if-available semantics). Emit:
+7b. **Persist the skill routing, if any.** The `skill-routing` skill is the
+   convention. For each of `coder` and `qa` whose `skill_manifest.roles.<role>.skills`
+   list is non-empty, add one line to PROGRESS.md: `CODER_SKILLS: <a>, <b>` /
+   `QA_SKILLS: <a>, <b>`. This routes domain-appropriate skills to coder/qa at BUILD
+   (see the `skill-routing` skill for the load-if-available semantics). Emit:
 
    ```
    BUILD_FLEET_SKILL_MANIFEST: {"feature":"<slug>","feature_type":"<...>","coder_skills":[...],"qa_skills":[...]}
    ```
 
-   If `skill_manifest` is `null` or has only empty `roles`, **write no file** — its
-   absence means "no routing," and BUILD proceeds unrouted. Do not scaffold an
-   empty manifest. (Manifest routing is advisory and never gates anything.)
+   If `skill_manifest` is `null` or has only empty `roles`, **write neither line** —
+   their absence means "no routing," and BUILD proceeds unrouted. (Skill routing is
+   advisory and never gates anything.)
 
 8. **Delegate to product-owner.** Use the Task tool to spawn the
    `build-fleet:product-owner` subagent. The prompt varies by tier:
 
    - **For `tier=trivial`:** include the classifier's `skeleton_spec_hint` and
-     ask PO to draft a *minimal* `spec.md` (STATUS=DRAFT) and `acceptance.md`
-     based on it. The skeleton spec satisfies the 8 required sections (Overview,
+     ask PO to draft a *minimal* `spec.md` (STATUS=DRAFT), acceptance criteria
+     included, based on it. The skeleton spec satisfies the 8 required sections (Overview,
      Goals, Non-goals, Behavior, Interfaces / Contracts, Constraints, Risks,
      Acceptance Criteria) but each section is 1-3 sentences. PO does not need
      to run the full self-review — the trivial fast-path skips REVIEW.
 
-   - **For `tier=standard` or `tier=large`:** ask for a complete first-pass `spec.md` (STATUS=DRAFT) and `acceptance.md`
-     following the `sdd-spec-template` skill, with PO's self-review checklist.
+   - **For `tier=standard` or `tier=large`:** ask for a complete first-pass `spec.md` (STATUS=DRAFT), acceptance criteria
+     included, following the `sdd-spec-template` skill, with PO's self-review checklist.
 
    **Size budget (both non-trivial tiers).** Tell the PO its budget from PROGRESS.md —
-   `SPEC_MAX_KB` for `spec.md` and `AC_MAX` distinct criteria for `acceptance.md` — that
-   hooks refuse writes over it, and that a feature which cannot fit is a SPLIT signal:
-   name the proposed sibling rows in `## Self-review notes` and draft the smaller feature.
+   `SPEC_MAX_LINES` lines for `spec.md` and `AC_MAX` distinct criteria in its acceptance
+   section — that hooks refuse writes over it, and that a feature which cannot fit is a
+   SPLIT signal: name the proposed sibling rows in its report and draft the smaller feature.
    Never compress rationale to fit. Draft to the budget from the first line: the first
    draft sets the review surface.
 
@@ -363,7 +362,7 @@ spec STATUS contract.
    - **trivial:** "Spec drafted as a skeleton (TIER=trivial). REVIEW is skipped
      for this fast-path. Next commands: `/build-fleet:finalize` (which recognizes
      TIER=trivial and flips the spec without requiring a review cycle), then
-     `/build-fleet:build`."
+     `/build-fleet:implement`."
    - **standard:** "Spec drafted (TIER=standard). Next command: `/build-fleet:review`
      to run the adversarial review workflow (then finalize, then build)."
      Also say: "Review roster seeded `<REVIEW_ROLES>` with cycle budget `<REVIEW_CYCLE_BUDGET>`
@@ -371,7 +370,7 @@ spec STATUS contract.
      change it."
    - **large:** "Spec drafted (TIER=large; BUILD_MODE=deep-build). Next command:
      `/build-fleet:review` to run the adversarial review workflow. After
-     `/build-fleet:finalize`, `/build-fleet:build` routes the BUILD phase to
+     `/build-fleet:finalize`, `/build-fleet:implement` routes the BUILD phase to
      `workflows/deep-build.js` automatically (fan-out coders across file
      partitions)."
      Also say: "Review roster seeded `<REVIEW_ROLES>` with cycle budget `<REVIEW_CYCLE_BUDGET>`

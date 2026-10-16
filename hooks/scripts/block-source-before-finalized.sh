@@ -55,6 +55,17 @@ if [ "$(resolve_lane "$slug")" = "bug" ]; then
   exit 2
 fi
 
+# Schema: this plugin reads the four-file layout only (SDD_SCHEMA: 2). A forward feature
+# scaffolded by an older build-fleet keeps its criteria and test map in files nothing
+# reads any more, so its gates would pass on nothing. Refuse source writes; .sdd/ stays
+# writable above, so parking it by hand still works.
+schema=$(read_progress_field "$slug" SDD_SCHEMA)
+if [ "$schema" != "2" ]; then
+  echo "build-fleet: active feature '${slug}' was started by an older build-fleet (SDD_SCHEMA=${schema:-<none>}; this version needs 2). Source writes are blocked — park it (/build-fleet:status park <reason>) and start it again." >&2
+  echo "Refused write: ${file_path}" >&2
+  exit 2
+fi
+
 status=$(read_spec_status "$slug")
 
 if [ -z "$status" ]; then

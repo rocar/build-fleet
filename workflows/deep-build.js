@@ -86,6 +86,10 @@ function normalizeCycleBudget(raw) {
   const budget = Math.min(n, MAX_CYCLE_BUDGET);
   return { budget, error: null, clamped: budget !== n };
 }
+// BUILD_STATE written back to PROGRESS.md: a clean run is done; anything else resumes.
+function buildStateFor(verdict) {
+  return verdict === "clean" ? "done" : "needs-iteration";
+}
 // --- LAYER1-PURE-HELPERS END ---
 
 // Validation failures are NEVER a bare throw: a throw would strand the
@@ -172,10 +176,9 @@ const CODER_SUMMARY_SCHEMA = {
 const BUILD_REVIEW_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["role", "status", "concerns"],
+  required: ["role", "concerns"],
   properties: {
     role: { type: "string", enum: ["architect", "qa"] },
-    status: { type: "string", enum: ["concerns-raised", "approved"] },
     concerns: {
       type: "array",
       items: {
@@ -406,8 +409,8 @@ function partitionPrompt(feature, maxPartitions) {
   return `You are the architect planning a file partition for up to ${maxPartitions} coders to implement this feature IN PARALLEL against pre-existing failing tests.
 
 Read yourself (you have Read/Grep/Glob):
-- .sdd/${feature}/spec.md, acceptance.md, TEST_PLAN.md
-- the tests/ directory (what test files exist)
+- .sdd/${feature}/spec.md (acceptance criteria included); qa's tests carry \`${feature}/AC-<n>\` markers
+- the test roots (TEST_ROOTS in PROGRESS.md, else whichever of tests/, test/, spec/ exist): what test files exist
 - the project layout (top-level dirs suggesting package/module boundaries)
 
 Design a partition where each entry is one coder's assignment. Partitions MUST NOT share
@@ -433,9 +436,9 @@ Acceptance criteria you cover: ${JSON.stringify(partition.acceptance_criteria)}
 Tests you must make pass (they EXIST and currently FAIL — qa wrote them under M2 ordering):
 ${JSON.stringify(partition.tests)}
 
-Read .sdd/${feature}/spec.md and acceptance.md yourself for full context.
-If .sdd/${feature}/SKILL_MANIFEST.md exists, load and apply the skills it lists
-under the 'coder' role (per the skill-routing skill) before implementing; an
+Read .sdd/${feature}/spec.md yourself for full context, acceptance criteria included.
+If .sdd/${feature}/PROGRESS.md has CODER_SKILLS, load and apply the skills it lists
+(per the skill-routing skill) before implementing; an
 unavailable skill is a no-op — note it in your impl_notes and proceed.
 
 Your job:
@@ -450,7 +453,7 @@ Return the structured object: { label, files_modified, tests_passing, tests_fail
 function archReviewPrompt(partitions, coderResults, feature, violations) {
   return `You are the architect reviewing a merged deep-build diff. ${partitions.length} coders worked in parallel.
 
-Read .sdd/${feature}/spec.md, acceptance.md, DECISIONS.md yourself.
+Read .sdd/${feature}/spec.md and DECISIONS.md yourself.
 
 Partition plan: ${JSON.stringify(partitions, null, 2)}
 Coder summaries: ${JSON.stringify(coderResults.map((r) => r.summary), null, 2)}
@@ -460,14 +463,14 @@ Your lens: design adherence, scalability, failure modes, security, blast radius.
 SEAMS between partitions — single-partition correctness is easy; integration points (contracts,
 error envelopes, type assumptions across partitions) are where parallel coding fails.
 
-Return the structured object: { role:"architect", status, concerns:[{id,severity,text}] }.
-Empty concerns + status "approved" if clean.`;
+Return the structured object: { role:"architect", concerns:[{id,severity,text}] }.
+Empty concerns if clean.`;
 }
 
 function qaReviewPrompt(partitions, coderResults, feature) {
   return `You are qa reviewing a merged deep-build diff. Lens: coverage gaps + the M2 counterfactual.
 
-Read .sdd/${feature}/acceptance.md and TEST_PLAN.md yourself.
+Read .sdd/${feature}/spec.md's acceptance criteria yourself; tests carry \`${feature}/AC-<n>\` markers.
 
 Partition plan + coder summaries: ${JSON.stringify({ partitions, summaries: coderResults.map((r) => r.summary) }, null, 2)}
 
@@ -478,8 +481,8 @@ Your job:
 3. Failure paths covered? Missing → [major].
 4. Integration tests spanning partitions — ownership gap → [major].
 
-Return the structured object: { role:"qa", status, concerns:[{id,severity,text}] }.
-Empty concerns + status "approved" if clean.`;
+Return the structured object: { role:"qa", concerns:[{id,severity,text}] }.
+Empty concerns if clean.`;
 }
 
 function mergeConcerns(reviews) {
@@ -547,6 +550,7 @@ function buildEnvelope({ feature, cycle, now, partitions, partitionPlan, coderRe
       PHASE: verdict === "escalate" ? "ESCALATED" : "BUILD",
       BUILD_CYCLE: cycle,
       BUILD_MODE: "deep-build",
+      BUILD_STATE: buildStateFor(verdict),
       UPDATED: now,
     },
     next_legal_commands:
