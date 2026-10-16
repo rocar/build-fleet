@@ -5,7 +5,7 @@ All notable changes to the build-fleet plugin. Follows [Keep a Changelog](https:
 ## Compatibility
 
 build-fleet's machine surface is versioned: scaffolded `.sdd/` state files carry an
-`SDD_SCHEMA: 1` stamp, the status snapshot declares `build-fleet/status-snapshot@1`, and the
+`SDD_SCHEMA` stamp (2 for features since 0.12.0, 1 for bugs and the product tier), the status snapshot declares `build-fleet/status-snapshot@1`, and the
 `BUILD_FLEET_*` signal-line grammar is at version 1. Any release that changes the `.sdd/` schema
 or the signal grammar adds a **Compatibility** line to its entry below, describing the change and
 any migration; additive changes keep the version, breaking changes bump it. **Finish or park
@@ -14,7 +14,7 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
-## [Unreleased] — 0.12.0 (lite)
+## [0.12.0] — 2026-10-16
 
 ### Added
 - **Five user commands** — `/build-fleet:start [idea | --product "<vision>"]`, `build`, `ship`,
@@ -32,7 +32,8 @@ only (never across clones).
   else whichever of `tests`, `test`, `spec` exist), and that no marker names a criterion the spec
   lacks. On by default (`DRIFT_GATE: off` opts a feature with no tests out). It runs before and
   after coder and at `handoff`; a failure gets one qa repair pass, then `QA_FAIL: drift` and
-  `build` repairs it. `drift-gate.sh --all` runs it in CI over every built feature.
+  `build` repairs it. `drift-gate.sh --all` runs it in CI over every built feature. The feature
+  build (coder, deep-build, handoff) looks for tests under the same roots.
 
 ### Changed
 - **Four files per feature.** A feature is `spec.md` (ending with its `## Acceptance Criteria`),

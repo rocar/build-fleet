@@ -378,9 +378,24 @@ verified review with verifiers on a different model. The bar: verified review mu
 verified real defects per token than the single reviewer. The measurement protocol (with its
 planted-defect answer key) is still to be written.
 
+## v0.12 — lite (shipped 2026-10-16)
+
+What landed: five commands you type (`start`, `build`, `ship`, `fix`, `status`); every other
+command became a hidden step they run, routed by `scripts/lite-next.sh`. A drift gate proves each
+acceptance criterion is named by a `<slug>/AC-<n>` marker in a test, before and after coder and at
+handoff. A feature is four files (`spec.md` with its acceptance criteria, `PROGRESS.md`,
+`DECISIONS.md`, `REVIEW.md`), the spec's budget is in lines, and review blocks are findings only.
+Agent and skill descriptions are one routing line each, and agent bodies are capped; a 268-rule
+inventory shows no rule was cut. No backward compatibility: a forward feature from an older
+layout is refused and must be parked and restarted.
+
+Open: a shipped feature that drifts has no lite repair path; enforcing human-only `build` and
+`ship` beyond `disable-model-invocation` is undecided; a patch of deferred minors (0.12.1)
+comes before the measurement.
+
 ## Next — the approved order (roadmap review, 2026-10-14)
 
-1. **Lite** profile (with a drift gate): the smallest useful build-fleet.
+1. ~~**Lite** profile (with a drift gate)~~ — shipped in 0.12.0.
 2. **Prove the review:** the four-arm measurement above, and audited test-first.
 3. **Dashboard and receipt:** a local dashboard that shows specs, findings, citations and
    decisions and how they link; a receipt on every PR; Agent Trace output.
