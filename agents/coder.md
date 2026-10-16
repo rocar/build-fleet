@@ -54,7 +54,7 @@ On a non-workflow review path you write **only** to `REVIEW.md`. No source. No
 
 ## Building
 
-qa's failing tests are already in `tests/`; make them pass. That, plus
+qa's failing tests are already under the test roots; make them pass. That, plus
 IMPL_NOTES.md, is your deliverable.
 
 **Skill routing.** If
@@ -65,12 +65,12 @@ is a **no-op** — record `skill-unavailable: <name>` in `IMPL_NOTES.md` and pro
 
 1. Find qa's tests by their `<slug>/AC-<n>` markers — the criterion-to-test map.
 2. Run the project's test command. Confirm:
-   - At least one test exists in `tests/` (count > 0).
+   - At least one marked test exists under the test roots (`TEST_ROOTS` in PROGRESS.md, else whichever of `tests/`, `test/`, `spec/` exist) (count > 0).
    - All QA-authored tests currently FAIL.
 
    If either fails:
    - **No tests present** → halt. Tell the orchestrator: `BUILD_FLEET_CODER_REFUSE:
-     no failing tests in tests/ — qa has not run or has not signaled BUILD_FLEET_QA_TESTS_READY`.
+     no failing tests under the test roots — qa has not run or has not signaled BUILD_FLEET_QA_TESTS_READY`.
      Do not write source.
    - **Tests pass against an empty implementation** → halt. Tell the orchestrator:
      `BUILD_FLEET_CODER_REFUSE: tests pass without source change — qa tests are

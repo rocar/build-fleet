@@ -36,7 +36,7 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 3. **Check ESCALATION.md.** If it exists, refuse.
 
 4. **Pre-flight: tests must exist and pass.**
-   - If no tests exist (no `tests/` dir, no test files, no `test`
+   - If no tests exist (no test files under the test roots, no `test`
      command), refuse: BUILD is not complete until qa has authored tests
      for the spec's acceptance criteria.
    - Run the project's test command (npm test / pytest / make test, per

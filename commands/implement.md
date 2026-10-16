@@ -214,7 +214,7 @@ c. **Mark the build started.** qa's failing suite is verified.
 d. **Dispatch coder.** Use the Task tool to invoke `build-fleet:coder` with this prompt:
 
    > PHASE=BUILD for feature `<slug>`. STATUS=FINALIZED. QA has authored
-   > `<count>` failing tests under `tests/`. Per `agents/coder.md`, refuse-to-begin
+   > `<count>` failing tests under the test roots. Per `agents/coder.md`, refuse-to-begin
    > if tests are absent or already passing. Implement source until every QA test
    > passes. Record `gap:` / `deviation:` / `todo:` markers in
    > `.sdd/<slug>/IMPL_NOTES.md` (create it on first write). Self-review against the

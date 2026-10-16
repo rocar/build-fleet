@@ -37,7 +37,7 @@ Same as `/build-fleet:review`: `Workflow` tool must be available (Claude Code v2
 
 3. **Check phase.** Read `.sdd/<slug>/PROGRESS.md`. PHASE must be `BUILD`. STATUS in `spec.md` must be `FINALIZED`. If either fails, refuse and name the actual state (`{"command":"deep-build","code":2,"reason":"not-finalized","status":"<STATUS>","phase":"<PHASE>"}`).
 
-4. **Check tests-first prerequisite.** List files under `tests/`. If empty or absent, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"no-failing-tests","detail":"run /build-fleet:implement first so qa drafts the suite (tests-first ordering)"}`.
+4. **Check tests-first prerequisite.** List files under the test roots (`TEST_ROOTS` in PROGRESS.md, else whichever of `tests/`, `test/`, `spec/` exist). If none exist, refuse with: `BUILD_FLEET_REFUSE: {"command":"deep-build","code":2,"reason":"no-failing-tests","detail":"run /build-fleet:implement first so qa drafts the suite (tests-first ordering)"}`.
 
 5. **Check for prior escalation.** If `.sdd/<slug>/ESCALATION.md` exists, refuse (`{"command":"deep-build","code":2,"reason":"escalation-present"}`) — `/build-fleet:status resolve` is the unblock path.
 

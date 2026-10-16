@@ -202,6 +202,8 @@ proj; run ../x
 assert "bad-slug" "[ $rc -eq 1 ]"
 proj; run nope
 assert "missing-workspace" "[ $rc -eq 1 ]"
+proj; err=$( cd "$P" && CLAUDE_PROJECT_DIR="$P" bash "$GATE" --markers 2>&1 >/dev/null ); rc=$?
+assert "markers-no-slug-usage" "[ $rc -eq 1 ] && printf '%s' \"\$err\" | grep -q '^usage:' && ! printf '%s' \"\$err\" | grep -q unbound"
 
 # --- --all ---
 proj

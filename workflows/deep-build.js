@@ -410,7 +410,7 @@ function partitionPrompt(feature, maxPartitions) {
 
 Read yourself (you have Read/Grep/Glob):
 - .sdd/${feature}/spec.md (acceptance criteria included); qa's tests carry \`${feature}/AC-<n>\` markers
-- the tests/ directory (what test files exist)
+- the test roots (TEST_ROOTS in PROGRESS.md, else whichever of tests/, test/, spec/ exist): what test files exist
 - the project layout (top-level dirs suggesting package/module boundaries)
 
 Design a partition where each entry is one coder's assignment. Partitions MUST NOT share

@@ -29,7 +29,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/criteria.sh"
 
 usage() { echo "usage: drift-gate.sh <slug> | drift-gate.sh --all | drift-gate.sh --markers <slug>" >&2; exit 1; }
-[ $# -eq 1 ] || [ $# -eq 2 -a "${1:-}" = "--markers" ] || usage
+[ $# -eq 1 -a "${1:-}" != "--markers" ] || [ $# -eq 2 -a "${1:-}" = "--markers" ] || usage
 command -v jq >/dev/null 2>&1 || { echo "drift-gate.sh: jq is required" >&2; exit 1; }
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 1
 

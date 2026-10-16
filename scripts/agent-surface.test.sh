@@ -107,6 +107,14 @@ if [ -z "$retired" ]; then ok "no retired layout names"
 else no "no retired layout names" "$(printf '%s\n' "$retired" | head -5) … ($(printf '%s\n' "$retired" | grep -c .) lines)"; fi
 if [ ! -d "$ROOT/skills/test-plan" ]; then ok "test-plan skill removed"; else no "test-plan skill removed" "skills/test-plan exists"; fi
 
+# Test roots: a feature's tests live under the test roots (TEST_ROOTS, else tests/, test/
+# or spec/), so the feature build path must not require them to be in tests/. The bug lane
+# keeps tests/ (its hooks hardcode it).
+roots=$(cd "$ROOT" && /usr/bin/grep -nE 'already in `tests/`|exists in `tests/`|no failing tests in tests/|under `tests/`\. Per|List files under `tests/`|the tests/ directory|no `tests/` dir' \
+  agents/coder.md commands/implement.md commands/deep-build.md commands/handoff.md workflows/deep-build.js 2>/dev/null || true)
+if [ -z "$roots" ]; then ok "feature build finds tests by test roots"
+else no "feature build finds tests by test roots" "$(printf '%s\n' "$roots" | head -5)"; fi
+
 if [ -z "$PENDING" ]; then ok "nothing pending"; else no "nothing pending" "PENDING=\"$PENDING\""; fi
 
 printf '\npassed=%d failed=%d\n' "$pass" "$fail"
