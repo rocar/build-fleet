@@ -40,7 +40,12 @@ case "$rel" in
   "$phys"/*) rel="${rel#"$phys"/}" ;;
   ./*) rel="${rel#./}" ;;
 esac
-case "$rel" in */../*|../*|*/..|..) exit 0 ;; esac   # traversal is not inside .sdd/
+case "$rel" in
+  */../*|../*|*/..|..)
+    # A traversal path that names .sdd/ could resolve to a spec; it is never measured, so refuse it.
+    case "$rel" in *.sdd/*spec.md) echo "build-fleet: cap-spec-size refused — '${path}' contains '..'; write the spec by its plain path" >&2; exit 2 ;; esac
+    exit 0 ;;
+esac
 case "$rel" in
   .sdd/_product/*) exit 0 ;;
   .sdd/*/spec.md) ;;

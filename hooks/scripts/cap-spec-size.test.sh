@@ -55,7 +55,9 @@ p=$(new_proj o 1)
 check "acceptance-md-not-capped" "$p" "$(payload Write .sdd/feat/acceptance.md "$(lines 500)")" 0
 check "other-file-ignored" "$p" "$(payload Write .sdd/feat/DECISIONS.md "$(lines 500)")" 0
 check "product-tier-exempt" "$p" "$(payload Write .sdd/_product/spec.md "$(lines 500)")" 0
-check "traversal-ignored" "$p" "$(payload Write .sdd/feat/../feat/spec.md "$(lines 500)")" 0
+check "traversal-into-sdd-refuses" "$p" "$(payload Write .sdd/feat/../feat/spec.md "$(lines 500)")" 2
+check "traversal-other-sdd-file-ignored" "$p" "$(payload Write .sdd/feat/../feat/DECISIONS.md "$(lines 500)")" 0
+check "traversal-outside-sdd-ignored" "$p" "$(payload Write docs/../other/spec.md "$(lines 500)")" 0
 check "notebookedit-on-spec-refuses" "$p" "$(jq -cn --arg p $S '{tool_name:"NotebookEdit",tool_input:{notebook_path:$p}}')" 2
 check "notebookedit-elsewhere-ignored" "$p" "$(jq -cn '{tool_name:"NotebookEdit",tool_input:{notebook_path:"notes/x.ipynb"}}')" 0
 rc=0; ( cd "$p" && printf 'not json' | CLAUDE_PROJECT_DIR="$p" bash "$HOOK" >/dev/null 2>&1 ); rc=$?

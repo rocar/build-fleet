@@ -32,4 +32,16 @@ p=$(vr_proj s 2 2); vr_block "$p" 1 qa; vr_block "$p" 1 architect
 fire "stale-cycle-ignored"            "$p" Write "$p/.sdd/feat/.workflow-in-flight" "" 0
 p=$(vr_proj rel 1); vr_block "$p" 1 qa; vr_block "$p" 1 architect
 fire "relative-path-verified-runs"    "$p" Write ".sdd/feat/.workflow-in-flight" "" 1
+# A quote-check that fails (exit 1) is relayed on stderr and recorded, never swallowed.
+plug="$work/plug"; mkdir -p "$plug/hooks/scripts" "$plug/scripts"
+cp "$HOOK" "$DIR/_lib.sh" "$plug/hooks/scripts/"
+printf '#!/usr/bin/env bash\necho "quote-check.sh: could not evaluate REVIEW.md" >&2\nexit 1\n' > "$plug/scripts/quote-check.sh"
+p=$(vr_proj qf 1); vr_block "$p" 1 qa; vr_block "$p" 1 architect
+err=$( cd "$p" && jq -cn --arg p "$p/.sdd/feat/.workflow-in-flight" '{tool_name:"Write", tool_input:{file_path:$p, content:""}}' \
+  | CLAUDE_PROJECT_DIR="$p" bash "$plug/hooks/scripts/check-review-quotes.sh" 2>&1 >/dev/null ); rc=$?
+ev=$(grep -c '"source":"hook:check-review-quotes"' "$p/.sdd/feat/EVENTS.jsonl" 2>/dev/null || true)
+if [ "$rc" -eq 0 ] && printf '%s' "$err" | grep -q 'could not evaluate' && [ "$ev" = 1 ] \
+   && grep '"source":"hook:check-review-quotes"' "$p/.sdd/feat/EVENTS.jsonl" | grep -q '"decision":"error"'; then
+  pass=$((pass+1)); printf 'ok   %-40s\n' "quote-check-failure-relayed"
+else fail=$((fail+1)); printf 'FAIL %-40s rc=%s ev=%s err=%s\n' "quote-check-failure-relayed" "$rc" "$ev" "$err"; fi
 echo "-----"; echo "passed=$pass failed=$fail"; [ "$fail" -eq 0 ]
