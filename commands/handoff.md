@@ -87,6 +87,8 @@ skill. Consult it for the CHANGE_REVIEW phase, the CHANGE_CYCLE budget
 
    Every prompt includes:
    - The active feature slug and the current CHANGE_CYCLE number.
+   - The current UTC time (`date -u +%Y-%m-%dT%H:%M:%SZ`) for the block heading:
+     reviewers without Bash use it and never guess one.
    - A pointer to the diff (the orchestrator runs `git diff` against the
      base if a git repo; otherwise describe the changed files).
    - A pointer to `spec.md` (its acceptance criteria included), `DECISIONS.md` and

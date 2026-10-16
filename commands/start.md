@@ -20,8 +20,8 @@ product plan awaits `/build-fleet:status ratify`, when another item is in flight
 You are a thin driver. You never choose the next step yourself; the router does.
 
 1. Run `bash "${CLAUDE_PLUGIN_ROOT}/scripts/lite-next.sh" <name> $ARGUMENTS`, where `<name>`
-   is this command's name (above). Pass `$ARGUMENTS` on the first pass only; on every later
-   pass run it with `<name>` alone.
+   is this command's name (above). Pass `$ARGUMENTS` on the first pass only, as one single-quoted shell word
+   (write each `'` in it as `'\''`); on every later pass run it with `<name>` alone.
 2. Read its one `BUILD_FLEET_LITE_NEXT:` line.
    - `"stop"` → write two to four lines on what this run did, then print
      `BUILD_FLEET_LITE_DONE: {"stop":"<stop>","next":"<next>"}` (leave out `next` when the
@@ -40,8 +40,8 @@ You are a thin driver. You never choose the next step yourself; the router does.
    bug), end with `BUILD_FLEET_LITE_DONE: {"stop":"known-cause","next":"/build-fleet:start <the fix to make>"}`,
    naming the fix triage recommends.
 5. Guards. Before each step, note the active item's `PROGRESS.md` and `spec.md` (or
-   `diagnosis.md`). If the router names the same step twice in a row and those files did
-   not change in between, end with `BUILD_FLEET_LITE_DONE: {"stop":"no-progress","step":"<step>"}`.
+   `diagnosis.md`). If the router names the same step twice in a row and those files,
+   ignoring their `UPDATED:` line, did not change in between, end with `BUILD_FLEET_LITE_DONE: {"stop":"no-progress","step":"<step>"}`.
    After 12 steps in this run, end with `BUILD_FLEET_LITE_DONE: {"stop":"step-cap"}`;
    running the command again resumes.
 6. Go to 1.
