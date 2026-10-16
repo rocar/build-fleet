@@ -113,11 +113,13 @@ def vr_open($adrs):
   else null end;
 
 # Findings → the quotes to check. Carried entries are skipped: their evidence was
-# checked in the cycle that raised them, against the spec as it was then.
+# checked in the cycle that raised them, against the spec as it was then. A closure
+# claim's own anchor is skipped for the same reason (only its closure quote is new).
 def vr_quotes:
   [ .[] | select(.carried == null) | . as $f
-    | (if ($f.quote | type) == "object" then {id: $f.id, where: "anchor", file: $f.quote.file, text: $f.quote.text} else empty end),
-      (if ($f.absent | type) == "object" then {id: $f.id, where: "anchor", file: $f.absent.file, section: ($f.absent.section // "")} else empty end),
+    | (($f.closure | type) == "object") as $cl
+    | (if ($cl | not) and ($f.quote | type) == "object" then {id: $f.id, where: "anchor", file: $f.quote.file, text: $f.quote.text} else empty end),
+      (if ($cl | not) and ($f.absent | type) == "object" then {id: $f.id, where: "anchor", file: $f.absent.file, section: ($f.absent.section // "")} else empty end),
       (if ($f.closure | type) == "object" then {id: $f.id, where: "closure", file: $f.closure.file, text: $f.closure.text} else empty end),
       (($f.verdicts // [])[] | select(type == "object" and (.quote | type) == "object")
         | {id: $f.id, where: "verdict", v: .v, file: .quote.file, text: .quote.text}) ];

@@ -408,6 +408,39 @@ function applyVerifiedVote(findings, panels) {
   });
 }
 
+// Closure claims count only for carried findings the claiming reviewer raised, and each
+// id is claimed once (the first claim wins). A claim keeps the finding's anchor, ref,
+// test and from_cycle (written into its closure line), so a rejected closure is carried
+// next cycle with its evidence. Returns { closures, ignored, duplicate } (ids).
+function selectClosureClaims(reviews, carried, cycle) {
+  const byId = {};
+  for (const k of carried || []) if (k && typeof k.id === "string") byId[k.id] = k;
+  const closures = [], ignored = [], duplicate = [], taken = {};
+  for (const r of reviews || []) {
+    for (const cl of (r && r.payload && r.payload.closures) || []) {
+      const k = cl && byId[cl.id];
+      if (!k || k.raised_by !== r.role || !cl.closure) { ignored.push(cl && cl.id); continue; }
+      if (taken[k.id]) { duplicate.push(k.id); continue; }
+      taken[k.id] = true;
+      const from = k.carried && Number.isInteger(k.carried.from_cycle) ? k.carried.from_cycle : cycle - 1;
+      closures.push({
+        id: k.id, severity: k.severity, raised_by: k.raised_by, text: k.text,
+        anchor: k.quote ? { kind: "quote", ...k.quote } : k.absent ? { kind: "absent", ...k.absent } : { kind: "none" },
+        ...(k.ref ? { ref: k.ref } : {}), ...(k.test ? { test: k.test } : {}),
+        closure: { file: cl.closure.file, text: cl.closure.text, from_cycle: from },
+      });
+    }
+  }
+  return { closures, ignored, duplicate };
+}
+
+// The delta-cycle demotions worth logging: a carried finding a reviewer re-listed is
+// replaced by its carried record (severity restored), so it was never demoted.
+function deltaDemotionsToReport(demoted, carried) {
+  const ids = (carried || []).map((k) => k && k.id);
+  return (demoted || []).filter((id) => ids.indexOf(id) === -1);
+}
+
 // Carried findings (from finalize-gate --report) stay open until a confirmed closure.
 // A reviewer's re-listing of one is replaced by the carried record (original severity,
 // text, anchor, ref and test; reason "re-listed"), so re-listing can never demote,
@@ -456,7 +489,7 @@ function formatVerifiedFindingLines(c, dispositionMap) {
   else if (a.kind === "absent") lines.push(`  absent: ${j({ file: a.file, section: flattenText(a.section), missing: flattenText(a.missing) })}`);
   if (c.ref) lines.push(`  ref: ${flattenText(Array.isArray(c.ref) ? c.ref.join(", ") : c.ref)}`);
   if (c.test) lines.push(`  test: ${flattenText(c.test)}`);
-  if (c.closure) lines.push(`  closure: ${j({ file: c.closure.file, text: flattenText(c.closure.text) })}`);
+  if (c.closure) lines.push(`  closure: ${j({ file: c.closure.file, text: flattenText(c.closure.text), ...(Number.isInteger(c.closure.from_cycle) ? { from_cycle: c.closure.from_cycle } : {}) })}`);
   for (const v of c.verdicts || []) {
     const out = { v: v.v, vote: v.vote, severity: v.severity };
     if (v.reason) out.reason = flattenText(v.reason);
@@ -761,8 +794,9 @@ for (const r of reviews) {
 
 const enforced = enforceDeltaSeverity(mergeConcerns(reviews), cycle);
 const allConcerns = enforced.concerns;
-if (enforced.demoted.length > 0) {
-  log(`Delta-severity enforcement demoted new major(s) to minor (not permitted on a delta cycle): ${enforced.demoted.join(", ")}.`);
+const deltaDemoted = deltaDemotionsToReport(enforced.demoted, SHAPE === "verified" ? CARRIED : []);
+if (deltaDemoted.length > 0) {
+  log(`Delta-severity enforcement demoted new major(s) to minor (not permitted on a delta cycle): ${deltaDemoted.join(", ")}.`);
 }
 
 let surviving;
@@ -770,20 +804,11 @@ let verification = null;
 
 if (SHAPE === "verified") {
   // ---------- Phase 2 (verified): verification panel ----------
-  // Closure claims count only for carried findings the claiming reviewer raised.
-  const carriedById = {};
-  for (const k of CARRIED) carriedById[k.id] = k;
-  const closures = [];
-  for (const r of reviews) {
-    for (const cl of r.payload.closures || []) {
-      const k = cl && carriedById[cl.id];
-      if (!k || k.raised_by !== r.role || !cl.closure) {
-        log(`Closure claim ignored (not a carried finding raised by ${r.role}): ${cl && cl.id}.`);
-        continue;
-      }
-      closures.push({ id: k.id, severity: k.severity, raised_by: k.raised_by, text: k.text, closure: cl.closure });
-    }
-  }
+  // Closure claims count only for carried findings the claiming reviewer raised, once each.
+  const claims = selectClosureClaims(reviews, CARRIED, cycle);
+  const closures = claims.closures;
+  if (claims.ignored.length > 0) log(`Closure claim(s) ignored (not a carried finding raised by the claiming reviewer): ${claims.ignored.join(", ")}.`);
+  if (claims.duplicate.length > 0) log(`Duplicate closure claim(s) ignored (first claim kept): ${claims.duplicate.join(", ")}.`);
   const closureIds = closures.map((c) => c.id);
   const offRoster = CARRIED.filter((k) => ROLES.indexOf(k.raised_by) === -1).map((k) => k.id);
   if (offRoster.length > 0) log(`Carried findings whose raiser is not in the roster are written in ${ROLES[0]}'s block and stay open until their raiser closes them: ${offRoster.join(", ")}.`);

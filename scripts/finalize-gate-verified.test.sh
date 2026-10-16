@@ -74,6 +74,19 @@ vr_block "$p" 2 architect
 qc "$p" 2; gate "$p"
 assert "confirmed-closure-closes" "[ $rc -eq 0 ]"
 
+# A rejected closure carries its evidence: its anchor is not re-checked (the spec changed to
+# address it), and the report row keeps quote, test and the original from_cycle.
+p=$(vr_proj rejected 2 2)
+vr_block "$p" 1 qa '- [major] (qa-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)" '  disposition: fix'
+vr_block "$p" 1 architect
+vr_block "$p" 2 qa '- [major] (qa-c1-1) retry limit' '  quote: {"file":"spec.md","text":"wording since removed from the spec"}' '  test: t' \
+  '  closure: {"file":"spec.md","text":"Retries are capped at 3 attempts","from_cycle":1}' \
+  '  verdict: {"v":1,"vote":"reject","severity":"major","reason":"no"}' '  verdict: {"v":2,"vote":"reject","severity":"major","reason":"no"}'
+vr_block "$p" 2 architect
+qc "$p" 2; gate "$p" --report
+assert "rejected-closure-anchor-not-rechecked" "jq -e 'select(.source == \"script:quote-check\" and .cycle == 2) | .failures == []' '$p/.sdd/feat/EVENTS.jsonl' >/dev/null"
+assert "rejected-closure-keeps-evidence" "[ \"\$(field '.open[] | select(.id == \"qa-c1-1\") | [.quote.text, .test, .carried.from_cycle]')\" = '[\"wording since removed from the spec\",\"t\",1]' ]"
+
 p=$(vr_proj carried 2 2)
 vr_block "$p" 1 qa '- [major] (qa-c1-1) retry limit' "$(vr_q 'the client retries failed uploads')" '  test: t' "$(vr_up 1 major)" "$(vr_up 2 major)" '  disposition: fix'
 vr_block "$p" 1 architect

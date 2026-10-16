@@ -178,7 +178,10 @@ if [ -n "$vblocks" ]; then
            | map(select(.why != null)))
       + [$prev[] | select(.id as $i | $listed | index($i) | not) | . + {why: "carried-open"}]
     | map({id, severity: .final, text, raised_by: vr_raiser, why,
-           quote, absent, ref, test, disposition, carried} | with_entries(select(.value != null)))') \
+           quote, absent, ref, test, disposition,
+           carried: (.carried // (if (.closure | type) == "object" and (.closure.from_cycle | type) == "number"
+                                  then {from_cycle: .closure.from_cycle, reason: "closure-rejected"} else null end))}
+         | with_entries(select(.value != null)))') \
     || { add reasons "verified-eval-failed"; vopen='[]'; }
   while IFS= read -r row; do
     [ -n "$row" ] || continue
