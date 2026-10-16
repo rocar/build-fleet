@@ -390,8 +390,8 @@ inventory shows no rule was cut. No backward compatibility: a forward feature fr
 layout is refused and must be parked and restarted.
 
 Open: a shipped feature that drifts has no lite repair path; enforcing human-only `build` and
-`ship` beyond `disable-model-invocation` is undecided; a patch of deferred minors (0.12.1)
-comes before the measurement.
+`ship` beyond `disable-model-invocation` is undecided; the other deferred minors shipped
+in 0.12.1.
 
 ## Next — the approved order (roadmap review, 2026-10-14)
 

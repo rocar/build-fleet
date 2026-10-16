@@ -14,6 +14,57 @@ migrated automatically. build-fleet assumes a single driver per working tree: on
 session per worktree, with the `.sdd/ACTIVE` lock serializing acquisition within that worktree
 only (never across clones).
 
+## [0.12.1] — 2026-10-16
+
+Fixes for the minors deferred from 0.11.0 and 0.12.0. A few change behavior; each is named.
+
+### Fixed
+- **Gates that failed open now refuse.** `guard-event-log` refuses a payload it cannot read
+  when the payload names an event log. `cap-spec-size` and `validate-acceptance-count`
+  refuse a spec path containing `..` that names `.sdd/`, instead of skipping it unmeasured.
+- **Review gates read every finding.** A block's unterminated last line is read. An
+  indented `- [blocker]` / `- [major]` refuses with `unparsed-findings` (new `unparsed`
+  field on the finalize gate line, as on the change-review gate). A hand-wrapped
+  `verdict:` or `quote:` line joins while its JSON does not parse yet. A free-form finding
+  id is credited to its block's role, so its raiser can close it. `quote-check.sh` skips a
+  `--cycle` that is not PROGRESS's `CYCLE` (`stale-cycle`) and records nothing.
+- **Verified review.** A closure claim keeps the finding's quote, ref, test and
+  `from_cycle`, so a rejected closure is carried with its evidence. Only the first claim
+  per finding counts. The log no longer says "demoted" for a re-listed carried finding.
+  `check-review-quotes` relays a failing quote check on stderr and records an error event.
+- **Drift repair re-enters.** Every stop in implement's drift steps sets `QA_FAIL: drift`,
+  so the next `build` repairs instead of refusing `build-already-started`. Repair mode runs
+  the gate first and skips qa when a hand fix already passes. A repair at change review or
+  handoff records `DRIFT_REPAIR: <iso8601> tests-only` and does not re-run the change review.
+- **Lite router.** A finalized spec still at `PHASE: SPEC`/`REVIEW` routes to finalize.
+  `ship` checks the spec is still FINALIZED. A lane mismatch names that lane's command; `build`
+  or `ship` given words stop `bad-args`. A small product at PLAN, cycle 0, stops `plan-ready`.
+  A product escalation names `status resolve _product <decision>`. **Changed:** `start <idea>`
+  whose slug names a parked item stops `parked` instead of creating a `-2` copy, and
+  `start --product` with a product tier present stops `product-exists`. Slugs fold common
+  Latin accents (Café → cafe); words with no Latin form get a fallback slug.
+- **Drivers and status.** The four drivers pass their arguments as one single-quoted word,
+  and the no-progress guard ignores `UPDATED:` refreshes. `status resolve` restores `FIX`
+  (never `VERIFY`), resets `HYPOTHESIS_CYCLE` on a diagnose resolve, and targets `_product`.
+- **Spec budget.** An Edit's line count is exact (computed in jq). An over-budget spec may be
+  cut by a write that does not grow it. `validate-spec-status` counts a heading only at
+  the start of its line (`### Acceptance Criteria` is not the section).
+- **Test roots** may contain spaces, be a symlink to a directory, or be a single file.
+- Prompts: `QA_TESTS_READY` reads "under the test roots"; `BUILD_COMPLETE`'s
+  `impl_notes_path` is `null` with no notes file and coder writes no empty one; handoff
+  creates `REVIEW.md` before the parallel change reviewers and passes them the current
+  time; the PO replaces its self-review notes each cycle; coder and qa load routed skills
+  first; leftover prose about the retired review `status:` line is gone.
+
+### Tests
+- The ADR gate case asserts the refusal, and the `log_event` bad-slug and bad-payload cases
+  assert that nothing is written.
+
+**Compatibility.** No `.sdd/` schema change. Signal grammar (additive): the finalize gate
+and report lines gain `unparsed`; reason `unparsed-findings`; quote-check skip reason
+`stale-cycle`; lite stops `bad-args` and `product-exists`; the `QA_TESTS_READY` line's
+trailing text changes (only its count is read).
+
 ## [0.12.0] — 2026-10-16
 
 ### Added
