@@ -47,6 +47,9 @@ wantnot handoff-no-status-eval   commands/handoff.md         '`status:` lines ar
 wantnot finalize-no-status-info  commands/finalize.md        '`status:` lines are informational'
 wantnot protocol-no-status-info  skills/sdd-protocol/SKILL.md '`status:` is informational'
 
+want    finalize-lists-unparsed   commands/finalize.md  '`unparsed-findings` — a reviewer block holds a finding bullet the gate cannot read'
+want    implement-repair-no-count commands/implement.md 'with no count to compare'
+
 # ---- flow (§3.3) ----
 want new-feature-schema    commands/new-feature.md '   SDD_SCHEMA: 2'
 want implement-calls-gate  commands/implement.md   'scripts/drift-gate.sh'

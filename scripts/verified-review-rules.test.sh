@@ -48,6 +48,17 @@ t "wrapped-quote-joins" "$H
   quote: {\"file\":\"spec.md\",
      \"text\":\"abc def ghi\"}
   test: t" '[$fs[] | {q: .quote.text, test}]' '[{"q":"abc def ghi","test":"t"}]'
+# ...but a value that already parsed is never joined: a hand note under it stays a note.
+t "parsed-quote-not-joined" "$H
+- [major] (qa-c1-1) c
+  quote: {\"file\":\"spec.md\",\"text\":\"abc def ghi\"}
+    (hand note)" '[$fs[] | .quote.text]' '["abc def ghi"]'
+# ...and any other line ends the join: a 4-space line after an unknown key joins nothing.
+t "join-reset-by-other-line" "$H
+- [major] (qa-c1-1) c
+  verdict: {\"v\":1,\"vote\":\"refute\",
+  refuted-by: x
+    \"severity\":\"minor\"}" '[$fs[] | .verdicts[0].invalid]' '[true]'
 # A verdict counts only from a numbered verifier (v = 1, 2 or 3): hand-written lines
 # with no v, or a v outside the panel, never vote — they can neither kill nor demote.
 nv() { printf '  verdict: {"vote":"refute","severity":"%s","reason":"%s","quote":%s}' "$1" "$R" "$Q"; }

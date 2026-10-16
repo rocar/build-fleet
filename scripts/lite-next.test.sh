@@ -398,6 +398,7 @@ proj; mkdir -p "$P/.sdd/_product"; printf 'SDD_SCHEMA: 1\nPHASE: PLAN\nSIZE: sma
 check start-small-product-fast-path '"stop":"plan-ready","next":"/build-fleet:status ratify"' start
 # non-Latin and accented ideas still get a usable slug
 proj; check start-idea-accents '"args":"cafe-umlaut Café Ümlaut"' start 'Café Ümlaut'
+proj; check start-idea-dotted-capital-i '"args":"istanbul-rollout ' start 'İstanbul rollout'
 proj; check start-idea-non-latin '"step":"new-feature","args":"feature ' start '日本語 機能'
 # a parked item of the same name is not silently shadowed by a -2 copy
 proj; mkdir -p "$P/.sdd/add-csv-export"; printf 'SDD_SCHEMA: 2\nPHASE: PARKED\n' > "$P/.sdd/add-csv-export/PROGRESS.md"

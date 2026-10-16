@@ -62,6 +62,13 @@ check "write-shrinking-over-budget-allowed" "$p" "$(payload Write $S $'a\nb\nc\n
 # the replacement is literal: "&" never stands for the matched text (bash 5.2 patsub_replacement)
 p=$(new_proj amp 8)
 check "edit-ampersand-literal" "$p" "$(payload Edit $S $'l1\nl2\n' '&&')" 0
+# final review: new_string's trailing newlines count; no phantom line at EOF; exact replace_all
+p=$(new_proj tnl 5); printf 'w\nx\ny\nz\n' > "$p/.sdd/feat/spec.md"
+check "edit-trailing-blank-lines-over-refuses" "$p" "$(payload Edit $S $'z\n' $'z\n\n\n\n')" 2
+p=$(new_proj eofq 4); printf 'a\nb\nc\nd\n' > "$p/.sdd/feat/spec.md"
+check "edit-last-line-at-budget-allowed" "$p" "$(payload Edit $S $'d\n' $'D\n')" 0
+p=$(new_proj rax 5); printf 'Xa\nb\nX\nc\n' > "$p/.sdd/feat/spec.md"
+check "edit-replace-all-exact-match" "$p" "$(payload Edit $S $'X\n' $'X\nY\n' true)" 0
 p=$(new_proj o 1)
 check "acceptance-md-not-capped" "$p" "$(payload Write .sdd/feat/acceptance.md "$(lines 500)")" 0
 check "other-file-ignored" "$p" "$(payload Write .sdd/feat/DECISIONS.md "$(lines 500)")" 0

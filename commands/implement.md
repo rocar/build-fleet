@@ -54,8 +54,10 @@ this orchestration owns its own preconditions.
    markers exist, and the run is a
    repair: skip step a (qa's authoring pass). First run the drift gate: if it passes
    (the markers or test roots were fixed by hand), qa is not dispatched — remove
-   `QA_FAIL` and continue as if the repair pass had passed (below: step b's suite check
-   then step c, or step e2's suite-green branch). If it fails, go to the repair pass.
+   `QA_FAIL` and continue as if the repair pass had passed, with no count to compare:
+   `BUILD_STATE` absent → the suite must have at least one test and every test must
+   fail, then step c; otherwise → run the suite and take step e2's suite-green or
+   suite-red branch. If the gate fails, go to the repair pass.
    - `BUILD_STATE` absent and `PHASE` `BUILD` → the repair pass of step b2 (the suite
      must be red). On a pass, continue to step c and coder as a normal build.
    - Otherwise (`BUILD_STATE` `started`, `needs-iteration` or `done`, or `PHASE`

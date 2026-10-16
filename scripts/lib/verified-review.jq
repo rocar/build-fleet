@@ -13,7 +13,8 @@ def vr_norm:
 
 # Text of ONE "## Cycle N — role — ts" block → array of findings.
 # A continuation line ("  key: value") may be wrapped by hand: a following line indented
-# 4+ spaces joins it (one space between), and the joined value is parsed again.
+# 4+ spaces joins it (one space between) while its JSON value does not parse yet, and the
+# joined value is parsed again. A value that parsed, or any other line, ends the join.
 def vr_set_kv($k; $v):
   if $k == "verdict" then .cur.verdicts += [($v | (try fromjson catch {invalid: true}))]
   elif ($k == "quote" or $k == "absent" or $k == "closure" or $k == "carried" or $k == "demoted")
@@ -29,14 +30,17 @@ def vr_parse_block:
         | .cur = (($l | capture("^- \\[(?<severity>blocker|major|minor)\\] \\((?<id>[^)]+)\\) ?(?<text>.*)$")) + {verdicts: []})
       elif .cur != null and ($l | test("^  [a-z_]+: ")) then
         ($l | capture("^  (?<k>[a-z_]+): (?<v>.*)$")) as $kv
-        | .kv = $kv | vr_set_kv($kv.k; $kv.v)
+        | .kv = (if ($kv.k == "ref" or $kv.k == "test" or $kv.k == "disposition")
+                   or ($kv.v | (try (fromjson | true) catch false)) then null else $kv end)
+        | vr_set_kv($kv.k; $kv.v)
       elif .cur != null and .kv != null and ($l | test("^    +[^ ]")) then
         (.kv.v + " " + ($l | ltrimstr(" ") | sub("^ +"; ""))) as $joined
         | .kv.v = $joined
         | (if .kv.k == "verdict" then .cur.verdicts |= .[:-1] else . end)
         | vr_set_kv(.kv.k; $joined)
+        | (if ($joined | (try (fromjson | true) catch false)) then .kv = null else . end)
       elif .cur != null and ($l | test("^[^ ]")) then .out += [.cur] | .cur = null | .kv = null
-      else . end)
+      else .kv = null end)
   | (if .cur != null then .out + [.cur] else .out end);
 
 # Text of several blocks (split on "\n## ") → their findings, each tagged with its block's role.

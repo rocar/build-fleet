@@ -104,6 +104,7 @@ cycle.
    - `open-blockers` — current cycle has open `[blocker]` items
    - `majors-open` — `[major]` items dispositioned `fix` (or carrying no disposition line)
    - `majors-without-adr` — `[major]` items whose `disposition: adr ADR-N` cites an ADR absent from DECISIONS.md
+   - `unparsed-findings` — a reviewer block holds a finding bullet the gate cannot read (an indented `- [blocker]` / `- [major]`, listed in `unparsed`) — re-run `/build-fleet:review`; revise cannot fix a reviewer's block
    - `quote-check-missing` — a verified review cycle has no quote-check result (the check runs when the review's scribe finishes; it needs jq and the plugin's hooks enabled) — re-run `/build-fleet:review`
    - `spec-changed-since-review` — spec.md or an existing DECISIONS.md entry changed after this cycle was reviewed (the STATUS line and appended ADRs do not count) — re-run `/build-fleet:review` so the change is reviewed
    - `review-changed-since-check` — a verified cycle's REVIEW.md blocks were edited after their quotes were checked (verdict lines are trusted only as checked) — re-run `/build-fleet:review`
@@ -114,7 +115,8 @@ cycle.
    - Reviewers missing their current-cycle block.
    - Open `[blocker]` items, verbatim, with the reviewer attribution.
    - `[major]` items lacking ADRs.
-   - The recommended next command: `/build-fleet:revise` (hands the PO exactly the open items), then `/build-fleet:review`.
+   - The recommended next command: `/build-fleet:revise` (hands the PO exactly the open items), then `/build-fleet:review` —
+     or `/build-fleet:review` alone when the only reasons are a missing block or `unparsed-findings`.
 
 6. **Pass output — flip state and stop.** If the gate passes:
 

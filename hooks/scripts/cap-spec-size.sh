@@ -71,28 +71,28 @@ cap=$((10#$cap))                                    # normalize (leading zeros: 
 [ "$cap" -gt 0 ] || exit 0                          # 0 disables the cap
 
 lines_of() { awk 'END { print NR }'; }
-# raw <jq-path> — a tool_input string, trailing newlines kept
-raw() { local v; v=$(printf '%s' "$input" | jq -j "$1 // empty"; printf x); printf '%s' "${v%x}"; }
-current=0; content=""
-if [ -f "$rel" ]; then
-  current=$(lines_of < "$rel")
-  content=$(cat "$rel"; printf x); content="${content%x}"   # keep trailing newlines
-fi
+current=0
+[ -f "$rel" ] && current=$(lines_of < "$rel")
 
 case "$tool" in
   Write)
     projected=$(printf '%s' "$input" | jq -j '.tool_input.content // empty' | lines_of)
     ;;
   Edit)
-    # Apply the edit to the current text and count the result exactly.
-    oldstr=$(raw .tool_input.old_string); newstr=$(raw .tool_input.new_string)
-    if [ -z "$oldstr" ]; then after="$newstr"
-    elif [ "$(printf '%s' "$input" | jq -r '.tool_input.replace_all // false')" = "true" ]; then
-      after="${content//"$oldstr"/"$newstr"}"
-    else
-      after="${content/"$oldstr"/"$newstr"}"
-    fi
-    projected=$(printf '%s' "$after" | lines_of)
+    # Apply the edit to the current text in jq (split/join on a string is literal, and
+    # no shell expansion touches newlines or quotes) and count the result's lines as awk
+    # NR would: newlines, plus one for a non-empty unterminated last line.
+    src="$rel"; [ -f "$src" ] || src=/dev/null
+    projected=$(printf '%s' "$input" | jq -r --rawfile c "$src" '
+      .tool_input as $t | ($t.old_string // "") as $o | ($t.new_string // "") as $n
+      | (if $o == "" then $n
+         else ($c | split($o)) as $p
+           | if ($p | length) < 2 then $c
+             elif ($t.replace_all // false) == true then $p | join($n)
+             else $p[0] + $n + ($p[1:] | join($o)) end
+         end) as $r
+      | if $r == "" then 0
+        else ($r | split("\n") | length) - (if ($r | endswith("\n")) then 1 else 0 end) end')
     ;;
   NotebookEdit)
     echo "build-fleet: cap-spec-size refused — ${rel} is a spec file; NotebookEdit cannot be size-projected. Use Write or Edit." >&2
